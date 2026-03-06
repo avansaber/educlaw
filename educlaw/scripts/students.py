@@ -97,6 +97,12 @@ def add_student_applicant(conn, args):
         err("--last-name is required")
     if not date_of_birth:
         err("--date-of-birth is required")
+    try:
+        dob = date.fromisoformat(date_of_birth)
+        if dob > date.today():
+            err(f"--date-of-birth cannot be in the future: {date_of_birth}")
+    except (ValueError, TypeError):
+        err(f"Invalid date-of-birth format: {date_of_birth}. Use YYYY-MM-DD")
     if not company_id:
         err("--company-id is required")
 
@@ -411,6 +417,12 @@ def add_student(conn, args):
         err("--last-name is required")
     if not date_of_birth:
         err("--date-of-birth is required")
+    try:
+        dob = date.fromisoformat(date_of_birth)
+        if dob > date.today():
+            err(f"--date-of-birth cannot be in the future: {date_of_birth}")
+    except (ValueError, TypeError):
+        err(f"Invalid date-of-birth format: {date_of_birth}. Use YYYY-MM-DD")
     if not company_id:
         err("--company-id is required")
 

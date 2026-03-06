@@ -121,7 +121,7 @@ class MoodleAdapter(BaseLMSAdapter):
                 "users[0][email]": email,
                 "users[0][idnumber]": user_data.get("sis_user_id", ""),
                 "users[0][auth]": "manual",
-                "users[0][password]": user_data.get("temp_password", f"Reset{uuid.uuid4().hex[:8]}!"),  # Random temp; user must reset
+                "users[0][password]": user_data.get("temp_password", f"Reset{uuid.uuid4().hex[:8]}!"),  # Temp password; user must reset
             }
             result = self._call_ws("core_user_create_users", params)
             users = result if isinstance(result, list) else []
