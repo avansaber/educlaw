@@ -109,15 +109,15 @@ def add_loan(conn, args):
         loan_id = str(uuid.uuid4())
         now = _now_iso()
 
-        loan_amount = str(round_currency(to_decimal(getattr(args, "loan_amount", "0"))))
-        first_disb = str(round_currency(to_decimal(getattr(args, "first_disbursement_amount", "0") or "0")))
-        second_disb = str(round_currency(to_decimal(getattr(args, "second_disbursement_amount", "0") or "0")))
-        orig_fee = str(round_currency(to_decimal(getattr(args, "origination_fee", "0") or "0")))
-        interest_rate = str(round_currency(to_decimal(getattr(args, "interest_rate", "0") or "0")))
-        cod_loan_id = getattr(args, "cod_loan_id", "") or ""
-        borrower_type = getattr(args, "borrower_type", "student") or "student"
+        loan_amount = str(round_currency(to_decimal(getattr(args, "loan_amount", None) or "0")))
+        first_disb = str(round_currency(to_decimal(getattr(args, "first_disbursement_amount", None) or "0")))
+        second_disb = str(round_currency(to_decimal(getattr(args, "second_disbursement_amount", None) or "0")))
+        orig_fee = str(round_currency(to_decimal(getattr(args, "origination_fee", None) or "0")))
+        interest_rate = str(round_currency(to_decimal(getattr(args, "interest_rate", None) or "0")))
+        cod_loan_id = getattr(args, "cod_loan_id", None) or ""
+        borrower_type = getattr(args, "borrower_type", None) or "student"
         ec_required = int(getattr(args, "entrance_counseling_required", 0) or 0)
-        created_by = getattr(args, "created_by", "") or ""
+        created_by = getattr(args, "created_by", None) or ""
 
         # All federal loans require MPN
         mpn_required = 1
