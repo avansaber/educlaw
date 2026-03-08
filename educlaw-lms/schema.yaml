@@ -1,0 +1,244 @@
+product: educlaw-lms
+tables:
+
+  # ============================================================
+  # Domain: lms_sync
+  # ============================================================
+
+  educlaw_lms_connection:
+    owner: lms_sync
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL UNIQUE DEFAULT ''"
+      display_name: "TEXT NOT NULL DEFAULT ''"
+      lms_type: "TEXT NOT NULL DEFAULT '' CHECK(lms_type IN ('canvas','moodle','google_classroom','oneroster_csv'))"
+      endpoint_url: "TEXT NOT NULL DEFAULT ''"
+      client_id: "TEXT NOT NULL DEFAULT ''"
+      client_secret_encrypted: "TEXT NOT NULL DEFAULT ''"
+      site_token_encrypted: "TEXT NOT NULL DEFAULT ''"
+      google_credentials_encrypted: "TEXT NOT NULL DEFAULT ''"
+      lms_site_name: "TEXT NOT NULL DEFAULT ''"
+      lms_version: "TEXT NOT NULL DEFAULT ''"
+      grade_direction: "TEXT NOT NULL DEFAULT 'lms_to_sis' CHECK(grade_direction IN ('lms_to_sis','sis_to_lms','manual'))"
+      auto_sync_enabled: "INTEGER NOT NULL DEFAULT 0"
+      sync_frequency_hours: "INTEGER NOT NULL DEFAULT 0"
+      last_sync_at: "TEXT NOT NULL DEFAULT ''"
+      default_course_prefix: "TEXT NOT NULL DEFAULT ''"
+      auto_push_assignments: "INTEGER NOT NULL DEFAULT 0"
+      has_dpa_signed: "INTEGER NOT NULL DEFAULT 0"
+      dpa_signed_date: "TEXT NOT NULL DEFAULT ''"
+      is_coppa_verified: "INTEGER NOT NULL DEFAULT 0"
+      coppa_cert_url: "TEXT NOT NULL DEFAULT ''"
+      allowed_data_fields: "TEXT NOT NULL DEFAULT '[]'"
+      status: "TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','inactive','error'))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_connection_company_type_status
+        columns: [company_id, lms_type, status]
+      - name: idx_lms_connection_naming_series
+        columns: [naming_series]
+      - name: idx_lms_connection_company_status
+        columns: [company_id, status]
+
+  educlaw_lms_sync_log:
+    owner: lms_sync
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL UNIQUE DEFAULT ''"
+      lms_connection_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_lms_connection(id) ON DELETE RESTRICT"
+      sync_type: "TEXT NOT NULL DEFAULT '' CHECK(sync_type IN ('roster_push','grade_pull','assignment_push','full_sync','oneroster_export'))"
+      academic_term_id: "TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      section_id: "TEXT REFERENCES educlaw_section(id) ON DELETE RESTRICT"
+      triggered_by: "TEXT NOT NULL DEFAULT ''"
+      status: "TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','completed','completed_with_errors','failed'))"
+      sections_synced: "INTEGER NOT NULL DEFAULT 0"
+      students_synced: "INTEGER NOT NULL DEFAULT 0"
+      grades_pulled: "INTEGER NOT NULL DEFAULT 0"
+      grades_applied: "INTEGER NOT NULL DEFAULT 0"
+      conflicts_flagged: "INTEGER NOT NULL DEFAULT 0"
+      errors_count: "INTEGER NOT NULL DEFAULT 0"
+      error_summary: "TEXT NOT NULL DEFAULT '[]'"
+      started_at: "TEXT NOT NULL DEFAULT ''"
+      completed_at: "TEXT NOT NULL DEFAULT ''"
+      duration_seconds: "INTEGER NOT NULL DEFAULT 0"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_sync_log_conn_status
+        columns: [lms_connection_id, status]
+      - name: idx_lms_sync_log_term_type
+        columns: [academic_term_id, sync_type]
+      - name: idx_lms_sync_log_company_created
+        columns: [company_id, created_at]
+      - name: idx_lms_sync_log_naming_series
+        columns: [naming_series]
+      - name: idx_lms_sync_log_section
+        columns: [section_id]
+
+  educlaw_lms_course_mapping:
+    owner: lms_sync
+    columns:
+      id: TEXT PRIMARY KEY
+      lms_connection_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_lms_connection(id) ON DELETE RESTRICT"
+      section_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_section(id) ON DELETE RESTRICT"
+      lms_course_id: "TEXT NOT NULL DEFAULT ''"
+      lms_course_url: "TEXT NOT NULL DEFAULT ''"
+      lms_term_id: "TEXT NOT NULL DEFAULT ''"
+      sync_status: "TEXT NOT NULL DEFAULT 'pending' CHECK(sync_status IN ('pending','synced','error','closed'))"
+      last_synced_at: "TEXT NOT NULL DEFAULT ''"
+      sync_error: "TEXT NOT NULL DEFAULT ''"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_course_map_conn_section
+        columns: [lms_connection_id, section_id]
+      - name: idx_lms_course_map_lms_course_conn
+        columns: [lms_course_id, lms_connection_id]
+      - name: idx_lms_course_map_conn_status
+        columns: [lms_connection_id, sync_status]
+
+  educlaw_lms_user_mapping:
+    owner: lms_sync
+    columns:
+      id: TEXT PRIMARY KEY
+      lms_connection_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_lms_connection(id) ON DELETE RESTRICT"
+      sis_user_type: "TEXT NOT NULL DEFAULT '' CHECK(sis_user_type IN ('student','instructor'))"
+      sis_user_id: "TEXT NOT NULL DEFAULT ''"
+      lms_user_id: "TEXT NOT NULL DEFAULT ''"
+      lms_username: "TEXT NOT NULL DEFAULT ''"
+      lms_login_email: "TEXT NOT NULL DEFAULT ''"
+      is_coppa_restricted: "INTEGER NOT NULL DEFAULT 0"
+      is_directory_restricted: "INTEGER NOT NULL DEFAULT 0"
+      sync_status: "TEXT NOT NULL DEFAULT 'synced' CHECK(sync_status IN ('synced','pending','error','invited'))"
+      last_synced_at: "TEXT NOT NULL DEFAULT ''"
+      sync_error: "TEXT NOT NULL DEFAULT ''"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_user_map_conn_type_user
+        columns: [lms_connection_id, sis_user_type, sis_user_id]
+      - name: idx_lms_user_map_lms_user_conn
+        columns: [lms_user_id, lms_connection_id]
+      - name: idx_lms_user_map_sync_status
+        columns: [lms_connection_id, sync_status]
+      - name: idx_lms_user_map_sis_user
+        columns: [sis_user_id, sis_user_type]
+
+  # ============================================================
+  # Domain: assignments
+  # ============================================================
+
+  educlaw_lms_assignment_mapping:
+    owner: assignments
+    columns:
+      id: TEXT PRIMARY KEY
+      lms_connection_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_lms_connection(id) ON DELETE RESTRICT"
+      assessment_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_assessment(id) ON DELETE RESTRICT"
+      lms_assignment_id: "TEXT NOT NULL DEFAULT ''"
+      lms_assignment_url: "TEXT NOT NULL DEFAULT ''"
+      lms_grade_scheme: "TEXT NOT NULL DEFAULT ''"
+      push_direction: "TEXT NOT NULL DEFAULT 'sis_to_lms' CHECK(push_direction IN ('sis_to_lms','lms_to_sis'))"
+      is_published_in_lms: "INTEGER NOT NULL DEFAULT 0"
+      sync_status: "TEXT NOT NULL DEFAULT 'synced' CHECK(sync_status IN ('synced','pending','error'))"
+      last_synced_at: "TEXT NOT NULL DEFAULT ''"
+      sync_error: "TEXT NOT NULL DEFAULT ''"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_assign_map_conn_assess
+        columns: [lms_connection_id, assessment_id]
+      - name: idx_lms_assign_map_lms_assign_conn
+        columns: [lms_assignment_id, lms_connection_id]
+      - name: idx_lms_assign_map_sync_status
+        columns: [lms_connection_id, sync_status]
+      - name: idx_lms_assign_map_assessment
+        columns: [assessment_id]
+
+  # ============================================================
+  # Domain: online_gradebook
+  # ============================================================
+
+  educlaw_lms_grade_sync:
+    owner: online_gradebook
+    columns:
+      id: TEXT PRIMARY KEY
+      lms_connection_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_lms_connection(id) ON DELETE RESTRICT"
+      sync_log_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_lms_sync_log(id) ON DELETE RESTRICT"
+      lms_assignment_id: "TEXT NOT NULL DEFAULT ''"
+      lms_user_id: "TEXT NOT NULL DEFAULT ''"
+      assessment_id: "TEXT REFERENCES educlaw_assessment(id) ON DELETE RESTRICT"
+      student_id: "TEXT REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      assessment_result_id: "TEXT REFERENCES educlaw_assessment_result(id) ON DELETE RESTRICT"
+      lms_score: "TEXT NOT NULL DEFAULT ''"
+      lms_grade: "TEXT NOT NULL DEFAULT ''"
+      lms_submitted_at: "TEXT NOT NULL DEFAULT ''"
+      lms_graded_at: "TEXT NOT NULL DEFAULT ''"
+      is_late: "INTEGER NOT NULL DEFAULT 0"
+      is_missing: "INTEGER NOT NULL DEFAULT 0"
+      lms_comments: "TEXT NOT NULL DEFAULT ''"
+      sis_score: "TEXT NOT NULL DEFAULT ''"
+      is_conflict: "INTEGER NOT NULL DEFAULT 0"
+      conflict_type: "TEXT NOT NULL DEFAULT '' CHECK(conflict_type IN ('','score_mismatch','submitted_grade_locked','student_not_found','assignment_not_found'))"
+      sync_status: "TEXT NOT NULL DEFAULT 'pulled' CHECK(sync_status IN ('pulled','applied','conflict','skipped','error'))"
+      resolved_by: "TEXT NOT NULL DEFAULT ''"
+      resolved_at: "TEXT NOT NULL DEFAULT ''"
+      resolution: "TEXT NOT NULL DEFAULT '' CHECK(resolution IN ('','lms_wins','sis_wins','manual'))"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_grade_sync_conn_assess_student
+        columns: [lms_connection_id, assessment_id, student_id]
+      - name: idx_lms_grade_sync_status_conflict
+        columns: [sync_status, is_conflict]
+      - name: idx_lms_grade_sync_assess_student_log
+        columns: [assessment_id, student_id, sync_log_id]
+      - name: idx_lms_grade_sync_student_status
+        columns: [student_id, sync_status]
+      - name: idx_lms_grade_sync_log
+        columns: [sync_log_id]
+      - name: idx_lms_grade_sync_conn_status
+        columns: [lms_connection_id, sync_status]
+
+  # ============================================================
+  # Domain: course_materials
+  # ============================================================
+
+  educlaw_lms_course_material:
+    owner: course_materials
+    columns:
+      id: TEXT PRIMARY KEY
+      section_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_section(id) ON DELETE RESTRICT"
+      assessment_id: "TEXT REFERENCES educlaw_assessment(id) ON DELETE RESTRICT"
+      name: "TEXT NOT NULL DEFAULT ''"
+      description: "TEXT NOT NULL DEFAULT ''"
+      material_type: "TEXT NOT NULL DEFAULT '' CHECK(material_type IN ('syllabus','reading','video_link','assignment_guide','rubric','other'))"
+      access_type: "TEXT NOT NULL DEFAULT '' CHECK(access_type IN ('url','file_attachment','lms_linked'))"
+      external_url: "TEXT NOT NULL DEFAULT ''"
+      file_path: "TEXT NOT NULL DEFAULT ''"
+      lms_connection_id: "TEXT REFERENCES educlaw_lms_connection(id) ON DELETE RESTRICT"
+      lms_file_id: "TEXT NOT NULL DEFAULT ''"
+      lms_download_url: "TEXT NOT NULL DEFAULT ''"
+      is_visible_to_students: "INTEGER NOT NULL DEFAULT 1"
+      available_from: "TEXT NOT NULL DEFAULT ''"
+      available_until: "TEXT NOT NULL DEFAULT ''"
+      sort_order: "INTEGER NOT NULL DEFAULT 0"
+      status: "TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived'))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_lms_material_section_order
+        columns: [section_id, sort_order]
+      - name: idx_lms_material_section_type
+        columns: [section_id, material_type]
+      - name: idx_lms_material_assessment
+        columns: [assessment_id]
+      - name: idx_lms_material_company_status
+        columns: [company_id, status]
+      - name: idx_lms_material_lms_conn
+        columns: [lms_connection_id]

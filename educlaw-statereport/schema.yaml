@@ -1,0 +1,554 @@
+product: educlaw-statereport
+tables:
+
+  # ============================================================
+  # Domain: ed_fi — Connection config & org mapping
+  # ============================================================
+
+  sr_org_mapping:
+    owner: ed_fi
+    columns:
+      id: TEXT PRIMARY KEY
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      nces_lea_id: "TEXT NOT NULL DEFAULT ''"
+      nces_school_id: "TEXT NOT NULL DEFAULT ''"
+      state_code: "TEXT NOT NULL DEFAULT '' CHECK(length(state_code)=2 OR state_code='')"
+      state_lea_id: "TEXT NOT NULL DEFAULT ''"
+      state_school_id: "TEXT NOT NULL DEFAULT ''"
+      edfi_lea_id: "TEXT NOT NULL DEFAULT ''"
+      edfi_school_id: "TEXT NOT NULL DEFAULT ''"
+      crdc_school_id: "TEXT NOT NULL DEFAULT ''"
+      is_title_i_school: "INTEGER NOT NULL DEFAULT 0"
+      title_i_status: "TEXT NOT NULL DEFAULT '' CHECK(title_i_status IN ('targeted_assistance','schoolwide','not_title_i',''))"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_sr_org_mapping_company_state_school: UNIQUE (company_id, state_code, nces_school_id)
+    indexes:
+      - name: idx_sr_org_mapping_company_state
+        columns: [company_id, state_code]
+      - name: idx_sr_org_mapping_nces_lea
+        columns: [nces_lea_id]
+      - name: idx_sr_org_mapping_nces_school
+        columns: [nces_school_id]
+
+  sr_edfi_config:
+    owner: ed_fi
+    columns:
+      id: TEXT PRIMARY KEY
+      profile_name: "TEXT NOT NULL DEFAULT ''"
+      state_code: "TEXT NOT NULL DEFAULT ''"
+      school_year: "INTEGER NOT NULL DEFAULT 0"
+      ods_base_url: "TEXT NOT NULL DEFAULT ''"
+      oauth_token_url: "TEXT NOT NULL DEFAULT ''"
+      oauth_client_id: "TEXT NOT NULL DEFAULT ''"
+      oauth_client_secret_encrypted: "TEXT NOT NULL DEFAULT ''"
+      api_version: "TEXT NOT NULL DEFAULT '7' CHECK(api_version IN ('5','6','7'))"
+      is_active: "INTEGER NOT NULL DEFAULT 1"
+      last_tested_at: "TEXT NOT NULL DEFAULT ''"
+      last_token_at: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_sr_edfi_config_company_state_year: UNIQUE (company_id, state_code, school_year)
+    indexes:
+      - name: idx_sr_edfi_config_company_state
+        columns: [company_id, state_code, is_active]
+      - name: idx_sr_edfi_config_year
+        columns: [company_id, school_year]
+
+  sr_edfi_descriptor_map:
+    owner: ed_fi
+    columns:
+      id: TEXT PRIMARY KEY
+      config_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_edfi_config(id) ON DELETE RESTRICT"
+      descriptor_type: "TEXT NOT NULL DEFAULT '' CHECK(descriptor_type IN ('grade_level','race','sex','attendance_event','disability','language','exit_type','entry_type','discipline_behavior','discipline_action','sped_environment','program_type','credential_type','course_level','homeless_residence'))"
+      internal_code: "TEXT NOT NULL DEFAULT ''"
+      edfi_descriptor_uri: "TEXT NOT NULL DEFAULT ''"
+      description: "TEXT NOT NULL DEFAULT ''"
+      is_active: "INTEGER NOT NULL DEFAULT 1"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_sr_descriptor_config_type_code: UNIQUE (config_id, descriptor_type, internal_code)
+    indexes:
+      - name: idx_sr_descriptor_config_type
+        columns: [config_id, descriptor_type, is_active]
+      - name: idx_sr_descriptor_internal
+        columns: [config_id, internal_code]
+
+  # ============================================================
+  # Domain: demographics — Student supplement, SPED, EL
+  # ============================================================
+
+  sr_student_supplement:
+    owner: demographics
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL UNIQUE DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      ssid: "TEXT NOT NULL DEFAULT ''"
+      ssid_state_code: "TEXT NOT NULL DEFAULT ''"
+      ssid_status: "TEXT NOT NULL DEFAULT 'pending' CHECK(ssid_status IN ('pending','assigned','not_applicable'))"
+      is_hispanic_latino: "INTEGER NOT NULL DEFAULT 0"
+      race_codes: "TEXT NOT NULL DEFAULT '[]'"
+      race_federal_rollup: "TEXT NOT NULL DEFAULT '' CHECK(race_federal_rollup IN ('WHITE','BLACK_OR_AFRICAN_AMERICAN','ASIAN','AMERICAN_INDIAN_OR_ALASKA_NATIVE','NATIVE_HAWAIIAN_OR_OTHER_PACIFIC_ISLANDER','TWO_OR_MORE_RACES','HISPANIC_OR_LATINO',''))"
+      is_el: "INTEGER NOT NULL DEFAULT 0"
+      el_entry_date: "TEXT NOT NULL DEFAULT ''"
+      home_language_code: "TEXT NOT NULL DEFAULT ''"
+      native_language_code: "TEXT NOT NULL DEFAULT ''"
+      english_proficiency_level: "TEXT NOT NULL DEFAULT ''"
+      english_proficiency_instrument: "TEXT NOT NULL DEFAULT '' CHECK(english_proficiency_instrument IN ('WIDA_ACCESS','ELPAC','TELPAS','LAS_LINKS','IPT','OTHER',''))"
+      el_exit_date: "TEXT NOT NULL DEFAULT ''"
+      is_rfep: "INTEGER NOT NULL DEFAULT 0"
+      rfep_date: "TEXT NOT NULL DEFAULT ''"
+      is_sped: "INTEGER NOT NULL DEFAULT 0"
+      is_504: "INTEGER NOT NULL DEFAULT 0"
+      sped_entry_date: "TEXT NOT NULL DEFAULT ''"
+      sped_exit_date: "TEXT NOT NULL DEFAULT ''"
+      is_economically_disadvantaged: "INTEGER NOT NULL DEFAULT 0"
+      lunch_program_status: "TEXT NOT NULL DEFAULT '' CHECK(lunch_program_status IN ('free','reduced','paid','direct_certification',''))"
+      is_migrant: "INTEGER NOT NULL DEFAULT 0"
+      is_homeless: "INTEGER NOT NULL DEFAULT 0"
+      homeless_primary_nighttime_residence: "TEXT NOT NULL DEFAULT '' CHECK(homeless_primary_nighttime_residence IN ('sheltered','unsheltered','doubled_up','hotel_motel',''))"
+      is_foster_care: "INTEGER NOT NULL DEFAULT 0"
+      is_military_connected: "INTEGER NOT NULL DEFAULT 0"
+      military_connection_type: "TEXT NOT NULL DEFAULT '' CHECK(military_connection_type IN ('active_duty','veteran','national_guard',''))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_supplement_student
+        columns: [student_id]
+      - name: idx_sr_supplement_ssid
+        columns: [ssid, ssid_state_code]
+      - name: idx_sr_supplement_company_el
+        columns: [company_id, is_el]
+      - name: idx_sr_supplement_company_sped
+        columns: [company_id, is_sped]
+      - name: idx_sr_supplement_company_econ
+        columns: [company_id, is_economically_disadvantaged]
+      - name: idx_sr_supplement_ssid_status
+        columns: [company_id, ssid_status]
+      - name: idx_sr_supplement_race_rollup
+        columns: [company_id, race_federal_rollup]
+
+  sr_sped_placement:
+    owner: demographics
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      school_year: "INTEGER NOT NULL DEFAULT 0"
+      disability_category: "TEXT NOT NULL DEFAULT '' CHECK(disability_category IN ('AUT','DB','DD','ED','HI','ID','MD','OHI','OI','SLD','SLI','TBI','VI',''))"
+      secondary_disability: "TEXT NOT NULL DEFAULT ''"
+      educational_environment: "TEXT NOT NULL DEFAULT '' CHECK(educational_environment IN ('RC_80','RC_40_79','RC_LT40','SC','SS','RF','HH',''))"
+      sped_program_entry_date: "TEXT NOT NULL DEFAULT ''"
+      sped_program_exit_date: "TEXT NOT NULL DEFAULT ''"
+      sped_exit_reason: "TEXT NOT NULL DEFAULT '' CHECK(sped_exit_reason IN ('graduated','dropped_out','reached_max_age','transferred','died','not_eligible',''))"
+      iep_start_date: "TEXT NOT NULL DEFAULT ''"
+      iep_review_date: "TEXT NOT NULL DEFAULT ''"
+      is_transition_plan_required: "INTEGER NOT NULL DEFAULT 0"
+      lre_percentage: "TEXT NOT NULL DEFAULT ''"
+      is_early_childhood: "INTEGER NOT NULL DEFAULT 0"
+      early_childhood_environment: "TEXT NOT NULL DEFAULT '' CHECK(early_childhood_environment IN ('early_childhood_program','home','part_time_ec_part_time_home',''))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_sr_sped_placement_student_year: UNIQUE (student_id, school_year)
+    indexes:
+      - name: idx_sr_sped_student_year
+        columns: [student_id, school_year]
+      - name: idx_sr_sped_company_year
+        columns: [company_id, school_year]
+      - name: idx_sr_sped_disability
+        columns: [company_id, disability_category, school_year]
+      - name: idx_sr_sped_environment
+        columns: [company_id, educational_environment, school_year]
+
+  sr_sped_service:
+    owner: demographics
+    columns:
+      id: TEXT PRIMARY KEY
+      sped_placement_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_sped_placement(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      service_type: "TEXT NOT NULL DEFAULT '' CHECK(service_type IN ('speech_language','occupational_therapy','physical_therapy','counseling','audiology','orientation_mobility','special_transportation','behavior_intervention','vision_services','other'))"
+      provider_type: "TEXT NOT NULL DEFAULT '' CHECK(provider_type IN ('school_employed','contracted',''))"
+      minutes_per_week: "INTEGER NOT NULL DEFAULT 0"
+      start_date: "TEXT NOT NULL DEFAULT ''"
+      end_date: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_sped_service_placement
+        columns: [sped_placement_id]
+      - name: idx_sr_sped_service_student
+        columns: [student_id]
+      - name: idx_sr_sped_service_type
+        columns: [company_id, service_type]
+
+  sr_el_program:
+    owner: demographics
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      school_year: "INTEGER NOT NULL DEFAULT 0"
+      program_type: "TEXT NOT NULL DEFAULT '' CHECK(program_type IN ('pull_out','push_in','sheltered_english','dual_language','tbe_transitional','tbe_developmental','waiver','content_based'))"
+      entry_date: "TEXT NOT NULL DEFAULT ''"
+      exit_date: "TEXT NOT NULL DEFAULT ''"
+      exit_reason: "TEXT NOT NULL DEFAULT '' CHECK(exit_reason IN ('reclassified','parent_waiver','transferred','graduated',''))"
+      english_proficiency_assessed_date: "TEXT NOT NULL DEFAULT ''"
+      proficiency_level: "TEXT NOT NULL DEFAULT ''"
+      proficiency_instrument: "TEXT NOT NULL DEFAULT '' CHECK(proficiency_instrument IN ('WIDA_ACCESS','ELPAC','TELPAS','LAS_LINKS','IPT','OTHER',''))"
+      is_parent_waived: "INTEGER NOT NULL DEFAULT 0"
+      waiver_date: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_el_program_student_year
+        columns: [student_id, school_year]
+      - name: idx_sr_el_program_company_year
+        columns: [company_id, school_year]
+      - name: idx_sr_el_program_exit
+        columns: [company_id, exit_date]
+
+  # ============================================================
+  # Domain: discipline — Incidents, involvement, consequences
+  # ============================================================
+
+  sr_discipline_incident:
+    owner: discipline
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL UNIQUE DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      school_year: "INTEGER NOT NULL DEFAULT 0"
+      incident_date: "TEXT NOT NULL DEFAULT ''"
+      incident_time: "TEXT NOT NULL DEFAULT ''"
+      incident_type: "TEXT NOT NULL DEFAULT '' CHECK(incident_type IN ('bullying','harassment_race','harassment_sex','harassment_disability','harassment_other','drug_alcohol','physical_assault_student','physical_assault_staff','weapons_firearm','weapons_other','vandalism','robbery','sexual_offense','restraint','seclusion','insubordination','other'))"
+      incident_description: "TEXT NOT NULL DEFAULT ''"
+      campus_location: "TEXT NOT NULL DEFAULT '' CHECK(campus_location IN ('classroom','hallway','cafeteria','restroom','playground','gymnasium','school_bus','off_campus','online','other',''))"
+      reported_by: "TEXT NOT NULL DEFAULT ''"
+      student_count_involved: "INTEGER NOT NULL DEFAULT 0"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_discipline_incident_company_year
+        columns: [company_id, school_year]
+      - name: idx_sr_discipline_incident_date
+        columns: [incident_date]
+      - name: idx_sr_discipline_incident_type
+        columns: [company_id, incident_type, school_year]
+      - name: idx_sr_discipline_incident_series
+        columns: [naming_series]
+
+  sr_discipline_student:
+    owner: discipline
+    columns:
+      id: TEXT PRIMARY KEY
+      incident_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_discipline_incident(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      role: "TEXT NOT NULL DEFAULT '' CHECK(role IN ('offender','victim','witness'))"
+      is_idea_student: "INTEGER NOT NULL DEFAULT 0"
+      is_504_student: "INTEGER NOT NULL DEFAULT 0"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_sr_discipline_student_incident_student_role: UNIQUE (incident_id, student_id, role)
+    indexes:
+      - name: idx_sr_discipline_student_incident
+        columns: [incident_id]
+      - name: idx_sr_discipline_student_student
+        columns: [student_id]
+      - name: idx_sr_discipline_student_idea
+        columns: [is_idea_student]
+
+  sr_discipline_action:
+    owner: discipline
+    columns:
+      id: TEXT PRIMARY KEY
+      discipline_student_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_discipline_student(id) ON DELETE RESTRICT"
+      incident_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_discipline_incident(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      action_type: "TEXT NOT NULL DEFAULT '' CHECK(action_type IN ('iss','oss_1_10','oss_gt10','expulsion_with_services','expulsion_without_services','alternative_placement','law_enforcement_referral','school_related_arrest','no_action'))"
+      start_date: "TEXT NOT NULL DEFAULT ''"
+      end_date: "TEXT NOT NULL DEFAULT ''"
+      days_removed: "INTEGER NOT NULL DEFAULT 0"
+      alternative_services_provided: "INTEGER NOT NULL DEFAULT 0"
+      alternative_services_description: "TEXT NOT NULL DEFAULT ''"
+      mdr_required: "INTEGER NOT NULL DEFAULT 0"
+      mdr_outcome: "TEXT NOT NULL DEFAULT '' CHECK(mdr_outcome IN ('manifestation','not_manifestation','not_required','pending',''))"
+      mdr_date: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_discipline_action_student
+        columns: [discipline_student_id]
+      - name: idx_sr_discipline_action_incident
+        columns: [incident_id]
+      - name: idx_sr_discipline_action_student_id
+        columns: [student_id]
+      - name: idx_sr_discipline_action_type
+        columns: [company_id, action_type]
+      - name: idx_sr_discipline_action_mdr
+        columns: [mdr_required, mdr_outcome]
+
+  # ============================================================
+  # Domain: state_reporting — Collection windows, snapshots
+  # ============================================================
+
+  sr_collection_window:
+    owner: state_reporting
+    columns:
+      id: TEXT PRIMARY KEY
+      name: "TEXT NOT NULL DEFAULT ''"
+      state_code: "TEXT NOT NULL DEFAULT ''"
+      window_type: "TEXT NOT NULL DEFAULT '' CHECK(window_type IN ('fall_enrollment','fall_sped','winter_update','spring_enrollment','eoy_attendance','eoy_discipline','eoy_grades','staffing','crdc','summer_correction'))"
+      school_year: "INTEGER NOT NULL DEFAULT 0"
+      academic_year_id: "TEXT REFERENCES educlaw_academic_year(id) ON DELETE RESTRICT"
+      open_date: "TEXT NOT NULL DEFAULT ''"
+      close_date: "TEXT NOT NULL DEFAULT ''"
+      snapshot_date: "TEXT NOT NULL DEFAULT ''"
+      status: "TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('upcoming','open','data_entry','validation','snapshot','submitted','certified','closed'))"
+      required_data_categories: "TEXT NOT NULL DEFAULT '[]'"
+      description: "TEXT NOT NULL DEFAULT ''"
+      is_federal_required: "INTEGER NOT NULL DEFAULT 0"
+      edfi_config_id: "TEXT REFERENCES sr_edfi_config(id) ON DELETE RESTRICT"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_sr_collection_window_company_state_type_year: UNIQUE (company_id, state_code, window_type, school_year)
+    indexes:
+      - name: idx_sr_collection_window_company_status
+        columns: [company_id, status]
+      - name: idx_sr_collection_window_year_state
+        columns: [company_id, school_year, state_code]
+      - name: idx_sr_collection_window_type
+        columns: [company_id, window_type, school_year]
+      - name: idx_sr_collection_window_dates
+        columns: [open_date, close_date]
+
+  sr_snapshot:
+    owner: state_reporting
+    columns:
+      id: TEXT PRIMARY KEY
+      collection_window_id: "TEXT NOT NULL UNIQUE DEFAULT '' REFERENCES sr_collection_window(id) ON DELETE RESTRICT"
+      snapshot_taken_at: "TEXT NOT NULL DEFAULT ''"
+      snapshot_taken_by: "TEXT NOT NULL DEFAULT ''"
+      total_students: "INTEGER NOT NULL DEFAULT 0"
+      total_enrollment: "INTEGER NOT NULL DEFAULT 0"
+      total_sped: "INTEGER NOT NULL DEFAULT 0"
+      total_el: "INTEGER NOT NULL DEFAULT 0"
+      total_economically_disadvantaged: "INTEGER NOT NULL DEFAULT 0"
+      total_homeless: "INTEGER NOT NULL DEFAULT 0"
+      ada_total: "TEXT NOT NULL DEFAULT ''"
+      adm_total: "TEXT NOT NULL DEFAULT ''"
+      chronic_absenteeism_count: "INTEGER NOT NULL DEFAULT 0"
+      error_count_at_snapshot: "INTEGER NOT NULL DEFAULT 0"
+      status: "TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','finalized','certified'))"
+      certified_by: "TEXT NOT NULL DEFAULT ''"
+      certified_at: "TEXT NOT NULL DEFAULT ''"
+      certification_notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_snapshot_window
+        columns: [collection_window_id]
+      - name: idx_sr_snapshot_company_status
+        columns: [company_id, status]
+
+  sr_snapshot_record:
+    owner: state_reporting
+    columns:
+      id: TEXT PRIMARY KEY
+      snapshot_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_snapshot(id) ON DELETE RESTRICT"
+      student_id: "TEXT REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      record_type: "TEXT NOT NULL DEFAULT '' CHECK(record_type IN ('student_enrollment','attendance_summary','sped_placement','el_program','discipline_summary','staff_assignment'))"
+      data_json: "TEXT NOT NULL DEFAULT '{}'"
+      school_year: "INTEGER NOT NULL DEFAULT 0"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+    indexes:
+      - name: idx_sr_snapshot_record_snapshot_type
+        columns: [snapshot_id, record_type]
+      - name: idx_sr_snapshot_record_student
+        columns: [snapshot_id, student_id]
+      - name: idx_sr_snapshot_record_company
+        columns: [company_id, school_year]
+
+  # ============================================================
+  # Domain: ed_fi — Sync log (after collection_window exists)
+  # ============================================================
+
+  sr_edfi_sync_log:
+    owner: ed_fi
+    columns:
+      id: TEXT PRIMARY KEY
+      config_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_edfi_config(id) ON DELETE RESTRICT"
+      collection_window_id: "TEXT REFERENCES sr_collection_window(id) ON DELETE RESTRICT"
+      resource_type: "TEXT NOT NULL DEFAULT ''"
+      operation: "TEXT NOT NULL DEFAULT '' CHECK(operation IN ('POST','PUT','DELETE','GET'))"
+      internal_id: "TEXT NOT NULL DEFAULT ''"
+      edfi_natural_key: "TEXT NOT NULL DEFAULT ''"
+      http_status: "INTEGER NOT NULL DEFAULT 0"
+      request_payload_hash: "TEXT NOT NULL DEFAULT ''"
+      response_body: "TEXT NOT NULL DEFAULT ''"
+      sync_status: "TEXT NOT NULL DEFAULT 'pending' CHECK(sync_status IN ('success','error','retry','pending','skipped'))"
+      retry_count: "INTEGER NOT NULL DEFAULT 0"
+      synced_at: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+    indexes:
+      - name: idx_sr_sync_log_resource_internal
+        columns: [resource_type, internal_id]
+      - name: idx_sr_sync_log_status_time
+        columns: [sync_status, synced_at]
+      - name: idx_sr_sync_log_config_window
+        columns: [config_id, collection_window_id]
+      - name: idx_sr_sync_log_company_status
+        columns: [company_id, sync_status]
+
+  # ============================================================
+  # Domain: submission_tracking — Submissions, errors
+  # ============================================================
+
+  sr_submission:
+    owner: submission_tracking
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL UNIQUE DEFAULT ''"
+      collection_window_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_collection_window(id) ON DELETE RESTRICT"
+      snapshot_id: "TEXT REFERENCES sr_snapshot(id) ON DELETE RESTRICT"
+      submission_type: "TEXT NOT NULL DEFAULT 'initial' CHECK(submission_type IN ('initial','amendment','correction'))"
+      submission_method: "TEXT NOT NULL DEFAULT '' CHECK(submission_method IN ('edfi_api','flat_file','manual_portal'))"
+      submitted_at: "TEXT NOT NULL DEFAULT ''"
+      submitted_by: "TEXT NOT NULL DEFAULT ''"
+      records_submitted: "INTEGER NOT NULL DEFAULT 0"
+      records_accepted: "INTEGER NOT NULL DEFAULT 0"
+      records_rejected: "INTEGER NOT NULL DEFAULT 0"
+      status: "TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed','failed','certified'))"
+      state_confirmation_id: "TEXT NOT NULL DEFAULT ''"
+      state_confirmed_at: "TEXT NOT NULL DEFAULT ''"
+      amendment_reason: "TEXT NOT NULL DEFAULT ''"
+      linked_submission_id: "TEXT REFERENCES sr_submission(id) ON DELETE RESTRICT"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_submission_window
+        columns: [collection_window_id]
+      - name: idx_sr_submission_company_status
+        columns: [company_id, status]
+      - name: idx_sr_submission_series
+        columns: [naming_series]
+      - name: idx_sr_submission_linked
+        columns: [linked_submission_id]
+
+  sr_submission_error:
+    owner: submission_tracking
+    columns:
+      id: TEXT PRIMARY KEY
+      collection_window_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_collection_window(id) ON DELETE RESTRICT"
+      submission_id: "TEXT REFERENCES sr_submission(id) ON DELETE RESTRICT"
+      error_source: "TEXT NOT NULL DEFAULT '' CHECK(error_source IN ('edfi_api','state_portal','internal_validation'))"
+      error_level: "TEXT NOT NULL DEFAULT '' CHECK(error_level IN ('1','2','3'))"
+      severity: "TEXT NOT NULL DEFAULT '' CHECK(severity IN ('critical','major','minor','warning'))"
+      error_code: "TEXT NOT NULL DEFAULT ''"
+      error_category: "TEXT NOT NULL DEFAULT '' CHECK(error_category IN ('enrollment','demographics','sped','el','attendance','discipline','staff','calendar','other'))"
+      error_message: "TEXT NOT NULL DEFAULT ''"
+      student_id: "TEXT REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      staff_id: "TEXT REFERENCES employee(id) ON DELETE RESTRICT"
+      record_type: "TEXT NOT NULL DEFAULT ''"
+      field_name: "TEXT NOT NULL DEFAULT ''"
+      field_value: "TEXT NOT NULL DEFAULT ''"
+      resolution_status: "TEXT NOT NULL DEFAULT 'open' CHECK(resolution_status IN ('open','in_progress','resolved','deferred','state_waived'))"
+      resolution_method: "TEXT NOT NULL DEFAULT '' CHECK(resolution_method IN ('data_corrected','descriptor_mapped','state_exception','data_not_available',''))"
+      resolved_by: "TEXT NOT NULL DEFAULT ''"
+      resolved_at: "TEXT NOT NULL DEFAULT ''"
+      resolution_notes: "TEXT NOT NULL DEFAULT ''"
+      assigned_to: "TEXT NOT NULL DEFAULT ''"
+      assigned_at: "TEXT NOT NULL DEFAULT ''"
+      state_ticket_id: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_sub_error_window_severity
+        columns: [collection_window_id, severity, resolution_status]
+      - name: idx_sr_sub_error_student
+        columns: [student_id, resolution_status]
+      - name: idx_sr_sub_error_submission
+        columns: [submission_id]
+      - name: idx_sr_sub_error_company_open
+        columns: [company_id, resolution_status]
+      - name: idx_sr_sub_error_assigned
+        columns: [assigned_to, resolution_status]
+      - name: idx_sr_sub_error_category
+        columns: [company_id, error_category, severity]
+
+  # ============================================================
+  # Domain: data_validation — Rule library, validation results
+  # ============================================================
+
+  sr_validation_rule:
+    owner: data_validation
+    columns:
+      id: TEXT PRIMARY KEY
+      rule_code: "TEXT NOT NULL UNIQUE DEFAULT ''"
+      category: "TEXT NOT NULL DEFAULT '' CHECK(category IN ('enrollment','demographics','sped','el','attendance','discipline','staff','calendar'))"
+      severity: "TEXT NOT NULL DEFAULT '' CHECK(severity IN ('critical','major','minor','warning'))"
+      name: "TEXT NOT NULL DEFAULT ''"
+      description: "TEXT NOT NULL DEFAULT ''"
+      applicable_windows: "TEXT NOT NULL DEFAULT '[]'"
+      applicable_states: "TEXT NOT NULL DEFAULT '[]'"
+      is_federal_rule: "INTEGER NOT NULL DEFAULT 0"
+      sql_query: "TEXT NOT NULL DEFAULT ''"
+      error_message_template: "TEXT NOT NULL DEFAULT ''"
+      is_active: "INTEGER NOT NULL DEFAULT 1"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_sr_validation_rule_category
+        columns: [category, severity, is_active]
+      - name: idx_sr_validation_rule_code
+        columns: [rule_code]
+      - name: idx_sr_validation_rule_federal
+        columns: [is_federal_rule, is_active]
+
+  sr_validation_result:
+    owner: data_validation
+    columns:
+      id: TEXT PRIMARY KEY
+      collection_window_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_collection_window(id) ON DELETE RESTRICT"
+      run_at: "TEXT NOT NULL DEFAULT ''"
+      run_by: "TEXT NOT NULL DEFAULT ''"
+      rule_id: "TEXT NOT NULL DEFAULT '' REFERENCES sr_validation_rule(id) ON DELETE RESTRICT"
+      student_id: "TEXT REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      staff_id: "TEXT REFERENCES employee(id) ON DELETE RESTRICT"
+      error_detail: "TEXT NOT NULL DEFAULT ''"
+      is_resolved: "INTEGER NOT NULL DEFAULT 0"
+      resolved_at: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+    indexes:
+      - name: idx_sr_validation_result_window
+        columns: [collection_window_id, is_resolved]
+      - name: idx_sr_validation_result_rule
+        columns: [rule_id, collection_window_id]
+      - name: idx_sr_validation_result_student
+        columns: [student_id, collection_window_id]
+      - name: idx_sr_validation_result_run
+        columns: [collection_window_id, run_at]

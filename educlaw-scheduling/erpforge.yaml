@@ -1,0 +1,42 @@
+# ============================================================
+# erpforge.yaml — Project state for EduClaw Advanced Scheduling
+# ============================================================
+
+# --- Identity ---
+product: educlaw-scheduling
+display_name: EduClaw Advanced Scheduling
+description: "Master scheduling, schedule patterns, conflict resolution, and room assignment for K-12 and higher-education institutions."
+status: built
+created: "2026-03-05"
+updated: "2026-03-05"
+
+# --- Foundation ---
+foundation:
+  shared_db: ~/.openclaw/erpclaw/data.sqlite
+  shared_lib: ~/.openclaw/erpclaw/lib/erpclaw_lib/
+  init_db: init_db.py
+  skills: [erpclaw-setup, erpclaw-gl, erpclaw-hr]
+  foundation_actions: 0
+  foundation_tests: 0
+
+# --- Domain Skills (flat layout — all domains live in scripts/ and tests/) ---
+# Skill name "" means the project root itself (scripts/ and tests/ at top level).
+skills:
+  - name: ""
+    display_name: educlaw-scheduling
+    description: "All four domains: schedule_patterns, master_schedule, conflict_resolution, room_assignment"
+    status: built
+
+# --- Totals ---
+totals:
+  foundation_actions: 0
+  new_actions_planned: 77
+  new_actions_built: 77
+  new_tests: 423
+  total_actions: 77
+  total_tests: 423
+  total_tables: 9
+  total_skills: 4
+
+# --- Session History ---
+sessions: []
