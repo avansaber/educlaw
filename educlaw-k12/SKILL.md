@@ -3,6 +3,7 @@ name: educlaw-k12
 version: 1.0.0
 description: EduClaw K-12 Extensions — discipline management, student health records, special education (IDEA/IEP/504), and grade promotion workflows.
 author: ERPForge
+source: https://github.com/avansaber/educlaw
 parent: educlaw
 scripts:
   - scripts/db_query.py

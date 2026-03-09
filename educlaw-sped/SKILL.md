@@ -3,6 +3,7 @@ name: educlaw-sped
 version: 1.0.0
 description: EduClaw Special Education (SPED) — IEP management, service tracking, and IDEA compliance reporting.
 author: ERPForge
+source: https://github.com/avansaber/educlaw
 parent: educlaw-k12
 scripts:
   - scripts/db_query.py

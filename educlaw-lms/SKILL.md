@@ -4,7 +4,7 @@ version: 1.0.0
 description: LMS sync, assignments, course materials, and online gradebook for EduClaw. Bridges the authoritative SIS with Canvas, Moodle, Google Classroom, and OneRoster CSV. 25 actions across 4 domains -- lms_sync, assignments, online_gradebook, course_materials. FERPA/COPPA compliant. DPA hard-gated. Credentials AES-256 encrypted at rest.
 author: AvanSaber / Nikhil Jathar
 homepage: https://www.educlaw.ai
-source: https://github.com/avansaber/educlaw-lms
+source: https://github.com/avansaber/educlaw
 tier: 4
 category: education
 requires: [erpclaw-setup, erpclaw-gl, erpclaw-selling, erpclaw-payments, erpclaw-hr, educlaw]

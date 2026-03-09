@@ -6,6 +6,7 @@ description: >
   Master scheduling, schedule patterns, conflict resolution, and room assignment
   for K-12 and higher-education institutions. Sub-vertical of EduClaw SIS.
 author: ERPForge
+source: https://github.com/avansaber/educlaw
 parent: educlaw
 scripts:
   - scripts/db_query.py

@@ -8,6 +8,7 @@ description: >
   aid (packages, disbursements, SAP), alumni relations (giving, events), and
   faculty management (assignments, research grants).
 author: ERPForge
+source: https://github.com/avansaber/educlaw
 parent: educlaw
 scripts:
   - scripts/db_query.py

@@ -6,6 +6,7 @@ description: >
   and submission tracking for K-12 LEAs. Transforms operational EduClaw data into
   compliant state/federal reporting submissions (Ed-Fi ODS/API, EDFacts, CRDC, IDEA 618).
 author: ERPForge
+source: https://github.com/avansaber/educlaw
 scripts:
   - scripts/db_query.py
 parent: educlaw

@@ -7,6 +7,7 @@ description: >
   ISIR processing, SAP evaluation, R2T4 calculations, award packaging, disbursements,
   COD origination, scholarships, work-study, and loan tracking.
 author: ERPForge
+source: https://github.com/avansaber/educlaw
 parent: educlaw
 scripts:
   - scripts/db_query.py
