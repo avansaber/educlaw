@@ -59,8 +59,7 @@ def add_faculty(conn, args):
 
     fac_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.company_id = company_id
-    naming = get_next_name(conn, "highered_faculty")
+    naming = get_next_name(conn, "highered_faculty", company_id=company_id)
 
     conn.execute("""
         INSERT INTO highered_faculty

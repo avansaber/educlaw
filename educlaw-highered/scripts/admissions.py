@@ -65,8 +65,7 @@ def add_application(conn, args):
 
     app_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.company_id = company_id
-    naming = get_next_name(conn, "highered_application")
+    naming = get_next_name(conn, "highered_application", company_id=company_id)
 
     conn.execute("""
         INSERT INTO highered_application

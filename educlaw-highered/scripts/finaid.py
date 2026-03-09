@@ -52,8 +52,7 @@ def add_aid_package(conn, args):
     ))
     pkg_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.company_id = company_id
-    naming = get_next_name(conn, "highered_aid_package")
+    naming = get_next_name(conn, "highered_aid_package", company_id=company_id)
     conn.execute("""
         INSERT INTO highered_aid_package
         (id, naming_series, student_id, aid_year, total_cost, efc, total_need,

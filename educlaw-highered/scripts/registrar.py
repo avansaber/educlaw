@@ -50,8 +50,7 @@ def add_degree_program(conn, args):
 
     prog_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.company_id = company_id
-    naming = get_next_name(conn, "highered_degree_program")
+    naming = get_next_name(conn, "highered_degree_program", company_id=company_id)
 
     conn.execute("""
         INSERT INTO highered_degree_program

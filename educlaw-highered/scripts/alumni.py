@@ -57,8 +57,7 @@ def add_alumnus(conn, args):
 
     alum_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.company_id = company_id
-    naming = get_next_name(conn, "highered_alumnus")
+    naming = get_next_name(conn, "highered_alumnus", company_id=company_id)
 
     conn.execute("""
         INSERT INTO highered_alumnus
