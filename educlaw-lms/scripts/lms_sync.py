@@ -24,7 +24,10 @@ try:
     from erpclaw_lib.audit import audit
     from erpclaw_lib.crypto import encrypt_field, decrypt_field
 except ImportError:
-    pass
+    def encrypt_field(v, k):
+        raise RuntimeError("erpclaw_lib.crypto is required for credential storage. Install erpclaw-setup first.")
+    def decrypt_field(v, k):
+        raise RuntimeError("erpclaw_lib.crypto is required for credential decryption. Install erpclaw-setup first.")
 
 SKILL = "lms-educlaw-lms"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -53,13 +56,12 @@ def _get_encryption_key():
 
 
 def _encrypt_cred(value, key):
-    """Encrypt credential value if key is available; otherwise return as-is."""
-    if not value or not key:
-        return value or ""
-    try:
-        return encrypt_field(value, key)
-    except Exception:
-        return value or ""
+    """Encrypt credential value. Refuses to store plaintext if key is missing."""
+    if not value:
+        return ""
+    if not key:
+        raise ValueError("EDUCLAW_LMS_ENCRYPTION_KEY must be set to store LMS credentials securely.")
+    return encrypt_field(value, key)
 
 
 def _decrypt_cred(value, key):

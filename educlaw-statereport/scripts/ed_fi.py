@@ -38,8 +38,10 @@ try:
         return _decrypt_field_raw(v, _FIELD_KEY)
 
 except ImportError:
-    def encrypt_field(v): return f"ENC:{v}"
-    def decrypt_field(v): return v.replace("ENC:", "") if v.startswith("ENC:") else v
+    def encrypt_field(v):
+        raise RuntimeError("erpclaw_lib.crypto is required for credential storage. Install erpclaw-setup first.")
+    def decrypt_field(v):
+        raise RuntimeError("erpclaw_lib.crypto is required for credential decryption. Install erpclaw-setup first.")
 
 SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
