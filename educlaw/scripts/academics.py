@@ -115,7 +115,7 @@ def add_academic_year(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Academic year creation failed: {e}")
 
-    audit(conn, SKILL, "add-academic-year", "educlaw_academic_year", year_id,
+    audit(conn, SKILL, "edu-add-academic-year", "educlaw_academic_year", year_id,
           new_values={"name": name, "start_date": start_date, "end_date": end_date})
     conn.commit()
     ok({"id": year_id, "name": name, "start_date": start_date, "end_date": end_date})
@@ -153,7 +153,7 @@ def update_academic_year(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(year_id)
     conn.execute(f"UPDATE educlaw_academic_year SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-academic-year", "educlaw_academic_year", year_id,
+    audit(conn, SKILL, "edu-update-academic-year", "educlaw_academic_year", year_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": year_id, "updated_fields": changed})
@@ -260,7 +260,7 @@ def add_academic_term(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Academic term creation failed: {e}")
 
-    audit(conn, SKILL, "add-academic-term", "educlaw_academic_term", term_id,
+    audit(conn, SKILL, "edu-add-academic-term", "educlaw_academic_term", term_id,
           new_values={"name": name, "term_type": term_type, "academic_year_id": academic_year_id})
     conn.commit()
     ok({"id": term_id, "name": name, "term_type": term_type, "academic_year_id": academic_year_id,
@@ -315,7 +315,7 @@ def update_academic_term(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(term_id)
     conn.execute(f"UPDATE educlaw_academic_term SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-academic-term", "educlaw_academic_term", term_id,
+    audit(conn, SKILL, "edu-update-academic-term", "educlaw_academic_term", term_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": term_id, "updated_fields": changed})
@@ -405,7 +405,7 @@ def add_room(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Room already exists: {e}")
 
-    audit(conn, SKILL, "add-room", "educlaw_room", room_id,
+    audit(conn, SKILL, "edu-add-room", "educlaw_room", room_id,
           new_values={"room_number": room_number, "building": building})
     conn.commit()
     ok({"id": room_id, "room_number": room_number, "building": building, "capacity": int(capacity)})
@@ -446,7 +446,7 @@ def update_room(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(room_id)
     conn.execute(f"UPDATE educlaw_room SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-room", "educlaw_room", room_id, new_values={"updated_fields": changed})
+    audit(conn, SKILL, "edu-update-room", "educlaw_room", room_id, new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": room_id, "updated_fields": changed})
 
@@ -527,7 +527,7 @@ def add_program(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Program code '{code}' already exists for this company")
 
-    audit(conn, SKILL, "add-program", "educlaw_program", prog_id,
+    audit(conn, SKILL, "edu-add-program", "educlaw_program", prog_id,
           new_values={"code": code, "name": name, "program_type": program_type})
     conn.commit()
     ok({"id": prog_id, "code": code, "name": name, "program_type": program_type})
@@ -570,7 +570,7 @@ def update_program(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(program_id)
     conn.execute(f"UPDATE educlaw_program SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-program", "educlaw_program", program_id,
+    audit(conn, SKILL, "edu-update-program", "educlaw_program", program_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": program_id, "updated_fields": changed})
@@ -693,7 +693,7 @@ def add_course(conn, args):
                      now, getattr(args, "user_id", None) or "")
                 )
 
-    audit(conn, SKILL, "add-course", "educlaw_course", course_id,
+    audit(conn, SKILL, "edu-add-course", "educlaw_course", course_id,
           new_values={"course_code": course_code, "name": name})
     conn.commit()
     ok({"id": course_id, "course_code": course_code, "name": name, "credit_hours": credit_val})
@@ -738,7 +738,7 @@ def update_course(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(course_id)
     conn.execute(f"UPDATE educlaw_course SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-course", "educlaw_course", course_id,
+    audit(conn, SKILL, "edu-update-course", "educlaw_course", course_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": course_id, "updated_fields": changed})
@@ -908,7 +908,7 @@ def add_section(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Section creation failed: {e}")
 
-    audit(conn, SKILL, "add-section", "educlaw_section", section_id,
+    audit(conn, SKILL, "edu-add-section", "educlaw_section", section_id,
           new_values={"naming_series": section_series, "course_id": course_id,
                       "academic_term_id": academic_term_id})
     conn.commit()
@@ -980,7 +980,7 @@ def update_section(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(section_id)
     conn.execute(f"UPDATE educlaw_section SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-section", "educlaw_section", section_id,
+    audit(conn, SKILL, "edu-update-section", "educlaw_section", section_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": section_id, "updated_fields": changed})
@@ -1072,7 +1072,7 @@ def open_section(conn, args):
         "UPDATE educlaw_section SET status = ?, updated_at = datetime('now') WHERE id = ?",
         (new_status, section_id)
     )
-    audit(conn, SKILL, "open-section", "educlaw_section", section_id,
+    audit(conn, SKILL, "edu-open-section", "educlaw_section", section_id,
           new_values={"old_status": current_status, "new_status": new_status})
     conn.commit()
     ok({"id": section_id, "old_status": current_status, "section_status": new_status})
@@ -1135,7 +1135,7 @@ def cancel_section(conn, args):
         "UPDATE educlaw_section SET status = 'cancelled', current_enrollment = 0, updated_at = datetime('now') WHERE id = ?",
         (section_id,)
     )
-    audit(conn, SKILL, "cancel-section", "educlaw_section", section_id,
+    audit(conn, SKILL, "edu-cancel-section", "educlaw_section", section_id,
           new_values={"dropped_students": dropped_count})
     conn.commit()
     ok({"id": section_id, "section_status": "cancelled", "dropped_students": dropped_count})
@@ -1146,29 +1146,29 @@ def cancel_section(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-academic-year": add_academic_year,
-    "update-academic-year": update_academic_year,
-    "get-academic-year": get_academic_year,
-    "list-academic-years": list_academic_years,
-    "add-academic-term": add_academic_term,
-    "update-academic-term": update_academic_term,
-    "get-academic-term": get_academic_term,
-    "list-academic-terms": list_academic_terms,
-    "add-room": add_room,
-    "update-room": update_room,
-    "list-rooms": list_rooms,
-    "add-program": add_program,
-    "update-program": update_program,
-    "get-program": get_program,
-    "list-programs": list_programs,
-    "add-course": add_course,
-    "update-course": update_course,
-    "get-course": get_course,
-    "list-courses": list_courses,
-    "add-section": add_section,
-    "update-section": update_section,
-    "get-section": get_section,
-    "list-sections": list_sections,
-    "activate-section": open_section,
-    "cancel-section": cancel_section,
+    "edu-add-academic-year": add_academic_year,
+    "edu-update-academic-year": update_academic_year,
+    "edu-get-academic-year": get_academic_year,
+    "edu-list-academic-years": list_academic_years,
+    "edu-add-academic-term": add_academic_term,
+    "edu-update-academic-term": update_academic_term,
+    "edu-get-academic-term": get_academic_term,
+    "edu-list-academic-terms": list_academic_terms,
+    "edu-add-room": add_room,
+    "edu-update-room": update_room,
+    "edu-list-rooms": list_rooms,
+    "edu-add-program": add_program,
+    "edu-update-program": update_program,
+    "edu-get-program": get_program,
+    "edu-list-programs": list_programs,
+    "edu-add-course": add_course,
+    "edu-update-course": update_course,
+    "edu-get-course": get_course,
+    "edu-list-courses": list_courses,
+    "edu-add-section": add_section,
+    "edu-update-section": update_section,
+    "edu-get-section": get_section,
+    "edu-list-sections": list_sections,
+    "edu-activate-section": open_section,
+    "edu-cancel-section": cancel_section,
 }

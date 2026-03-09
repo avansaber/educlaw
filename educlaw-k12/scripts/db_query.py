@@ -39,7 +39,7 @@ from grade_promotion import ACTIONS as PROMOTION_ACTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 # Merge all domain actions into one router
 # ─────────────────────────────────────────────────────────────────────────────
-SKILL = "educlaw-k12"
+SKILL = "k12-educlaw-k12"
 REQUIRED_TABLES = ["company", "educlaw_student", "educlaw_k12_discipline_incident"]
 
 ACTIONS = {}
@@ -57,7 +57,7 @@ ACTIONS["status"] = lambda conn, args: ok({
 
 
 def main():
-    parser = argparse.ArgumentParser(description="educlaw-k12")
+    parser = argparse.ArgumentParser(description="k12-educlaw-k12")
     parser.add_argument("--action", required=True, choices=sorted(ACTIONS.keys()))
     parser.add_argument("--db-path", default=None)
 

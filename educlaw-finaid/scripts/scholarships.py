@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-finaid"
+SKILL = "finaid-educlaw-finaid"
 
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 _today = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -127,7 +127,7 @@ def add_scholarship_program(conn, args):
         return err(str(exc))
 
     conn.commit()
-    audit(conn, SKILL, "add-scholarship-program", "finaid_scholarship_program",
+    audit(conn, SKILL, "finaid-add-scholarship-program", "finaid_scholarship_program",
           program_id, description=f"Created scholarship program {name} ({code})")
     return ok({
         "id": program_id,
@@ -140,7 +140,7 @@ def add_scholarship_program(conn, args):
 
 
 ACTIONS = {}
-ACTIONS["add-scholarship-program"] = add_scholarship_program
+ACTIONS["finaid-add-scholarship-program"] = add_scholarship_program
 
 
 # ---------------------------------------------------------------------------
@@ -227,11 +227,11 @@ def update_scholarship_program(conn, args):
         return err(f"Duplicate: {exc}")
 
     conn.commit()
-    audit(conn, SKILL, "update-scholarship-program", "finaid_scholarship_program", program_id)
+    audit(conn, SKILL, "finaid-update-scholarship-program", "finaid_scholarship_program", program_id)
     return ok({"id": program_id, "message": "Scholarship program updated"})
 
 
-ACTIONS["update-scholarship-program"] = update_scholarship_program
+ACTIONS["finaid-update-scholarship-program"] = update_scholarship_program
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ def get_scholarship_program(conn, args):
     return ok(row_to_dict(row))
 
 
-ACTIONS["get-scholarship-program"] = get_scholarship_program
+ACTIONS["finaid-get-scholarship-program"] = get_scholarship_program
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +292,7 @@ def list_scholarship_programs(conn, args):
     return ok({"programs": rows_to_list(rows), "count": len(rows)})
 
 
-ACTIONS["list-scholarship-programs"] = list_scholarship_programs
+ACTIONS["finaid-list-scholarship-programs"] = list_scholarship_programs
 
 
 # ---------------------------------------------------------------------------
@@ -316,12 +316,12 @@ def deactivate_scholarship_program(conn, args):
         (_now_iso(), program_id)
     )
     conn.commit()
-    audit(conn, SKILL, "deactivate-scholarship-program", "finaid_scholarship_program",
+    audit(conn, SKILL, "finaid-deactivate-scholarship-program", "finaid_scholarship_program",
           program_id, description="Program deactivated")
     return ok({"id": program_id, "is_active": 0, "message": "Scholarship program deactivated"})
 
 
-ACTIONS["deactivate-scholarship-program"] = deactivate_scholarship_program
+ACTIONS["finaid-deactivate-scholarship-program"] = deactivate_scholarship_program
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +427,7 @@ def auto_match_scholarships(conn, args):
 
     conn.commit()
     if matches_created:
-        audit(conn, SKILL, "auto-match-scholarships", "finaid_award",
+        audit(conn, SKILL, "finaid-auto-match-scholarships", "finaid_award",
               company_id, description=f"Auto-matched {matches_created} scholarships for aid year {aid_year_id}")
 
     return ok({
@@ -439,7 +439,7 @@ def auto_match_scholarships(conn, args):
     })
 
 
-ACTIONS["auto-match-scholarships"] = auto_match_scholarships
+ACTIONS["finaid-auto-match-scholarships"] = auto_match_scholarships
 
 
 # ---------------------------------------------------------------------------
@@ -513,7 +513,7 @@ def submit_scholarship_application(conn, args):
         return err(str(exc))
 
     conn.commit()
-    audit(conn, SKILL, "submit-scholarship-application", "finaid_scholarship_application",
+    audit(conn, SKILL, "finaid-submit-scholarship-application", "finaid_scholarship_application",
           application_id,
           description=f"Application submitted for program {scholarship_program_id} by student {student_id}")
     return ok({
@@ -527,7 +527,7 @@ def submit_scholarship_application(conn, args):
     })
 
 
-ACTIONS["submit-scholarship-application"] = submit_scholarship_application
+ACTIONS["finaid-submit-scholarship-application"] = submit_scholarship_application
 
 
 # ---------------------------------------------------------------------------
@@ -569,12 +569,12 @@ def update_scholarship_application(conn, args):
         list(updates.values()) + [application_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-scholarship-application",
+    audit(conn, SKILL, "finaid-update-scholarship-application",
           "finaid_scholarship_application", application_id)
     return ok({"id": application_id, "message": "Scholarship application updated"})
 
 
-ACTIONS["update-scholarship-application"] = update_scholarship_application
+ACTIONS["finaid-update-scholarship-application"] = update_scholarship_application
 
 
 # ---------------------------------------------------------------------------
@@ -596,7 +596,7 @@ def get_scholarship_application(conn, args):
     return ok(row_to_dict(row))
 
 
-ACTIONS["get-scholarship-application"] = get_scholarship_application
+ACTIONS["finaid-get-scholarship-application"] = get_scholarship_application
 
 
 # ---------------------------------------------------------------------------
@@ -639,7 +639,7 @@ def list_scholarship_applications(conn, args):
     return ok({"applications": rows_to_list(rows), "count": len(rows)})
 
 
-ACTIONS["list-scholarship-applications"] = list_scholarship_applications
+ACTIONS["finaid-list-scholarship-applications"] = list_scholarship_applications
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +674,7 @@ def review_scholarship_application(conn, args):
         (reviewer_id, review_date, review_notes, now, application_id)
     )
     conn.commit()
-    audit(conn, SKILL, "review-scholarship-application",
+    audit(conn, SKILL, "finaid-review-scholarship-application",
           "finaid_scholarship_application", application_id,
           description=f"Assigned reviewer {reviewer_id}")
     return ok({
@@ -686,7 +686,7 @@ def review_scholarship_application(conn, args):
     })
 
 
-ACTIONS["review-scholarship-application"] = review_scholarship_application
+ACTIONS["finaid-review-scholarship-application"] = review_scholarship_application
 
 
 # ---------------------------------------------------------------------------
@@ -744,7 +744,7 @@ def award_scholarship_application(conn, args):
             pass
 
     conn.commit()
-    audit(conn, SKILL, "award-scholarship-application",
+    audit(conn, SKILL, "finaid-award-scholarship-application",
           "finaid_scholarship_application", application_id,
           description=f"Awarded ${award_amount}")
     return ok({
@@ -755,7 +755,7 @@ def award_scholarship_application(conn, args):
     })
 
 
-ACTIONS["award-scholarship-application"] = award_scholarship_application
+ACTIONS["finaid-award-scholarship-application"] = award_scholarship_application
 
 
 # ---------------------------------------------------------------------------
@@ -784,7 +784,7 @@ def deny_scholarship_application(conn, args):
         (denial_reason, now, application_id)
     )
     conn.commit()
-    audit(conn, SKILL, "deny-scholarship-application",
+    audit(conn, SKILL, "finaid-deny-scholarship-application",
           "finaid_scholarship_application", application_id,
           description="Application denied")
     return ok({
@@ -795,7 +795,7 @@ def deny_scholarship_application(conn, args):
     })
 
 
-ACTIONS["deny-scholarship-application"] = deny_scholarship_application
+ACTIONS["finaid-deny-scholarship-application"] = deny_scholarship_application
 
 
 # ---------------------------------------------------------------------------
@@ -910,7 +910,7 @@ def evaluate_scholarship_renewal(conn, args):
         return err(str(exc))
 
     conn.commit()
-    audit(conn, SKILL, "evaluate-scholarship-renewal",
+    audit(conn, SKILL, "finaid-evaluate-scholarship-renewal",
           "finaid_scholarship_renewal", renewal_id,
           description=f"Renewal evaluation: {renewal_status} for application {scholarship_application_id}")
     return ok({
@@ -928,7 +928,7 @@ def evaluate_scholarship_renewal(conn, args):
     })
 
 
-ACTIONS["evaluate-scholarship-renewal"] = evaluate_scholarship_renewal
+ACTIONS["finaid-evaluate-scholarship-renewal"] = evaluate_scholarship_renewal
 
 
 # ---------------------------------------------------------------------------
@@ -975,19 +975,19 @@ def list_scholarship_renewals(conn, args):
 # ACTIONS registry
 # ---------------------------------------------------------------------------
 ACTIONS = {
-    "add-scholarship-program": add_scholarship_program,
-    "update-scholarship-program": update_scholarship_program,
-    "get-scholarship-program": get_scholarship_program,
-    "list-scholarship-programs": list_scholarship_programs,
-    "terminate-scholarship-program": deactivate_scholarship_program,
-    "generate-scholarship-matches": auto_match_scholarships,
-    "submit-scholarship-application": submit_scholarship_application,
-    "update-scholarship-application": update_scholarship_application,
-    "get-scholarship-application": get_scholarship_application,
-    "list-scholarship-applications": list_scholarship_applications,
-    "complete-scholarship-review": review_scholarship_application,
-    "approve-scholarship-application": award_scholarship_application,
-    "deny-scholarship-application": deny_scholarship_application,
-    "generate-scholarship-renewal": evaluate_scholarship_renewal,
-    "list-scholarship-renewals": list_scholarship_renewals,
+    "finaid-add-scholarship-program": add_scholarship_program,
+    "finaid-update-scholarship-program": update_scholarship_program,
+    "finaid-get-scholarship-program": get_scholarship_program,
+    "finaid-list-scholarship-programs": list_scholarship_programs,
+    "finaid-terminate-scholarship-program": deactivate_scholarship_program,
+    "finaid-generate-scholarship-matches": auto_match_scholarships,
+    "finaid-submit-scholarship-application": submit_scholarship_application,
+    "finaid-update-scholarship-application": update_scholarship_application,
+    "finaid-get-scholarship-application": get_scholarship_application,
+    "finaid-list-scholarship-applications": list_scholarship_applications,
+    "finaid-complete-scholarship-review": review_scholarship_application,
+    "finaid-approve-scholarship-application": award_scholarship_application,
+    "finaid-deny-scholarship-application": deny_scholarship_application,
+    "finaid-generate-scholarship-renewal": evaluate_scholarship_renewal,
+    "finaid-list-scholarship-renewals": list_scholarship_renewals,
 }

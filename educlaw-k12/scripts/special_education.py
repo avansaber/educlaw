@@ -25,7 +25,7 @@ from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
 
-SKILL = "educlaw-k12"
+SKILL = "k12-educlaw-k12"
 
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -128,7 +128,7 @@ def create_sped_referral(conn, args):
          company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "create-sped-referral", "educlaw_k12_sped_referral",
+    audit(conn, SKILL, "k12-create-sped-referral", "educlaw_k12_sped_referral",
           referral_id, description=f"Created referral {naming_series}")
     return ok({"id": referral_id, "naming_series": naming_series,
                "referral_status": "received", "referral_date": referral_date,
@@ -181,7 +181,7 @@ def update_sped_referral(conn, args):
         list(updates.values()) + [referral_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-sped-referral", "educlaw_k12_sped_referral", referral_id)
+    audit(conn, SKILL, "k12-update-sped-referral", "educlaw_k12_sped_referral", referral_id)
     return ok({"id": referral_id, "message": "SPED referral updated",
                "evaluation_deadline": updates.get("evaluation_deadline", row["evaluation_deadline"])})
 
@@ -303,7 +303,7 @@ def add_sped_evaluation(conn, args):
          findings_summary, scores, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-sped-evaluation", "educlaw_k12_sped_evaluation", eval_id)
+    audit(conn, SKILL, "k12-add-sped-evaluation", "educlaw_k12_sped_evaluation", eval_id)
     return ok({"id": eval_id, "evaluation_type": evaluation_type,
                "message": "SPED evaluation added"})
 
@@ -410,7 +410,7 @@ def record_sped_eligibility(conn, args):
     _log_ferpa(conn, user_id, student_id, "special_education", company_id,
                access_reason="eligibility_determination")
     conn.commit()
-    audit(conn, SKILL, "record-sped-eligibility", "educlaw_k12_sped_eligibility", elig_id)
+    audit(conn, SKILL, "k12-record-sped-eligibility", "educlaw_k12_sped_eligibility", elig_id)
     return ok({
         "id": elig_id,
         "is_eligible": bool(is_eligible),
@@ -553,7 +553,7 @@ def add_iep(conn, args):
          progress_report_frequency, company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-iep", "educlaw_k12_iep",
+    audit(conn, SKILL, "k12-add-iep", "educlaw_k12_iep",
           iep_id, description=f"Created IEP {naming_series}")
     return ok({
         "id": iep_id,
@@ -613,7 +613,7 @@ def update_iep(conn, args):
         list(updates.values()) + [iep_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-iep", "educlaw_k12_iep", iep_id)
+    audit(conn, SKILL, "k12-update-iep", "educlaw_k12_iep", iep_id)
     return ok({"id": iep_id, "message": "IEP updated"})
 
 
@@ -655,7 +655,7 @@ def activate_iep(conn, args):
         (parent_consent_date, now, iep_id)
     )
     conn.commit()
-    audit(conn, SKILL, "activate-iep", "educlaw_k12_iep", iep_id, description="IEP activated")
+    audit(conn, SKILL, "k12-activate-iep", "educlaw_k12_iep", iep_id, description="IEP activated")
     return ok({
         "id": iep_id,
         "iep_status": "active",
@@ -728,7 +728,7 @@ def amend_iep(conn, args):
         (now, iep_id)
     )
     conn.commit()
-    audit(conn, SKILL, "add-iep-amendment", "educlaw_k12_iep",
+    audit(conn, SKILL, "k12-add-iep-amendment", "educlaw_k12_iep",
           new_iep_id, description=f"Amendment of IEP {iep_id}")
     return ok({
         "id": new_iep_id,
@@ -940,7 +940,7 @@ def add_iep_goal(conn, args):
          responsible_provider, sort_order, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-iep-goal", "educlaw_k12_iep_goal", goal_id)
+    audit(conn, SKILL, "k12-add-iep-goal", "educlaw_k12_iep_goal", goal_id)
     return ok({"id": goal_id, "goal_area": goal_area, "message": "IEP goal added"})
 
 
@@ -1008,7 +1008,7 @@ def add_iep_service(conn, args):
          start_date, end_date, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-iep-service", "educlaw_k12_iep_service", service_id)
+    audit(conn, SKILL, "k12-add-iep-service", "educlaw_k12_iep_service", service_id)
     return ok({"id": service_id, "service_type": service_type,
                "frequency_minutes_per_week": frequency_minutes_per_week,
                "message": "IEP service added"})
@@ -1089,7 +1089,7 @@ def log_iep_service_session(conn, args):
         )
 
     conn.commit()
-    audit(conn, SKILL, "record-iep-service-session", "educlaw_k12_iep_service_log", log_id)
+    audit(conn, SKILL, "k12-record-iep-service-session", "educlaw_k12_iep_service_log", log_id)
     return ok({"id": log_id, "minutes_delivered": minutes_delivered,
                "was_session_missed": bool(was_session_missed),
                "message": "IEP service session logged"})
@@ -1246,7 +1246,7 @@ def add_iep_team_member(conn, args):
          excusal_notes, signature_date, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-iep-team-member", "educlaw_k12_iep_team_member", member_id)
+    audit(conn, SKILL, "k12-add-iep-team-member", "educlaw_k12_iep_team_member", member_id)
     return ok({"id": member_id, "member_type": member_type, "member_name": member_name,
                "message": "IEP team member added"})
 
@@ -1298,7 +1298,7 @@ def record_iep_progress(conn, args):
          documented_by, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "record-iep-progress", "educlaw_k12_iep_progress", progress_id)
+    audit(conn, SKILL, "k12-record-iep-progress", "educlaw_k12_iep_progress", progress_id)
     return ok({"id": progress_id, "progress_rating": progress_rating,
                "reporting_period": reporting_period, "message": "IEP progress recorded"})
 
@@ -1428,7 +1428,7 @@ def add_504_plan(conn, args):
          company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-504-plan", "educlaw_k12_504_plan",
+    audit(conn, SKILL, "k12-add-504-plan", "educlaw_k12_504_plan",
           plan_id, description=f"Created 504 plan {naming_series}")
     return ok({"id": plan_id, "naming_series": naming_series,
                "plan_status": "active", "message": "Section 504 plan created"})
@@ -1473,7 +1473,7 @@ def update_504_plan(conn, args):
         list(updates.values()) + [plan_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-504-plan", "educlaw_k12_504_plan", plan_id)
+    audit(conn, SKILL, "k12-update-504-plan", "educlaw_k12_504_plan", plan_id)
     return ok({"id": plan_id, "message": "504 plan updated"})
 
 
@@ -1510,33 +1510,33 @@ def get_active_504_plan(conn, args):
 
 # ─── ACTIONS registry ────────────────────────────────────────────────────────
 ACTIONS = {
-    "create-sped-referral": create_sped_referral,
-    "update-sped-referral": update_sped_referral,
-    "get-sped-referral": get_sped_referral,
-    "list-sped-referrals": list_sped_referrals,
-    "add-sped-evaluation": add_sped_evaluation,
-    "list-sped-evaluations": list_sped_evaluations,
-    "record-sped-eligibility": record_sped_eligibility,
-    "get-sped-eligibility": get_sped_eligibility,
-    "add-iep": add_iep,
-    "update-iep": update_iep,
-    "activate-iep": activate_iep,
-    "add-iep-amendment": amend_iep,
-    "get-active-iep": get_active_iep,
-    "get-iep": get_iep,
-    "list-iep-deadlines": list_iep_deadlines,
-    "list-reevaluation-due": list_reevaluation_due,
-    "add-iep-goal": add_iep_goal,
-    "list-iep-goals": list_iep_goals,
-    "add-iep-service": add_iep_service,
-    "list-iep-services": list_iep_services,
-    "record-iep-service-session": log_iep_service_session,
-    "list-iep-service-logs": list_iep_service_logs,
-    "get-service-compliance-report": get_service_compliance_report,
-    "add-iep-team-member": add_iep_team_member,
-    "record-iep-progress": record_iep_progress,
-    "generate-iep-progress-report": generate_iep_progress_report,
-    "add-504-plan": add_504_plan,
-    "update-504-plan": update_504_plan,
-    "get-active-504-plan": get_active_504_plan,
+    "k12-create-sped-referral": create_sped_referral,
+    "k12-update-sped-referral": update_sped_referral,
+    "k12-get-sped-referral": get_sped_referral,
+    "k12-list-sped-referrals": list_sped_referrals,
+    "k12-add-sped-evaluation": add_sped_evaluation,
+    "k12-list-sped-evaluations": list_sped_evaluations,
+    "k12-record-sped-eligibility": record_sped_eligibility,
+    "k12-get-sped-eligibility": get_sped_eligibility,
+    "k12-add-iep": add_iep,
+    "k12-update-iep": update_iep,
+    "k12-activate-iep": activate_iep,
+    "k12-add-iep-amendment": amend_iep,
+    "k12-get-active-iep": get_active_iep,
+    "k12-get-iep": get_iep,
+    "k12-list-iep-deadlines": list_iep_deadlines,
+    "k12-list-reevaluation-due": list_reevaluation_due,
+    "k12-add-iep-goal": add_iep_goal,
+    "k12-list-iep-goals": list_iep_goals,
+    "k12-add-iep-service": add_iep_service,
+    "k12-list-iep-services": list_iep_services,
+    "k12-record-iep-service-session": log_iep_service_session,
+    "k12-list-iep-service-logs": list_iep_service_logs,
+    "k12-get-service-compliance-report": get_service_compliance_report,
+    "k12-add-iep-team-member": add_iep_team_member,
+    "k12-record-iep-progress": record_iep_progress,
+    "k12-generate-iep-progress-report": generate_iep_progress_report,
+    "k12-add-504-plan": add_504_plan,
+    "k12-update-504-plan": update_504_plan,
+    "k12-get-active-504-plan": get_active_504_plan,
 }

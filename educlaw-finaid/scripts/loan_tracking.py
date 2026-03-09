@@ -635,14 +635,14 @@ def get_loan_limits_status(conn, args):
 # ACTIONS registry
 # ---------------------------------------------------------------------------
 ACTIONS = {
-    "add-loan": add_loan,
-    "update-loan": update_loan,
-    "get-loan": get_loan,
-    "list-loans": list_loans,
-    "update-mpn-status": update_mpn_status,
-    "update-entrance-counseling": update_entrance_counseling,
-    "update-exit-counseling": update_exit_counseling,
-    "generate-cod-origination": generate_cod_origination,
-    "update-cod-origination-status": update_cod_origination_status,
-    "get-loan-limits-status": get_loan_limits_status,
+    "finaid-add-loan": add_loan,
+    "finaid-update-loan": update_loan,
+    "finaid-get-loan": get_loan,
+    "finaid-list-loans": list_loans,
+    "finaid-update-mpn-status": update_mpn_status,
+    "finaid-update-entrance-counseling": update_entrance_counseling,
+    "finaid-update-exit-counseling": update_exit_counseling,
+    "finaid-generate-cod-origination": generate_cod_origination,
+    "finaid-update-cod-origination-status": update_cod_origination_status,
+    "finaid-get-loan-limits-status": get_loan_limits_status,
 }

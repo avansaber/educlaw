@@ -382,12 +382,12 @@ def get_truancy_report(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "record-attendance": mark_attendance,
-    "record-batch-attendance": batch_mark_attendance,
-    "update-attendance": update_attendance,
-    "get-attendance": get_attendance,
-    "list-attendance": list_attendance,
-    "get-attendance-summary": get_attendance_summary,
-    "get-section-attendance": get_section_attendance,
-    "get-truancy-report": get_truancy_report,
+    "edu-record-attendance": mark_attendance,
+    "edu-record-batch-attendance": batch_mark_attendance,
+    "edu-update-attendance": update_attendance,
+    "edu-get-attendance": get_attendance,
+    "edu-list-attendance": list_attendance,
+    "edu-get-attendance-summary": get_attendance_summary,
+    "edu-get-section-attendance": get_section_attendance,
+    "edu-get-truancy-report": get_truancy_report,
 }

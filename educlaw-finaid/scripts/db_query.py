@@ -38,7 +38,7 @@ from loan_tracking import ACTIONS as LOAN_TRACKING_ACTIONS
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
 # ---------------------------------------------------------------------------
-SKILL = "educlaw-finaid"
+SKILL = "finaid-educlaw-finaid"
 REQUIRED_TABLES = ["company", "finaid_aid_year"]
 
 ACTIONS = {}
@@ -56,7 +56,7 @@ ACTIONS["status"] = lambda conn, args: ok({
 
 
 def main():
-    parser = argparse.ArgumentParser(description="educlaw-finaid")
+    parser = argparse.ArgumentParser(description="finaid-educlaw-finaid")
     parser.add_argument("--action", required=True, choices=sorted(ACTIONS.keys()))
     parser.add_argument("--db-path", default=None)
 

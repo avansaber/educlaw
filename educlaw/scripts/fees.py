@@ -70,7 +70,7 @@ def add_fee_category(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Fee category '{name}' already exists for this company")
 
-    audit(conn, SKILL, "add-fee-category", "educlaw_fee_category", cat_id,
+    audit(conn, SKILL, "edu-add-fee-category", "educlaw_fee_category", cat_id,
           new_values={"name": name})
     conn.commit()
     ok({"id": cat_id, "name": name, "company_id": company_id})
@@ -206,7 +206,7 @@ def add_fee_structure(conn, args):
              item.get("sort_order", i + 1), now, getattr(args, "user_id", None) or "")
         )
 
-    audit(conn, SKILL, "add-fee-structure", "educlaw_fee_structure", struct_id,
+    audit(conn, SKILL, "edu-add-fee-structure", "educlaw_fee_structure", struct_id,
           new_values={"name": name, "total_amount": str(total)})
     conn.commit()
     ok({"id": struct_id, "name": name, "total_amount": str(total), "item_count": len(items)})
@@ -384,7 +384,7 @@ def add_scholarship(conn, args):
          company_id, now, now, getattr(args, "user_id", None) or "")
     )
 
-    audit(conn, SKILL, "add-scholarship", "educlaw_scholarship", schol_id,
+    audit(conn, SKILL, "edu-add-scholarship", "educlaw_scholarship", schol_id,
           new_values={"name": name, "student_id": student_id, "discount_type": discount_type})
     conn.commit()
     ok({"id": schol_id, "name": name, "student_id": student_id,
@@ -742,19 +742,19 @@ def apply_late_fee(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-fee-category": add_fee_category,
-    "update-fee-category": update_fee_category,
-    "list-fee-categories": list_fee_categories,
-    "add-fee-structure": add_fee_structure,
-    "update-fee-structure": update_fee_structure,
-    "get-fee-structure": get_fee_structure,
-    "list-fee-structures": list_fee_structures,
-    "add-scholarship": add_scholarship,
-    "update-scholarship": update_scholarship,
-    "list-scholarships": list_scholarships,
-    "generate-fee-invoice": generate_fee_invoice,
-    "list-fee-invoices": list_fee_invoices,
-    "get-student-account": get_student_account,
-    "get-outstanding-fees": get_outstanding_fees,
-    "apply-late-fee": apply_late_fee,
+    "edu-add-fee-category": add_fee_category,
+    "edu-update-fee-category": update_fee_category,
+    "edu-list-fee-categories": list_fee_categories,
+    "edu-add-fee-structure": add_fee_structure,
+    "edu-update-fee-structure": update_fee_structure,
+    "edu-get-fee-structure": get_fee_structure,
+    "edu-list-fee-structures": list_fee_structures,
+    "edu-add-scholarship": add_scholarship,
+    "edu-update-scholarship": update_scholarship,
+    "edu-list-scholarships": list_scholarships,
+    "edu-generate-fee-invoice": generate_fee_invoice,
+    "edu-list-fee-invoices": list_fee_invoices,
+    "edu-get-student-account": get_student_account,
+    "edu-get-outstanding-fees": get_outstanding_fees,
+    "edu-apply-late-fee": apply_late_fee,
 }

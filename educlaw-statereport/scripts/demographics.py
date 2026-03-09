@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_SSID_STATUSES = ("pending", "assigned", "not_applicable")
@@ -982,25 +982,25 @@ def list_el_programs(conn, args):
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-student-supplement": add_student_supplement,
-    "update-student-supplement": update_student_supplement,
-    "get-student-supplement": get_student_supplement,
-    "list-student-supplements": list_student_supplements,
-    "assign-ssid": assign_ssid,
-    "update-student-race": set_student_race,
-    "update-el-status": update_el_status,
-    "update-sped-status": update_sped_status,
-    "update-economic-status": update_economic_status,
-    "add-sped-placement": add_sped_placement,
-    "update-sped-placement": update_sped_placement,
-    "get-sped-placement": get_sped_placement,
-    "list-sped-placements": list_sped_placements,
-    "add-sped-service": add_sped_service,
-    "update-sped-service": update_sped_service,
-    "list-sped-services": list_sped_services,
-    "delete-sped-service": delete_sped_service,
-    "add-el-program": add_el_program,
-    "update-el-program": update_el_program,
-    "get-el-program": get_el_program,
-    "list-el-programs": list_el_programs,
+    "statereport-add-student-supplement": add_student_supplement,
+    "statereport-update-student-supplement": update_student_supplement,
+    "statereport-get-student-supplement": get_student_supplement,
+    "statereport-list-student-supplements": list_student_supplements,
+    "statereport-assign-ssid": assign_ssid,
+    "statereport-update-student-race": set_student_race,
+    "statereport-update-el-status": update_el_status,
+    "statereport-update-sped-status": update_sped_status,
+    "statereport-update-economic-status": update_economic_status,
+    "statereport-add-sped-placement": add_sped_placement,
+    "statereport-update-sped-placement": update_sped_placement,
+    "statereport-get-sped-placement": get_sped_placement,
+    "statereport-list-sped-placements": list_sped_placements,
+    "statereport-add-sped-service": add_sped_service,
+    "statereport-update-sped-service": update_sped_service,
+    "statereport-list-sped-services": list_sped_services,
+    "statereport-delete-sped-service": delete_sped_service,
+    "statereport-add-el-program": add_el_program,
+    "statereport-update-el-program": update_el_program,
+    "statereport-get-el-program": get_el_program,
+    "statereport-list-el-programs": list_el_programs,
 }

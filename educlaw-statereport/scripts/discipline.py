@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_INCIDENT_TYPES = (
@@ -661,19 +661,19 @@ def get_discipline_summary(conn, args):
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-discipline-incident": add_discipline_incident,
-    "update-discipline-incident": update_discipline_incident,
-    "get-discipline-incident": get_discipline_incident,
-    "list-discipline-incidents": list_discipline_incidents,
-    "delete-discipline-incident": delete_discipline_incident,
-    "add-discipline-student": add_discipline_student,
-    "update-discipline-student": update_discipline_student,
-    "delete-discipline-student": remove_discipline_student,
-    "list-discipline-students": list_discipline_students,
-    "add-discipline-action": add_discipline_action,
-    "update-discipline-action": update_discipline_action,
-    "record-mdr-outcome": record_mdr_outcome,
-    "get-discipline-action": get_discipline_action,
-    "list-discipline-actions": list_discipline_actions,
-    "get-discipline-summary": get_discipline_summary,
+    "statereport-add-discipline-incident": add_discipline_incident,
+    "statereport-update-discipline-incident": update_discipline_incident,
+    "statereport-get-discipline-incident": get_discipline_incident,
+    "statereport-list-discipline-incidents": list_discipline_incidents,
+    "statereport-delete-discipline-incident": delete_discipline_incident,
+    "statereport-add-discipline-student": add_discipline_student,
+    "statereport-update-discipline-student": update_discipline_student,
+    "statereport-delete-discipline-student": remove_discipline_student,
+    "statereport-list-discipline-students": list_discipline_students,
+    "statereport-add-discipline-action": add_discipline_action,
+    "statereport-update-discipline-action": update_discipline_action,
+    "statereport-record-mdr-outcome": record_mdr_outcome,
+    "statereport-get-discipline-action": get_discipline_action,
+    "statereport-list-discipline-actions": list_discipline_actions,
+    "statereport-get-discipline-summary": get_discipline_summary,
 }

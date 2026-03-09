@@ -19,27 +19,37 @@ tables: 23
 
 Sub-vertical of EduClaw SIS. Adds K-12 specific workflows: behavioral incident tracking with IDEA MDR compliance, student health records with FERPA-compliant access logging, the complete IDEA Part B pipeline (referral → IEP → services → progress), Section 504 plans, and end-of-year grade promotion with batch advancement.
 
+## Security Model
+
+- **Local-only**: All data stored in `~/.openclaw/erpclaw/data.sqlite`
+- **Fully offline**: No external API calls, no telemetry, no cloud dependencies
+- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw-setup)
+- **SQL injection safe**: All queries use parameterized statements
+- **FERPA compliant**: Health records, discipline records, and special education data access is logged
+- **IDEA compliance**: IEP goals and services are immutable; changes require new IEP version
+- **Immutable records**: Office visits, medication logs, immunizations, and promotion decisions cannot be modified after creation
+
 ## Quick Start
 
 ```bash
 # Create a discipline incident
-python3 scripts/db_query.py --action add-discipline-incident \
+python3 scripts/db_query.py --action k12-add-discipline-incident \
   --incident-date 2025-10-15 --incident-time 10:30 \
   --location classroom --incident-type bullying \
   --severity moderate --academic-year-id <year-id>
 
 # Add a student health profile
-python3 scripts/db_query.py --action add-health-profile \
+python3 scripts/db_query.py --action k12-add-health-profile \
   --student-id <id> --allergies '[{"allergen":"peanuts","severity":"severe","epipen_location":"nurse office"}]'
 
 # Create a SpEd referral
-python3 scripts/db_query.py --action create-sped-referral \
+python3 scripts/db_query.py --action k12-create-sped-referral \
   --student-id <id> --referral-source teacher \
   --referral-reason "Student struggling with reading fluency" \
   --referral-date 2025-09-10
 
 # Start end-of-year promotion review
-python3 scripts/db_query.py --action create-promotion-review \
+python3 scripts/db_query.py --action k12-create-promotion-review \
   --student-id <id> --academic-year-id <year-id>
 ```
 
@@ -51,10 +61,10 @@ python3 scripts/db_query.py --action create-promotion-review \
 
 | Action | Description |
 |--------|-------------|
-| `add-discipline-incident` | Create a new behavioral incident header |
-| `add-discipline-student` | Add student involvement (offender/victim/witness/bystander) |
-| `add-discipline-action` | Add consequence; auto-updates cumulative suspension days |
-| `get-discipline-incident` | Get incident with all students and actions (FERPA logged) |
+| `k12-add-discipline-incident` | Create a new behavioral incident header |
+| `k12-add-discipline-student` | Add student involvement (offender/victim/witness/bystander) |
+| `k12-add-discipline-action` | Add consequence; auto-updates cumulative suspension days |
+| `k12-get-discipline-incident` | Get incident with all students and actions (FERPA logged) |
 | `close-discipline-incident` | Close incident; set reviewer and timestamp |
 | `notify-guardians-discipline` | Create guardian notifications for involved students |
 
@@ -62,33 +72,33 @@ python3 scripts/db_query.py --action create-promotion-review \
 
 | Action | Description |
 |--------|-------------|
-| `add-health-profile` | Create student health profile (one per student) |
-| `get-health-profile` | Get student health profile (FERPA logged) |
-| `get-emergency-health-info` | Quick emergency access: allergies, EpiPen, contacts |
-| `add-office-visit` | Record nurse visit (immutable) |
+| `k12-add-health-profile` | Create student health profile (one per student) |
+| `k12-get-health-profile` | Get student health profile (FERPA logged) |
+| `k12-get-emergency-health-info` | Quick emergency access: allergies, EpiPen, contacts |
+| `k12-add-office-visit` | Record nurse visit (immutable) |
 | `log-medication-admin` | Log medication administration; decrements supply |
-| `add-immunization` | Add immunization dose record (immutable) |
+| `k12-add-immunization` | Add immunization dose record (immutable) |
 | `check-immunization-compliance` | Check compliance against grade-level requirements |
 
 ### Special Education
 
 | Action | Description |
 |--------|-------------|
-| `create-sped-referral` | Start IDEA referral (begins 60-day evaluation clock) |
-| `add-iep` | Create IEP in draft status |
-| `activate-iep` | Activate IEP with parent consent; prior IEP → superseded |
-| `add-iep-goal` | Add measurable annual goal (immutable) |
-| `add-iep-service` | Add mandated service to IEP (immutable) |
+| `k12-create-sped-referral` | Start IDEA referral (begins 60-day evaluation clock) |
+| `k12-add-iep` | Create IEP in draft status |
+| `k12-activate-iep` | Activate IEP with parent consent; prior IEP → superseded |
+| `k12-add-iep-goal` | Add measurable annual goal (immutable) |
+| `k12-add-iep-service` | Add mandated service to IEP (immutable) |
 | `log-iep-service-session` | Log service delivery; increments total_minutes_delivered |
-| `get-active-iep` | Get student's active IEP with goals, services, team |
-| `get-active-504-plan` | Get active Section 504 plan (FERPA logged) |
+| `k12-get-active-iep` | Get student's active IEP with goals, services, team |
+| `k12-get-active-504-plan` | Get active Section 504 plan (FERPA logged) |
 
 ### Grade Promotion
 
 | Action | Description |
 |--------|-------------|
-| `create-promotion-review` | Create end-of-year review; auto-populates discipline count |
-| `submit-promotion-decision` | Record final immutable decision (promote/retain/conditional) |
+| `k12-create-promotion-review` | Create end-of-year review; auto-populates discipline count |
+| `k12-submit-promotion-decision` | Record final immutable decision (promote/retain/conditional) |
 | `batch-promote-grade` | Advance all promoted students; graduates 12th graders |
 | `identify-at-risk-students` | Flag students below GPA/attendance thresholds |
 
@@ -100,66 +110,66 @@ python3 scripts/db_query.py --action create-promotion-review \
 
 | Action | Key Args |
 |--------|----------|
-| `update-discipline-incident` | `--incident-id`, updatable fields |
-| `list-discipline-incidents` | `--academic-year-id`, `--severity`, `--incident-status`, `--student-id` |
-| `get-discipline-history` | `--student-id` — full history across all years |
-| `get-cumulative-suspension-days` | `--student-id`, `--academic-year-id` — MDR threshold check |
-| `add-manifestation-review` | `--discipline-student-id`, `--iep-id`, `--mdr-date` |
-| `update-manifestation-review` | `--mdr-id`, `--determination`, `--outcome-action` |
-| `add-pbis-recognition` | `--student-id`, `--incident-date`, `--description` |
+| `k12-update-discipline-incident` | `--incident-id`, updatable fields |
+| `k12-list-discipline-incidents` | `--academic-year-id`, `--severity`, `--incident-status`, `--student-id` |
+| `k12-get-discipline-history` | `--student-id` — full history across all years |
+| `k12-get-cumulative-suspension-days` | `--student-id`, `--academic-year-id` — MDR threshold check |
+| `k12-add-manifestation-review` | `--discipline-student-id`, `--iep-id`, `--mdr-date` |
+| `k12-update-manifestation-review` | `--mdr-id`, `--determination`, `--outcome-action` |
+| `k12-add-pbis-recognition` | `--student-id`, `--incident-date`, `--description` |
 
 ### Health Records
 
 | Action | Key Args |
 |--------|----------|
-| `update-health-profile` | `--student-id`, updatable fields |
+| `k12-update-health-profile` | `--student-id`, updatable fields |
 | `verify-health-profile` | `--student-id`, `--last-verified-by` |
-| `list-office-visits` | `--student-id`, `--date-from`, `--date-to`, `--disposition` |
-| `get-office-visit` | `--visit-id` |
-| `add-student-medication` | `--student-id`, `--medication-name`, `--route`, `--frequency` |
-| `update-student-medication` | `--medication-id`, `--medication-status`, `--supply-count` |
-| `list-student-medications` | `--student-id`, `--medication-status` |
-| `list-medication-logs` | `--student-id` or `--student-medication-id` |
-| `add-immunization-waiver` | `--student-id`, `--vaccine-name`, `--waiver-type` |
-| `update-immunization-waiver` | `--waiver-id`, `--waiver-status` |
-| `get-immunization-record` | `--student-id` — all doses + waivers |
-| `list-health-alerts` | School-wide: severe allergies, expiring waivers, low supply |
+| `k12-list-office-visits` | `--student-id`, `--date-from`, `--date-to`, `--disposition` |
+| `k12-get-office-visit` | `--visit-id` |
+| `k12-add-student-medication` | `--student-id`, `--medication-name`, `--route`, `--frequency` |
+| `k12-update-student-medication` | `--medication-id`, `--medication-status`, `--supply-count` |
+| `k12-list-student-medications` | `--student-id`, `--medication-status` |
+| `k12-list-medication-logs` | `--student-id` or `--student-medication-id` |
+| `k12-add-immunization-waiver` | `--student-id`, `--vaccine-name`, `--waiver-type` |
+| `k12-update-immunization-waiver` | `--waiver-id`, `--waiver-status` |
+| `k12-get-immunization-record` | `--student-id` — all doses + waivers |
+| `k12-list-health-alerts` | School-wide: severe allergies, expiring waivers, low supply |
 
 ### Special Education
 
 | Action | Key Args |
 |--------|----------|
-| `update-sped-referral` | `--referral-id`, `--referral-status`, `--consent-received-date` |
-| `get-sped-referral` | `--referral-id` — includes evaluations |
-| `list-sped-referrals` | `--referral-status`, `--approaching-deadline` |
-| `add-sped-evaluation` | `--referral-id`, `--evaluation-type`, `--evaluation-date` |
-| `list-sped-evaluations` | `--referral-id` |
-| `record-sped-eligibility` | `--referral-id`, `--is-eligible`, `--primary-disability` |
-| `get-sped-eligibility` | `--student-id` or `--eligibility-id` |
-| `update-iep` | `--iep-id`, draft fields only |
+| `k12-update-sped-referral` | `--referral-id`, `--referral-status`, `--consent-received-date` |
+| `k12-get-sped-referral` | `--referral-id` — includes evaluations |
+| `k12-list-sped-referrals` | `--referral-status`, `--approaching-deadline` |
+| `k12-add-sped-evaluation` | `--referral-id`, `--evaluation-type`, `--evaluation-date` |
+| `k12-list-sped-evaluations` | `--referral-id` |
+| `k12-record-sped-eligibility` | `--referral-id`, `--is-eligible`, `--primary-disability` |
+| `k12-get-sped-eligibility` | `--student-id` or `--eligibility-id` |
+| `k12-update-iep` | `--iep-id`, draft fields only |
 | `amend-iep` | `--iep-id` (prior active IEP) — creates amendment |
-| `get-iep` | `--iep-id` — includes goals, services, team |
-| `list-iep-deadlines` | `--days-window` (default: 30) |
-| `list-reevaluation-due` | `--days-window` (default: 90) |
-| `list-iep-goals` | `--iep-id` |
-| `list-iep-services` | `--iep-id` |
-| `list-iep-service-logs` | `--iep-service-id` |
-| `add-iep-team-member` | `--iep-id`, `--member-type`, `--member-name` |
-| `record-iep-progress` | `--iep-goal-id`, `--progress-rating`, `--reporting-period` |
-| `add-504-plan` | `--student-id`, `--meeting-date`, `--accommodations` (JSON) |
-| `update-504-plan` | `--plan-504-id`, `--plan-status`, `--accommodations` |
+| `k12-get-iep` | `--iep-id` — includes goals, services, team |
+| `k12-list-iep-deadlines` | `--days-window` (default: 30) |
+| `k12-list-reevaluation-due` | `--days-window` (default: 90) |
+| `k12-list-iep-goals` | `--iep-id` |
+| `k12-list-iep-services` | `--iep-id` |
+| `k12-list-iep-service-logs` | `--iep-service-id` |
+| `k12-add-iep-team-member` | `--iep-id`, `--member-type`, `--member-name` |
+| `k12-record-iep-progress` | `--iep-goal-id`, `--progress-rating`, `--reporting-period` |
+| `k12-add-504-plan` | `--student-id`, `--meeting-date`, `--accommodations` (JSON) |
+| `k12-update-504-plan` | `--plan-504-id`, `--plan-status`, `--accommodations` |
 
 ### Grade Promotion
 
 | Action | Key Args |
 |--------|----------|
-| `update-promotion-review` | `--review-id`, `--teacher-recommendation`, `--counselor-recommendation` |
-| `list-promotion-reviews` | `--academic-year-id`, `--grade-level`, `--review-status` |
-| `get-promotion-decision` | `--decision-id` or `--student-id` + `--academic-year-id` |
+| `k12-update-promotion-review` | `--review-id`, `--teacher-recommendation`, `--counselor-recommendation` |
+| `k12-list-promotion-reviews` | `--academic-year-id`, `--grade-level`, `--review-status` |
+| `k12-get-promotion-decision` | `--decision-id` or `--student-id` + `--academic-year-id` |
 | `notify-promotion-decision` | `--decision-id` — creates guardian notifications |
-| `create-intervention-plan` | `--student-id`, `--trigger`, `--intervention-types` |
-| `update-intervention-plan` | `--intervention-plan-id`, `--plan-status`, `--outcome-notes` |
-| `list-intervention-plans` | `--academic-year-id`, `--plan-status`, `--student-id` |
+| `k12-create-intervention-plan` | `--student-id`, `--trigger`, `--intervention-types` |
+| `k12-update-intervention-plan` | `--intervention-plan-id`, `--plan-status`, `--outcome-notes` |
+| `k12-list-intervention-plans` | `--academic-year-id`, `--plan-status`, `--student-id` |
 
 ---
 
@@ -167,12 +177,12 @@ python3 scripts/db_query.py --action create-promotion-review \
 
 | Action | Description |
 |--------|-------------|
-| `generate-discipline-report` | School-wide analytics: by type, severity, location, PBIS ratio |
-| `generate-discipline-state-report` | State-format: ISS/OSS/expulsion by grade/disability; MDR count |
-| `generate-immunization-report` | Compliance by grade level; state Annual Immunization Status Report |
-| `get-service-compliance-report` | Planned vs. actual IEP service minutes; gap detection |
-| `generate-iep-progress-report` | Parent-facing: all goals with progress ratings and notes |
-| `generate-promotion-report` | Summary by grade: promote/retain/conditional; intervention coverage |
+| `k12-generate-discipline-report` | School-wide analytics: by type, severity, location, PBIS ratio |
+| `k12-generate-discipline-state-report` | State-format: ISS/OSS/expulsion by grade/disability; MDR count |
+| `k12-generate-immunization-report` | Compliance by grade level; state Annual Immunization Status Report |
+| `k12-get-service-compliance-report` | Planned vs. actual IEP service minutes; gap detection |
+| `k12-generate-iep-progress-report` | Parent-facing: all goals with progress ratings and notes |
+| `k12-generate-promotion-report` | Summary by grade: promote/retain/conditional; intervention coverage |
 
 ---
 
@@ -237,12 +247,12 @@ identify-at-risk-students (configurable GPA/attendance thresholds)
 
 ## FERPA / Privacy Notes
 
-- **Health records** (`get-health-profile`, `list-office-visits`, `get-office-visit`, `get-immunization-record`, `get-emergency-health-info`) are logged to `educlaw_data_access_log` with `data_category='health'`.
-- **Discipline reads** (`get-discipline-incident`, `get-discipline-history`) are logged with `data_category='discipline'`.
-- **Special education reads** (`get-sped-referral`, `get-active-iep`, `get-iep`, `record-sped-eligibility`, `get-active-504-plan`, `generate-iep-progress-report`) are logged with `data_category='special_education'`.
+- **Health records** (`k12-get-health-profile`, `k12-list-office-visits`, `k12-get-office-visit`, `k12-get-immunization-record`, `k12-get-emergency-health-info`) are logged to `educlaw_data_access_log` with `data_category='health'`.
+- **Discipline reads** (`k12-get-discipline-incident`, `k12-get-discipline-history`) are logged with `data_category='discipline'`.
+- **Special education reads** (`k12-get-sped-referral`, `k12-get-active-iep`, `k12-get-iep`, `k12-record-sped-eligibility`, `k12-get-active-504-plan`, `k12-generate-iep-progress-report`) are logged with `data_category='special_education'`.
 - Emergency health access uses `is_emergency_access=1` in the FERPA log.
 
-**Note:** The `special_education` category requires the parent educlaw maintainers to add `'special_education'` to the `data_category` CHECK constraint in `educlaw_data_access_log`. See plan Section 1.
+The `special_education` data category is used for FERPA access logging of IEP and 504 plan records.
 
 ---
 
@@ -262,7 +272,7 @@ identify-at-risk-students (configurable GPA/attendance thresholds)
 | SpEd | `iep_deadline = eligibility_meeting_date + 30 days` |
 | SpEd | `transition_plan_required=1` for students ≥16 at IEP start date |
 | Promotion | One review per student per academic year |
-| Promotion | `submit-promotion-decision` creates immutable record |
+| Promotion | `k12-submit-promotion-decision` creates immutable record |
 | Promotion | `batch-promote-grade` is idempotent |
 
 ---

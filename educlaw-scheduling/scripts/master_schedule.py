@@ -27,7 +27,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-scheduling"
+SKILL = "schedule-educlaw-scheduling"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_SCHEDULE_STATUSES = ("draft", "building", "review", "published", "locked", "archived")
@@ -195,7 +195,7 @@ def create_master_schedule(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Master schedule creation failed: {e}")
 
-    audit(conn, SKILL, "create-master-schedule", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-create-master-schedule", "educlaw_master_schedule", master_id,
           new_values={"naming_series": naming, "academic_term_id": academic_term_id,
                       "schedule_pattern_id": schedule_pattern_id})
     conn.commit()
@@ -238,7 +238,7 @@ def update_master_schedule(conn, args):
     conn.execute(
         f"UPDATE educlaw_master_schedule SET {', '.join(updates)} WHERE id = ?", params
     )
-    audit(conn, SKILL, "update-master-schedule", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-update-master-schedule", "educlaw_master_schedule", master_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": master_id, "updated_fields": changed})
@@ -350,7 +350,7 @@ def add_section_to_schedule(conn, args):
            WHERE id = ?""",
         (master_id,)
     )
-    audit(conn, SKILL, "add-section-to-schedule", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-add-section-to-schedule", "educlaw_master_schedule", master_id,
           new_values={"section_id": section_id, "action": "increment_total"})
     conn.commit()
 
@@ -488,7 +488,7 @@ def place_section_meeting(conn, args):
 
     _refresh_master_stats(conn, master_id)
 
-    audit(conn, SKILL, "add-section-meeting", "educlaw_section_meeting", meeting_id,
+    audit(conn, SKILL, "schedule-add-section-meeting", "educlaw_section_meeting", meeting_id,
           new_values={"section_id": section_id, "master_schedule_id": master_id,
                       "day_type_id": day_type_id, "bell_period_id": bell_period_id})
     conn.commit()
@@ -530,7 +530,7 @@ def remove_section_meeting(conn, args):
 
     _refresh_master_stats(conn, meeting["master_schedule_id"])
 
-    audit(conn, SKILL, "delete-section-meeting", "educlaw_section_meeting", meeting_id,
+    audit(conn, SKILL, "schedule-delete-section-meeting", "educlaw_section_meeting", meeting_id,
           old_values={"section_id": meeting["section_id"],
                       "day_type_id": meeting["day_type_id"],
                       "bell_period_id": meeting["bell_period_id"]})
@@ -865,7 +865,7 @@ def publish_master_schedule(conn, args):
         (now, published_by, master_id)
     )
 
-    audit(conn, SKILL, "submit-master-schedule", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-submit-master-schedule", "educlaw_master_schedule", master_id,
           new_values={"schedule_status": "published", "published_by": published_by,
                       "sections_updated": len(section_ids)})
     conn.commit()
@@ -896,7 +896,7 @@ def lock_master_schedule(conn, args):
         (now, locked_by, master_id)
     )
 
-    audit(conn, SKILL, "update-schedule-lock", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-update-schedule-lock", "educlaw_master_schedule", master_id,
           new_values={"schedule_status": "locked", "locked_by": locked_by})
     conn.commit()
     ok({"id": master_id, "schedule_status": "locked",
@@ -953,7 +953,7 @@ def clone_master_schedule(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Clone failed: {e}")
 
-    audit(conn, SKILL, "create-schedule-clone", "educlaw_master_schedule", new_master_id,
+    audit(conn, SKILL, "schedule-create-schedule-clone", "educlaw_master_schedule", new_master_id,
           new_values={"cloned_from_id": master_id, "target_term_id": target_term_id})
     conn.commit()
     ok({"id": new_master_id, "naming_series": naming, "name": name,
@@ -1108,7 +1108,7 @@ def submit_course_request(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Course request creation failed: {e}")
 
-    audit(conn, SKILL, "submit-course-request", "educlaw_course_request", request_id,
+    audit(conn, SKILL, "schedule-submit-course-request", "educlaw_course_request", request_id,
           new_values={"student_id": student_id, "course_id": course_id,
                       "academic_term_id": academic_term_id})
     conn.commit()
@@ -1161,7 +1161,7 @@ def update_course_request(conn, args):
     conn.execute(
         f"UPDATE educlaw_course_request SET {', '.join(updates)} WHERE id = ?", params
     )
-    audit(conn, SKILL, "update-course-request", "educlaw_course_request", request_id,
+    audit(conn, SKILL, "schedule-update-course-request", "educlaw_course_request", request_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": request_id, "updated_fields": changed})
@@ -1253,7 +1253,7 @@ def approve_course_requests(conn, args):
         "SELECT changes()"
     ).fetchone()[0]
 
-    audit(conn, SKILL, "approve-course-requests", "educlaw_course_request", academic_term_id,
+    audit(conn, SKILL, "schedule-approve-course-requests", "educlaw_course_request", academic_term_id,
           new_values={"approved_by": approved_by, "requests_approved": count})
     conn.commit()
     ok({"academic_term_id": academic_term_id, "requests_approved": count,
@@ -1390,7 +1390,7 @@ def close_course_requests(conn, args):
     ).fetchall()
     stats_dict = {r["request_status"]: r["cnt"] for r in stats}
 
-    audit(conn, SKILL, "complete-course-requests", "educlaw_course_request", academic_term_id,
+    audit(conn, SKILL, "schedule-complete-course-requests", "educlaw_course_request", academic_term_id,
           new_values={"academic_term_id": academic_term_id, "stats": stats_dict})
     conn.commit()
 
@@ -1408,29 +1408,29 @@ def close_course_requests(conn, args):
 
 ACTIONS = {
     # Core master schedule
-    "create-master-schedule":      create_master_schedule,
-    "update-master-schedule":      update_master_schedule,
-    "get-master-schedule":         get_master_schedule,
-    "list-master-schedules":       list_master_schedules,
-    "add-section-to-schedule":     add_section_to_schedule,
-    "add-section-meeting":         place_section_meeting,
-    "delete-section-meeting":      remove_section_meeting,
-    "list-section-meetings":       list_section_meetings,
-    "get-schedule-matrix":         get_schedule_matrix,
-    "get-course-demand-analysis":  analyze_course_demand,
-    "get-fulfillment-report":      get_fulfillment_report,
-    "get-load-balance-report":     get_load_balance_report,
-    "submit-master-schedule":      publish_master_schedule,
-    "update-schedule-lock":        lock_master_schedule,
-    "create-schedule-clone":       clone_master_schedule,
+    "schedule-create-master-schedule":      create_master_schedule,
+    "schedule-update-master-schedule":      update_master_schedule,
+    "schedule-get-master-schedule":         get_master_schedule,
+    "schedule-list-master-schedules":       list_master_schedules,
+    "schedule-add-section-to-schedule":     add_section_to_schedule,
+    "schedule-add-section-meeting":         place_section_meeting,
+    "schedule-delete-section-meeting":      remove_section_meeting,
+    "schedule-list-section-meetings":       list_section_meetings,
+    "schedule-get-schedule-matrix":         get_schedule_matrix,
+    "schedule-get-course-demand-analysis":  analyze_course_demand,
+    "schedule-get-fulfillment-report":      get_fulfillment_report,
+    "schedule-get-load-balance-report":     get_load_balance_report,
+    "schedule-submit-master-schedule":      publish_master_schedule,
+    "schedule-update-schedule-lock":        lock_master_schedule,
+    "schedule-create-schedule-clone":       clone_master_schedule,
     # Course requests
-    "activate-course-requests":    open_course_requests,
-    "submit-course-request":       submit_course_request,
-    "update-course-request":       update_course_request,
-    "get-course-request":          get_course_request,
-    "list-course-requests":        list_course_requests,
-    "approve-course-requests":     approve_course_requests,
-    "get-demand-report":           get_demand_report,
-    "get-singleton-analysis":      get_singleton_analysis,
-    "complete-course-requests":    close_course_requests,
+    "schedule-activate-course-requests":    open_course_requests,
+    "schedule-submit-course-request":       submit_course_request,
+    "schedule-update-course-request":       update_course_request,
+    "schedule-get-course-request":          get_course_request,
+    "schedule-list-course-requests":        list_course_requests,
+    "schedule-approve-course-requests":     approve_course_requests,
+    "schedule-get-demand-report":           get_demand_report,
+    "schedule-get-singleton-analysis":      get_singleton_analysis,
+    "schedule-complete-course-requests":    close_course_requests,
 }

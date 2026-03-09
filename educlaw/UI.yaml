@@ -2009,3 +2009,350 @@ entities:
         in_form_view: true
         form_group: header
         form_order: 6
+
+# =============================================================================
+# Action Map — maps actions to UI components
+# =============================================================================
+action_map:
+  # ── Dashboard ──────────────────────────────────────────────────────────────
+  status:
+    component: DashboardView
+    sections:
+      - type: kpis
+      - type: quick_actions
+      - type: recent_activity
+
+  # ── Students domain ────────────────────────────────────────────────────────
+  list-students:
+    component: DataTable
+    entity: student
+    default_sort: created_at
+    add_action: add-student
+  add-student:
+    component: FormView
+    entity: student
+    mode: create
+  update-student:
+    component: FormView
+    entity: student
+    mode: edit
+  get-student:
+    component: DetailView
+    entity: student
+
+  list-applicants:
+    component: DataTable
+    entity: student_applicant
+    default_sort: created_at
+    add_action: add-student-applicant
+  add-student-applicant:
+    component: FormView
+    entity: student_applicant
+    mode: create
+  update-student-applicant:
+    component: FormView
+    entity: student_applicant
+    mode: edit
+  get-applicant:
+    component: DetailView
+    entity: student_applicant
+
+  list-guardians:
+    component: DataTable
+    entity: guardian
+    default_sort: created_at
+    add_action: add-guardian
+  add-guardian:
+    component: FormView
+    entity: guardian
+    mode: create
+  update-guardian:
+    component: FormView
+    entity: guardian
+    mode: edit
+  get-guardian:
+    component: DetailView
+    entity: guardian
+
+  add-consent-record:
+    component: FormView
+    entity: consent_record
+    mode: create
+
+  # ── Academics domain ───────────────────────────────────────────────────────
+  list-academic-years:
+    component: DataTable
+    entity: academic_year
+    default_sort: created_at
+    add_action: add-academic-year
+  add-academic-year:
+    component: FormView
+    entity: academic_year
+    mode: create
+  update-academic-year:
+    component: FormView
+    entity: academic_year
+    mode: edit
+  get-academic-year:
+    component: DetailView
+    entity: academic_year
+
+  list-academic-terms:
+    component: DataTable
+    entity: academic_term
+    default_sort: created_at
+    add_action: add-academic-term
+  add-academic-term:
+    component: FormView
+    entity: academic_term
+    mode: create
+  update-academic-term:
+    component: FormView
+    entity: academic_term
+    mode: edit
+  get-academic-term:
+    component: DetailView
+    entity: academic_term
+
+  list-programs:
+    component: DataTable
+    entity: program
+    default_sort: created_at
+    add_action: add-program
+  add-program:
+    component: FormView
+    entity: program
+    mode: create
+  update-program:
+    component: FormView
+    entity: program
+    mode: edit
+  get-program:
+    component: DetailView
+    entity: program
+
+  list-courses:
+    component: DataTable
+    entity: course
+    default_sort: created_at
+    add_action: add-course
+  add-course:
+    component: FormView
+    entity: course
+    mode: create
+  update-course:
+    component: FormView
+    entity: course
+    mode: edit
+  get-course:
+    component: DetailView
+    entity: course
+
+  list-sections:
+    component: DataTable
+    entity: section
+    default_sort: created_at
+    add_action: add-section
+  add-section:
+    component: FormView
+    entity: section
+    mode: create
+  update-section:
+    component: FormView
+    entity: section
+    mode: edit
+  get-section:
+    component: DetailView
+    entity: section
+
+  list-rooms:
+    component: DataTable
+    entity: room
+    default_sort: created_at
+    add_action: add-room
+  add-room:
+    component: FormView
+    entity: room
+    mode: create
+  update-room:
+    component: FormView
+    entity: room
+    mode: edit
+
+  # ── Enrollment domain ──────────────────────────────────────────────────────
+  list-program-enrollments:
+    component: DataTable
+    entity: program_enrollment
+    default_sort: created_at
+    add_action: create-program-enrollment
+  create-program-enrollment:
+    component: FormView
+    entity: program_enrollment
+    mode: create
+
+  list-enrollments:
+    component: DataTable
+    entity: course_enrollment
+    default_sort: created_at
+    add_action: create-section-enrollment
+  create-section-enrollment:
+    component: FormView
+    entity: course_enrollment
+    mode: create
+  get-enrollment:
+    component: DetailView
+    entity: course_enrollment
+
+  list-waitlist:
+    component: DataTable
+    entity: waitlist
+    default_sort: created_at
+
+  # ── Grading domain ─────────────────────────────────────────────────────────
+  list-grading-scales:
+    component: DataTable
+    entity: grading_scale
+    default_sort: created_at
+    add_action: add-grading-scale
+  add-grading-scale:
+    component: FormView
+    entity: grading_scale
+    mode: create
+  update-grading-scale:
+    component: FormView
+    entity: grading_scale
+    mode: edit
+  get-grading-scale:
+    component: DetailView
+    entity: grading_scale
+
+  add-assessment-plan:
+    component: FormView
+    entity: assessment_plan
+    mode: create
+  update-assessment-plan:
+    component: FormView
+    entity: assessment_plan
+    mode: edit
+  get-assessment-plan:
+    component: DetailView
+    entity: assessment_plan
+
+  list-assessments:
+    component: DataTable
+    entity: assessment
+    default_sort: created_at
+    add_action: add-assessment
+  add-assessment:
+    component: FormView
+    entity: assessment
+    mode: create
+  update-assessment:
+    component: FormView
+    entity: assessment
+    mode: edit
+
+  # ── Attendance domain ──────────────────────────────────────────────────────
+  list-attendance:
+    component: DataTable
+    entity: student_attendance
+    default_sort: created_at
+    add_action: record-attendance
+  record-attendance:
+    component: FormView
+    entity: student_attendance
+    mode: create
+  update-attendance:
+    component: FormView
+    entity: student_attendance
+    mode: edit
+  get-attendance:
+    component: DetailView
+    entity: student_attendance
+
+  # ── Staff domain ───────────────────────────────────────────────────────────
+  list-instructors:
+    component: DataTable
+    entity: instructor
+    default_sort: created_at
+    add_action: add-instructor
+  add-instructor:
+    component: FormView
+    entity: instructor
+    mode: create
+  update-instructor:
+    component: FormView
+    entity: instructor
+    mode: edit
+  get-instructor:
+    component: DetailView
+    entity: instructor
+
+  # ── Fees domain ────────────────────────────────────────────────────────────
+  list-fee-categories:
+    component: DataTable
+    entity: fee_category
+    default_sort: created_at
+    add_action: add-fee-category
+  add-fee-category:
+    component: FormView
+    entity: fee_category
+    mode: create
+  update-fee-category:
+    component: FormView
+    entity: fee_category
+    mode: edit
+
+  list-fee-structures:
+    component: DataTable
+    entity: fee_structure
+    default_sort: created_at
+    add_action: add-fee-structure
+  add-fee-structure:
+    component: FormView
+    entity: fee_structure
+    mode: create
+  update-fee-structure:
+    component: FormView
+    entity: fee_structure
+    mode: edit
+  get-fee-structure:
+    component: DetailView
+    entity: fee_structure
+
+  list-scholarships:
+    component: DataTable
+    entity: scholarship
+    default_sort: created_at
+    add_action: add-scholarship
+  add-scholarship:
+    component: FormView
+    entity: scholarship
+    mode: create
+  update-scholarship:
+    component: FormView
+    entity: scholarship
+    mode: edit
+
+  # ── Communications domain ──────────────────────────────────────────────────
+  list-announcements:
+    component: DataTable
+    entity: announcement
+    default_sort: created_at
+    add_action: add-announcement
+  add-announcement:
+    component: FormView
+    entity: announcement
+    mode: create
+  update-announcement:
+    component: FormView
+    entity: announcement
+    mode: edit
+  get-announcement:
+    component: DetailView
+    entity: announcement
+
+  list-notifications:
+    component: DataTable
+    entity: notification
+    default_sort: created_at

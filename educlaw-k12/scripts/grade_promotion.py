@@ -20,7 +20,7 @@ from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
 
-SKILL = "educlaw-k12"
+SKILL = "k12-educlaw-k12"
 
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -142,7 +142,7 @@ def create_promotion_review(conn, args):
          interventions_tried, company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "create-promotion-review", "educlaw_k12_promotion_review", review_id)
+    audit(conn, SKILL, "k12-create-promotion-review", "educlaw_k12_promotion_review", review_id)
     return ok({
         "id": review_id,
         "student_id": student_id,
@@ -197,7 +197,7 @@ def update_promotion_review(conn, args):
         list(updates.values()) + [review_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-promotion-review", "educlaw_k12_promotion_review", review_id)
+    audit(conn, SKILL, "k12-update-promotion-review", "educlaw_k12_promotion_review", review_id)
     return ok({"id": review_id, "message": "Promotion review updated"})
 
 
@@ -314,7 +314,7 @@ def submit_promotion_decision(conn, args):
         (now, promotion_review_id)
     )
     conn.commit()
-    audit(conn, SKILL, "submit-promotion-decision", "educlaw_k12_promotion_decision",
+    audit(conn, SKILL, "k12-submit-promotion-decision", "educlaw_k12_promotion_decision",
           decision_id, description=f"Decision: {decision} for student {student_id}")
     return ok({
         "id": decision_id,
@@ -651,7 +651,7 @@ def create_intervention_plan(conn, args):
          company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "create-intervention-plan", "educlaw_k12_intervention_plan", plan_id)
+    audit(conn, SKILL, "k12-create-intervention-plan", "educlaw_k12_intervention_plan", plan_id)
     return ok({"id": plan_id, "trigger": trigger, "plan_status": "active",
                "message": "Intervention plan created"})
 
@@ -690,7 +690,7 @@ def update_intervention_plan(conn, args):
         list(updates.values()) + [plan_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-intervention-plan", "educlaw_k12_intervention_plan", plan_id)
+    audit(conn, SKILL, "k12-update-intervention-plan", "educlaw_k12_intervention_plan", plan_id)
     return ok({"id": plan_id, "message": "Intervention plan updated"})
 
 
@@ -916,16 +916,16 @@ def generate_promotion_report(conn, args):
 
 # ─── ACTIONS registry ────────────────────────────────────────────────────────
 ACTIONS = {
-    "create-promotion-review": create_promotion_review,
-    "update-promotion-review": update_promotion_review,
-    "list-promotion-reviews": list_promotion_reviews,
-    "submit-promotion-decision": submit_promotion_decision,
-    "get-promotion-decision": get_promotion_decision,
-    "add-promotion-notification": notify_promotion_decision,
-    "apply-grade-promotion": batch_promote_grade,
-    "create-intervention-plan": create_intervention_plan,
-    "update-intervention-plan": update_intervention_plan,
-    "list-intervention-plans": list_intervention_plans,
-    "list-at-risk-students": identify_at_risk_students,
-    "generate-promotion-report": generate_promotion_report,
+    "k12-create-promotion-review": create_promotion_review,
+    "k12-update-promotion-review": update_promotion_review,
+    "k12-list-promotion-reviews": list_promotion_reviews,
+    "k12-submit-promotion-decision": submit_promotion_decision,
+    "k12-get-promotion-decision": get_promotion_decision,
+    "k12-add-promotion-notification": notify_promotion_decision,
+    "k12-apply-grade-promotion": batch_promote_grade,
+    "k12-create-intervention-plan": create_intervention_plan,
+    "k12-update-intervention-plan": update_intervention_plan,
+    "k12-list-intervention-plans": list_intervention_plans,
+    "k12-list-at-risk-students": identify_at_risk_students,
+    "k12-generate-promotion-report": generate_promotion_report,
 }

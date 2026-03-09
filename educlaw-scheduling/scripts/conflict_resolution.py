@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-scheduling"
+SKILL = "schedule-educlaw-scheduling"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_CONFLICT_TYPES = (
@@ -528,7 +528,7 @@ def run_conflict_check(conn, args):
         (master_id,)
     ).fetchone()[0]
 
-    audit(conn, SKILL, "generate-conflict-check", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-generate-conflict-check", "educlaw_master_schedule", master_id,
           new_values={"new_conflicts": len(all_new), "open_conflicts": open_count})
     conn.commit()
 
@@ -645,7 +645,7 @@ def resolve_conflict(conn, args):
 
     _update_open_conflicts(conn, conflict["master_schedule_id"])
 
-    audit(conn, SKILL, "complete-conflict", "educlaw_schedule_conflict", conflict_id,
+    audit(conn, SKILL, "schedule-complete-conflict", "educlaw_schedule_conflict", conflict_id,
           new_values={"conflict_status": "resolved", "resolved_by": resolved_by})
     conn.commit()
     ok({"id": conflict_id, "conflict_status": "resolved",
@@ -685,7 +685,7 @@ def accept_conflict(conn, args):
 
     _update_open_conflicts(conn, conflict["master_schedule_id"])
 
-    audit(conn, SKILL, "accept-conflict", "educlaw_schedule_conflict", conflict_id,
+    audit(conn, SKILL, "schedule-accept-conflict", "educlaw_schedule_conflict", conflict_id,
           new_values={"conflict_status": "accepted", "resolved_by": resolved_by})
     conn.commit()
     ok({"id": conflict_id, "conflict_status": "accepted",
@@ -872,12 +872,12 @@ def get_student_conflict_report(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "generate-conflict-check":    run_conflict_check,
-    "list-conflicts":             list_conflicts,
-    "get-conflict":               get_conflict,
-    "complete-conflict":          resolve_conflict,
-    "accept-conflict":            accept_conflict,
-    "get-conflict-summary":       get_conflict_summary,
-    "get-singleton-conflict-map": get_singleton_conflict_map,
-    "get-student-conflict-report": get_student_conflict_report,
+    "schedule-generate-conflict-check":    run_conflict_check,
+    "schedule-list-conflicts":             list_conflicts,
+    "schedule-get-conflict":               get_conflict,
+    "schedule-complete-conflict":          resolve_conflict,
+    "schedule-accept-conflict":            accept_conflict,
+    "schedule-get-conflict-summary":       get_conflict_summary,
+    "schedule-get-singleton-conflict-map": get_singleton_conflict_map,
+    "schedule-get-student-conflict-report": get_student_conflict_report,
 }

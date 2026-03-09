@@ -1,0 +1,689 @@
+product: educlaw-finaid
+tables:
+
+  # ============================================================
+  # Domain: financial_aid — Core compliance engine
+  # ============================================================
+
+  finaid_aid_year:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      aid_year_code: "TEXT NOT NULL DEFAULT ''"
+      description: "TEXT NOT NULL DEFAULT ''"
+      start_date: "TEXT NOT NULL DEFAULT ''"
+      end_date: "TEXT NOT NULL DEFAULT ''"
+      pell_max_award: "TEXT NOT NULL DEFAULT '0'"
+      is_active: "INTEGER NOT NULL DEFAULT 0"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_aid_year_company_code
+        columns: [company_id, aid_year_code]
+      - name: idx_finaid_aid_year_company_active
+        columns: [company_id, is_active]
+
+  finaid_pell_schedule:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      pell_index: "INTEGER NOT NULL DEFAULT 0"
+      full_time_annual: "TEXT NOT NULL DEFAULT '0'"
+      three_quarter_time: "TEXT NOT NULL DEFAULT '0'"
+      half_time: "TEXT NOT NULL DEFAULT '0'"
+      less_than_half_time: "TEXT NOT NULL DEFAULT '0'"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_pell_schedule_year_index
+        columns: [aid_year_id, pell_index]
+
+  finaid_fund_allocation:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      fund_type: "TEXT NOT NULL DEFAULT '' CHECK(fund_type IN ('fseog','fws','institutional_grant','departmental'))"
+      fund_name: "TEXT NOT NULL DEFAULT ''"
+      total_allocation: "TEXT NOT NULL DEFAULT '0'"
+      committed_amount: "TEXT NOT NULL DEFAULT '0'"
+      disbursed_amount: "TEXT NOT NULL DEFAULT '0'"
+      available_amount: "TEXT NOT NULL DEFAULT '0'"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_fund_alloc_year_type_name
+        columns: [aid_year_id, fund_type, fund_name]
+      - name: idx_finaid_fund_alloc_company_year
+        columns: [company_id, aid_year_id]
+
+  finaid_cost_of_attendance:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      program_id: "TEXT REFERENCES educlaw_program(id) ON DELETE RESTRICT"
+      enrollment_status: "TEXT NOT NULL DEFAULT '' CHECK(enrollment_status IN ('full_time','three_quarter','half_time','less_than_half'))"
+      living_arrangement: "TEXT NOT NULL DEFAULT '' CHECK(living_arrangement IN ('on_campus','off_campus','with_parent',''))"
+      tuition_fees: "TEXT NOT NULL DEFAULT '0'"
+      books_supplies: "TEXT NOT NULL DEFAULT '0'"
+      room_board: "TEXT NOT NULL DEFAULT '0'"
+      transportation: "TEXT NOT NULL DEFAULT '0'"
+      personal_expenses: "TEXT NOT NULL DEFAULT '0'"
+      loan_fees: "TEXT NOT NULL DEFAULT '0'"
+      total_coa: "TEXT NOT NULL DEFAULT '0'"
+      is_active: "INTEGER NOT NULL DEFAULT 1"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_coa_year_program_status_living
+        columns: [aid_year_id, program_id, enrollment_status, living_arrangement]
+      - name: idx_finaid_coa_company_year
+        columns: [company_id, aid_year_id]
+
+  finaid_isir:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      transaction_number: "INTEGER NOT NULL DEFAULT 1"
+      is_active_transaction: "INTEGER NOT NULL DEFAULT 0"
+      fafsa_submission_id: "TEXT NOT NULL DEFAULT ''"
+      receipt_date: "TEXT NOT NULL DEFAULT ''"
+      sai: "TEXT NOT NULL DEFAULT '0'"
+      sai_is_negative: "INTEGER NOT NULL DEFAULT 0"
+      dependency_status: "TEXT NOT NULL DEFAULT '' CHECK(dependency_status IN ('dependent','independent',''))"
+      dependency_override: "INTEGER NOT NULL DEFAULT 0"
+      pell_index: "TEXT NOT NULL DEFAULT ''"
+      pell_scheduled_award: "TEXT NOT NULL DEFAULT '0'"
+      pell_lifetime_eligibility_used: "TEXT NOT NULL DEFAULT '0'"
+      verification_flag: "INTEGER NOT NULL DEFAULT 0"
+      verification_group: "TEXT NOT NULL DEFAULT '' CHECK(verification_group IN ('V1','V4','V5',''))"
+      has_unresolved_cflags: "INTEGER NOT NULL DEFAULT 0"
+      nslds_default_flag: "INTEGER NOT NULL DEFAULT 0"
+      nslds_overpayment_flag: "INTEGER NOT NULL DEFAULT 0"
+      selective_service_flag: "INTEGER NOT NULL DEFAULT 0"
+      citizenship_flag: "INTEGER NOT NULL DEFAULT 0"
+      agi: "TEXT NOT NULL DEFAULT '0'"
+      household_size: "INTEGER NOT NULL DEFAULT 0"
+      family_members_in_college: "INTEGER NOT NULL DEFAULT 0"
+      aggregate_loan_borrowed: "TEXT NOT NULL DEFAULT '0'"
+      aggregate_sub_loan_borrowed: "TEXT NOT NULL DEFAULT '0'"
+      status: "TEXT NOT NULL DEFAULT 'received' CHECK(status IN ('received','under_review','reviewed','packaged','archived'))"
+      reviewed_by: "TEXT NOT NULL DEFAULT ''"
+      reviewed_at: "TEXT NOT NULL DEFAULT ''"
+      raw_isir_data: "TEXT NOT NULL DEFAULT '{}'"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_isir_student_year_txn
+        columns: [student_id, aid_year_id, transaction_number]
+      - name: idx_finaid_isir_student_year_active
+        columns: [student_id, aid_year_id, is_active_transaction]
+      - name: idx_finaid_isir_company_status
+        columns: [company_id, status]
+
+  finaid_isir_cflag:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      isir_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_isir(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      cflag_code: "TEXT NOT NULL DEFAULT ''"
+      cflag_description: "TEXT NOT NULL DEFAULT ''"
+      blocks_disbursement: "INTEGER NOT NULL DEFAULT 1"
+      resolution_status: "TEXT NOT NULL DEFAULT 'pending' CHECK(resolution_status IN ('pending','resolved','waived'))"
+      resolution_date: "TEXT NOT NULL DEFAULT ''"
+      resolved_by: "TEXT NOT NULL DEFAULT ''"
+      resolution_notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_isir_cflag_isir_code
+        columns: [isir_id, cflag_code]
+      - name: idx_finaid_isir_cflag_student_status
+        columns: [student_id, resolution_status]
+      - name: idx_finaid_isir_cflag_company_status
+        columns: [company_id, resolution_status]
+
+  finaid_verification_request:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      isir_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_isir(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      verification_group: "TEXT NOT NULL DEFAULT '' CHECK(verification_group IN ('V1','V4','V5'))"
+      status: "TEXT NOT NULL DEFAULT 'initiated' CHECK(status IN ('initiated','documents_requested','in_review','discrepancy','complete','withdrawn'))"
+      requested_date: "TEXT NOT NULL DEFAULT ''"
+      deadline_date: "TEXT NOT NULL DEFAULT ''"
+      completed_date: "TEXT NOT NULL DEFAULT ''"
+      discrepancy_found: "INTEGER NOT NULL DEFAULT 0"
+      discrepancy_notes: "TEXT NOT NULL DEFAULT ''"
+      assigned_to: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_verif_req_isir
+        columns: [isir_id]
+      - name: idx_finaid_verif_req_student_status
+        columns: [student_id, status]
+      - name: idx_finaid_verif_req_company_status
+        columns: [company_id, status]
+
+  finaid_verification_document:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      verification_request_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_verification_request(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      document_type: "TEXT NOT NULL DEFAULT '' CHECK(document_type IN ('tax_transcript','w2','household_verification','identity','statement_of_purpose','snap_verification','child_support','hs_completion','other'))"
+      document_description: "TEXT NOT NULL DEFAULT ''"
+      is_required: "INTEGER NOT NULL DEFAULT 1"
+      submission_status: "TEXT NOT NULL DEFAULT 'not_submitted' CHECK(submission_status IN ('not_submitted','submitted','accepted','rejected','waived'))"
+      submitted_date: "TEXT NOT NULL DEFAULT ''"
+      reviewed_by: "TEXT NOT NULL DEFAULT ''"
+      reviewed_date: "TEXT NOT NULL DEFAULT ''"
+      rejection_reason: "TEXT NOT NULL DEFAULT ''"
+      document_reference: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_verif_doc_req_type
+        columns: [verification_request_id, document_type]
+      - name: idx_finaid_verif_doc_student_status
+        columns: [student_id, submission_status]
+      - name: idx_finaid_verif_doc_company_status
+        columns: [company_id, submission_status]
+
+  finaid_award_package:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL UNIQUE DEFAULT ''"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      program_enrollment_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_program_enrollment(id) ON DELETE RESTRICT"
+      isir_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_isir(id) ON DELETE RESTRICT"
+      cost_of_attendance_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_cost_of_attendance(id) ON DELETE RESTRICT"
+      enrollment_status: "TEXT NOT NULL DEFAULT '' CHECK(enrollment_status IN ('full_time','three_quarter','half_time','less_than_half'))"
+      financial_need: "TEXT NOT NULL DEFAULT '0'"
+      total_grants: "TEXT NOT NULL DEFAULT '0'"
+      total_loans: "TEXT NOT NULL DEFAULT '0'"
+      total_work_study: "TEXT NOT NULL DEFAULT '0'"
+      total_aid: "TEXT NOT NULL DEFAULT '0'"
+      status: "TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','offered','accepted','partially_accepted','cancelled','disbursed'))"
+      offered_date: "TEXT NOT NULL DEFAULT ''"
+      accepted_date: "TEXT NOT NULL DEFAULT ''"
+      acceptance_deadline: "TEXT NOT NULL DEFAULT ''"
+      packaged_by: "TEXT NOT NULL DEFAULT ''"
+      packaged_at: "TEXT NOT NULL DEFAULT ''"
+      approved_by: "TEXT NOT NULL DEFAULT ''"
+      approved_at: "TEXT NOT NULL DEFAULT ''"
+      notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_award_pkg_student_year_term
+        columns: [student_id, aid_year_id, academic_term_id]
+      - name: idx_finaid_award_pkg_company_status
+        columns: [company_id, status]
+      - name: idx_finaid_award_pkg_year_status
+        columns: [aid_year_id, status]
+      - name: idx_finaid_award_pkg_naming_series
+        columns: [naming_series]
+
+  finaid_award:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      award_package_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_award_package(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      aid_type: "TEXT NOT NULL DEFAULT '' CHECK(aid_type IN ('pell','fseog','subsidized_loan','unsubsidized_loan','plus_loan','parent_plus_loan','fws','institutional_grant','institutional_scholarship','state_grant','external_scholarship','tuition_waiver','teach_grant'))"
+      aid_source: "TEXT NOT NULL DEFAULT '' CHECK(aid_source IN ('federal','state','institutional','external'))"
+      fund_source_id: "TEXT NOT NULL DEFAULT ''"
+      offered_amount: "TEXT NOT NULL DEFAULT '0'"
+      accepted_amount: "TEXT NOT NULL DEFAULT '0'"
+      disbursed_amount: "TEXT NOT NULL DEFAULT '0'"
+      acceptance_status: "TEXT NOT NULL DEFAULT 'pending' CHECK(acceptance_status IN ('pending','accepted','declined','partial'))"
+      acceptance_date: "TEXT NOT NULL DEFAULT ''"
+      disbursement_holds: "TEXT NOT NULL DEFAULT '[]'"
+      is_locked: "INTEGER NOT NULL DEFAULT 0"
+      gl_account_id: "TEXT NOT NULL DEFAULT ''"
+      notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_award_pkg_type
+        columns: [award_package_id, aid_type]
+      - name: idx_finaid_award_student_year_type
+        columns: [student_id, aid_year_id, aid_type]
+      - name: idx_finaid_award_company_type_status
+        columns: [company_id, aid_type, acceptance_status]
+
+  finaid_disbursement:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      award_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_award(id) ON DELETE RESTRICT"
+      award_package_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_award_package(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      disbursement_type: "TEXT NOT NULL DEFAULT 'disbursement' CHECK(disbursement_type IN ('disbursement','reversal','return','post_withdrawal'))"
+      disbursement_number: "INTEGER NOT NULL DEFAULT 1"
+      amount: "TEXT NOT NULL DEFAULT '0'"
+      disbursement_date: "TEXT NOT NULL DEFAULT ''"
+      gl_journal_id: "TEXT NOT NULL DEFAULT ''"
+      sales_invoice_id: "TEXT NOT NULL DEFAULT ''"
+      cod_origination_id: "TEXT NOT NULL DEFAULT ''"
+      cod_disbursement_id: "TEXT NOT NULL DEFAULT ''"
+      cod_status: "TEXT NOT NULL DEFAULT '' CHECK(cod_status IN ('pending','reported','acknowledged','rejected',''))"
+      cod_response_date: "TEXT NOT NULL DEFAULT ''"
+      is_credit_balance: "INTEGER NOT NULL DEFAULT 0"
+      credit_balance_amount: "TEXT NOT NULL DEFAULT '0'"
+      credit_balance_date: "TEXT NOT NULL DEFAULT ''"
+      credit_balance_returned_date: "TEXT NOT NULL DEFAULT ''"
+      disbursed_by: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_disbursement_award_num_type
+        columns: [award_id, disbursement_number, disbursement_type]
+      - name: idx_finaid_disbursement_student_date
+        columns: [student_id, disbursement_date]
+      - name: idx_finaid_disbursement_company_cod
+        columns: [company_id, cod_status]
+      - name: idx_finaid_disbursement_company_credit_balance
+        columns: [company_id, is_credit_balance, credit_balance_returned_date]
+
+  finaid_sap_evaluation:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      evaluation_date: "TEXT NOT NULL DEFAULT ''"
+      evaluation_type: "TEXT NOT NULL DEFAULT 'automatic' CHECK(evaluation_type IN ('automatic','manual','appeal'))"
+      gpa_earned: "TEXT NOT NULL DEFAULT '0'"
+      gpa_threshold: "TEXT NOT NULL DEFAULT '2.00'"
+      gpa_meets_standard: "INTEGER NOT NULL DEFAULT 0"
+      credits_attempted: "TEXT NOT NULL DEFAULT '0'"
+      credits_completed: "TEXT NOT NULL DEFAULT '0'"
+      completion_rate: "TEXT NOT NULL DEFAULT '0'"
+      completion_threshold: "TEXT NOT NULL DEFAULT '0.67'"
+      completion_meets_standard: "INTEGER NOT NULL DEFAULT 0"
+      max_timeframe_credits: "TEXT NOT NULL DEFAULT '0'"
+      projected_credits_remaining: "TEXT NOT NULL DEFAULT '0'"
+      max_timeframe_met: "INTEGER NOT NULL DEFAULT 0"
+      transfer_credits_attempted: "TEXT NOT NULL DEFAULT '0'"
+      transfer_credits_completed: "TEXT NOT NULL DEFAULT '0'"
+      sap_status: "TEXT NOT NULL DEFAULT 'SAT' CHECK(sap_status IN ('SAT','FAW','FSP','FAP'))"
+      prior_sap_status: "TEXT NOT NULL DEFAULT ''"
+      holds_placed: "INTEGER NOT NULL DEFAULT 0"
+      evaluated_by: "TEXT NOT NULL DEFAULT ''"
+      notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_sap_eval_student_term
+        columns: [student_id, academic_term_id]
+      - name: idx_finaid_sap_eval_company_status
+        columns: [company_id, sap_status]
+      - name: idx_finaid_sap_eval_term_status
+        columns: [academic_term_id, sap_status]
+
+  finaid_sap_appeal:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      sap_evaluation_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_sap_evaluation(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      submitted_date: "TEXT NOT NULL DEFAULT ''"
+      appeal_reason: "TEXT NOT NULL DEFAULT '' CHECK(appeal_reason IN ('death_family','illness','injury','divorce_separation','natural_disaster','other'))"
+      reason_narrative: "TEXT NOT NULL DEFAULT ''"
+      academic_plan: "TEXT NOT NULL DEFAULT ''"
+      supporting_documents: "TEXT NOT NULL DEFAULT '[]'"
+      status: "TEXT NOT NULL DEFAULT 'submitted' CHECK(status IN ('submitted','under_review','granted','denied'))"
+      reviewed_by: "TEXT NOT NULL DEFAULT ''"
+      reviewed_date: "TEXT NOT NULL DEFAULT ''"
+      decision_rationale: "TEXT NOT NULL DEFAULT ''"
+      probation_term_id: "TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      probation_conditions: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_sap_appeal_student_status
+        columns: [student_id, status]
+      - name: idx_finaid_sap_appeal_evaluation
+        columns: [sap_evaluation_id]
+      - name: idx_finaid_sap_appeal_company_status
+        columns: [company_id, status]
+
+  finaid_r2t4_calculation:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      award_package_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_award_package(id) ON DELETE RESTRICT"
+      withdrawal_type: "TEXT NOT NULL DEFAULT '' CHECK(withdrawal_type IN ('official','unofficial'))"
+      withdrawal_date: "TEXT NOT NULL DEFAULT ''"
+      last_date_of_attendance: "TEXT NOT NULL DEFAULT ''"
+      determination_date: "TEXT NOT NULL DEFAULT ''"
+      payment_period_start: "TEXT NOT NULL DEFAULT ''"
+      payment_period_end: "TEXT NOT NULL DEFAULT ''"
+      payment_period_days: "INTEGER NOT NULL DEFAULT 0"
+      days_attended: "INTEGER NOT NULL DEFAULT 0"
+      percent_completed: "TEXT NOT NULL DEFAULT '0'"
+      earned_percent: "TEXT NOT NULL DEFAULT '0'"
+      total_aid_disbursed: "TEXT NOT NULL DEFAULT '0'"
+      total_aid_scheduleable: "TEXT NOT NULL DEFAULT '0'"
+      earned_aid: "TEXT NOT NULL DEFAULT '0'"
+      unearned_aid: "TEXT NOT NULL DEFAULT '0'"
+      institution_return_amount: "TEXT NOT NULL DEFAULT '0'"
+      student_return_amount: "TEXT NOT NULL DEFAULT '0'"
+      post_withdrawal_disbursement: "TEXT NOT NULL DEFAULT '0'"
+      pwd_offered_date: "TEXT NOT NULL DEFAULT ''"
+      pwd_accepted: "INTEGER NOT NULL DEFAULT 0"
+      pwd_disbursed_date: "TEXT NOT NULL DEFAULT ''"
+      institution_return_due_date: "TEXT NOT NULL DEFAULT ''"
+      institution_return_date: "TEXT NOT NULL DEFAULT ''"
+      return_detail: "TEXT NOT NULL DEFAULT '{}'"
+      status: "TEXT NOT NULL DEFAULT 'calculated' CHECK(status IN ('calculated','approved','returned','complete'))"
+      calculated_by: "TEXT NOT NULL DEFAULT ''"
+      approved_by: "TEXT NOT NULL DEFAULT ''"
+      notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_r2t4_student_term
+        columns: [student_id, academic_term_id]
+      - name: idx_finaid_r2t4_company_status
+        columns: [company_id, status]
+      - name: idx_finaid_r2t4_company_due_date_status
+        columns: [company_id, institution_return_due_date, status]
+
+  finaid_professional_judgment:
+    owner: financial_aid
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      award_package_id: "TEXT REFERENCES finaid_award_package(id) ON DELETE RESTRICT"
+      pj_type: "TEXT NOT NULL DEFAULT '' CHECK(pj_type IN ('sai_adjustment','coa_adjustment','dependency_override','enrollment_status_override','other'))"
+      pj_reason: "TEXT NOT NULL DEFAULT '' CHECK(pj_reason IN ('job_loss','death_family','illness_injury','divorce_separation','unusual_expenses','natural_disaster','other'))"
+      reason_narrative: "TEXT NOT NULL DEFAULT ''"
+      data_element_changed: "TEXT NOT NULL DEFAULT ''"
+      original_value: "TEXT NOT NULL DEFAULT ''"
+      adjusted_value: "TEXT NOT NULL DEFAULT ''"
+      effective_date: "TEXT NOT NULL DEFAULT ''"
+      supporting_documentation: "TEXT NOT NULL DEFAULT '[]'"
+      authorized_by: "TEXT NOT NULL DEFAULT ''"
+      authorization_date: "TEXT NOT NULL DEFAULT ''"
+      supervisor_review_required: "INTEGER NOT NULL DEFAULT 0"
+      supervisor_reviewed_by: "TEXT NOT NULL DEFAULT ''"
+      supervisor_review_date: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_pj_student_year_type
+        columns: [student_id, aid_year_id, pj_type]
+      - name: idx_finaid_pj_company_auth_date
+        columns: [company_id, authorization_date]
+
+  # ============================================================
+  # Domain: scholarships — Institutional scholarship management
+  # ============================================================
+
+  finaid_scholarship_program:
+    owner: scholarships
+    columns:
+      id: TEXT PRIMARY KEY
+      name: "TEXT NOT NULL DEFAULT ''"
+      code: "TEXT NOT NULL DEFAULT ''"
+      description: "TEXT NOT NULL DEFAULT ''"
+      scholarship_type: "TEXT NOT NULL DEFAULT '' CHECK(scholarship_type IN ('merit','need_based','merit_need','athletic','departmental','endowed','external','tuition_waiver'))"
+      funding_source: "TEXT NOT NULL DEFAULT '' CHECK(funding_source IN ('endowment','budget','departmental','donor','external'))"
+      award_method: "TEXT NOT NULL DEFAULT '' CHECK(award_method IN ('auto_match','application_required','fao_discretion'))"
+      award_amount_type: "TEXT NOT NULL DEFAULT '' CHECK(award_amount_type IN ('fixed','percentage_coa','percentage_tuition','variable'))"
+      award_amount: "TEXT NOT NULL DEFAULT '0'"
+      min_award: "TEXT NOT NULL DEFAULT '0'"
+      max_award: "TEXT NOT NULL DEFAULT '0'"
+      annual_budget: "TEXT NOT NULL DEFAULT '0'"
+      budget_remaining: "TEXT NOT NULL DEFAULT '0'"
+      max_recipients: "INTEGER NOT NULL DEFAULT 0"
+      renewal_eligible: "INTEGER NOT NULL DEFAULT 0"
+      renewal_gpa_minimum: "TEXT NOT NULL DEFAULT '0'"
+      renewal_credits_minimum: "TEXT NOT NULL DEFAULT '0'"
+      eligibility_criteria: "TEXT NOT NULL DEFAULT '{}'"
+      application_deadline: "TEXT NOT NULL DEFAULT ''"
+      award_period: "TEXT NOT NULL DEFAULT '' CHECK(award_period IN ('annual','per_term','one_time'))"
+      applies_to_aid_type: "TEXT NOT NULL DEFAULT '' CHECK(applies_to_aid_type IN ('institutional_grant','institutional_scholarship','tuition_waiver'))"
+      gl_account_id: "TEXT NOT NULL DEFAULT ''"
+      is_active: "INTEGER NOT NULL DEFAULT 1"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_schol_prog_company_code
+        columns: [company_id, code]
+      - name: idx_finaid_schol_prog_company_type_active
+        columns: [company_id, scholarship_type, is_active]
+
+  finaid_scholarship_application:
+    owner: scholarships
+    columns:
+      id: TEXT PRIMARY KEY
+      scholarship_program_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_scholarship_program(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      submission_date: "TEXT NOT NULL DEFAULT ''"
+      status: "TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','submitted','under_review','awarded','waitlisted','denied','withdrawn'))"
+      essay_response: "TEXT NOT NULL DEFAULT ''"
+      gpa_at_application: "TEXT NOT NULL DEFAULT '0'"
+      reviewer_id: "TEXT NOT NULL DEFAULT ''"
+      review_date: "TEXT NOT NULL DEFAULT ''"
+      review_notes: "TEXT NOT NULL DEFAULT ''"
+      award_amount: "TEXT NOT NULL DEFAULT '0'"
+      award_term_id: "TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      denial_reason: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_schol_app_prog_student_year
+        columns: [scholarship_program_id, student_id, aid_year_id]
+      - name: idx_finaid_schol_app_company_status
+        columns: [company_id, status]
+      - name: idx_finaid_schol_app_student_status
+        columns: [student_id, status]
+
+  finaid_scholarship_renewal:
+    owner: scholarships
+    columns:
+      id: TEXT PRIMARY KEY
+      scholarship_application_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_scholarship_application(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      scholarship_program_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_scholarship_program(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      renewal_status: "TEXT NOT NULL DEFAULT 'renewed' CHECK(renewal_status IN ('renewed','suspended','revoked','exhausted'))"
+      gpa_at_evaluation: "TEXT NOT NULL DEFAULT '0'"
+      credits_attempted: "INTEGER NOT NULL DEFAULT 0"
+      meets_criteria: "INTEGER NOT NULL DEFAULT 0"
+      reason: "TEXT NOT NULL DEFAULT ''"
+      evaluated_by: "TEXT NOT NULL DEFAULT ''"
+      evaluation_date: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_schol_renewal_app_term
+        columns: [scholarship_application_id, academic_term_id]
+      - name: idx_finaid_schol_renewal_student_status
+        columns: [student_id, renewal_status]
+
+  # ============================================================
+  # Domain: work_study — Federal Work-Study management
+  # ============================================================
+
+  finaid_work_study_job:
+    owner: work_study
+    columns:
+      id: TEXT PRIMARY KEY
+      job_title: "TEXT NOT NULL DEFAULT ''"
+      department_id: "TEXT NOT NULL DEFAULT ''"
+      supervisor_id: "TEXT NOT NULL DEFAULT ''"
+      job_type: "TEXT NOT NULL DEFAULT '' CHECK(job_type IN ('on_campus','off_campus_community','off_campus_other'))"
+      description: "TEXT NOT NULL DEFAULT ''"
+      pay_rate: "TEXT NOT NULL DEFAULT '0'"
+      hours_per_week: "TEXT NOT NULL DEFAULT '0'"
+      total_positions: "INTEGER NOT NULL DEFAULT 1"
+      filled_positions: "INTEGER NOT NULL DEFAULT 0"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      status: "TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','filled','closed'))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_ws_job_company_year_status
+        columns: [company_id, aid_year_id, status]
+      - name: idx_finaid_ws_job_company_type
+        columns: [company_id, job_type]
+
+  finaid_work_study_assignment:
+    owner: work_study
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      award_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_award(id) ON DELETE RESTRICT"
+      job_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_work_study_job(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      start_date: "TEXT NOT NULL DEFAULT ''"
+      end_date: "TEXT NOT NULL DEFAULT ''"
+      award_limit: "TEXT NOT NULL DEFAULT '0'"
+      earned_to_date: "TEXT NOT NULL DEFAULT '0'"
+      status: "TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','terminated'))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_ws_assign_student_year_status
+        columns: [student_id, aid_year_id, status]
+      - name: idx_finaid_ws_assign_job_status
+        columns: [job_id, status]
+      - name: idx_finaid_ws_assign_company_term_status
+        columns: [company_id, academic_term_id, status]
+
+  finaid_work_study_timesheet:
+    owner: work_study
+    columns:
+      id: TEXT PRIMARY KEY
+      assignment_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_work_study_assignment(id) ON DELETE RESTRICT"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      pay_period_start: "TEXT NOT NULL DEFAULT ''"
+      pay_period_end: "TEXT NOT NULL DEFAULT ''"
+      hours_worked: "TEXT NOT NULL DEFAULT '0'"
+      earnings: "TEXT NOT NULL DEFAULT '0'"
+      cumulative_earnings: "TEXT NOT NULL DEFAULT '0'"
+      submission_date: "TEXT NOT NULL DEFAULT ''"
+      supervisor_approval_status: "TEXT NOT NULL DEFAULT 'pending' CHECK(supervisor_approval_status IN ('pending','approved','rejected'))"
+      supervisor_approved_by: "TEXT NOT NULL DEFAULT ''"
+      supervisor_approved_date: "TEXT NOT NULL DEFAULT ''"
+      rejection_reason: "TEXT NOT NULL DEFAULT ''"
+      payroll_exported: "INTEGER NOT NULL DEFAULT 0"
+      payroll_export_date: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_ws_timesheet_assign_period
+        columns: [assignment_id, pay_period_start]
+      - name: idx_finaid_ws_timesheet_student_period
+        columns: [student_id, pay_period_start]
+      - name: idx_finaid_ws_timesheet_company_approval
+        columns: [company_id, supervisor_approval_status]
+
+  # ============================================================
+  # Domain: loan_tracking — Federal loan origination records
+  # ============================================================
+
+  finaid_loan:
+    owner: loan_tracking
+    columns:
+      id: TEXT PRIMARY KEY
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      award_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_award(id) ON DELETE RESTRICT"
+      aid_year_id: "TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT"
+      loan_type: "TEXT NOT NULL DEFAULT '' CHECK(loan_type IN ('subsidized','unsubsidized','graduate_plus','parent_plus','teach'))"
+      loan_period_start: "TEXT NOT NULL DEFAULT ''"
+      loan_period_end: "TEXT NOT NULL DEFAULT ''"
+      loan_amount: "TEXT NOT NULL DEFAULT '0'"
+      first_disbursement_amount: "TEXT NOT NULL DEFAULT '0'"
+      second_disbursement_amount: "TEXT NOT NULL DEFAULT '0'"
+      origination_fee: "TEXT NOT NULL DEFAULT '0'"
+      interest_rate: "TEXT NOT NULL DEFAULT '0'"
+      cod_loan_id: "TEXT NOT NULL DEFAULT ''"
+      cod_origination_status: "TEXT NOT NULL DEFAULT '' CHECK(cod_origination_status IN ('pending','accepted','rejected',''))"
+      cod_origination_date: "TEXT NOT NULL DEFAULT ''"
+      mpn_required: "INTEGER NOT NULL DEFAULT 1"
+      mpn_signed: "INTEGER NOT NULL DEFAULT 0"
+      mpn_signed_date: "TEXT NOT NULL DEFAULT ''"
+      entrance_counseling_required: "INTEGER NOT NULL DEFAULT 0"
+      entrance_counseling_complete: "INTEGER NOT NULL DEFAULT 0"
+      entrance_counseling_date: "TEXT NOT NULL DEFAULT ''"
+      exit_counseling_required: "INTEGER NOT NULL DEFAULT 0"
+      exit_counseling_complete: "INTEGER NOT NULL DEFAULT 0"
+      exit_counseling_date: "TEXT NOT NULL DEFAULT ''"
+      borrower_id: "TEXT NOT NULL DEFAULT ''"
+      borrower_type: "TEXT NOT NULL DEFAULT 'student' CHECK(borrower_type IN ('student','parent'))"
+      status: "TEXT NOT NULL DEFAULT 'originated' CHECK(status IN ('originated','active','repayment','deferred','defaulted','paid_off','cancelled'))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_finaid_loan_student_year_type
+        columns: [student_id, aid_year_id, loan_type]
+      - name: idx_finaid_loan_company_cod_status
+        columns: [company_id, cod_origination_status]
+      - name: idx_finaid_loan_company_mpn_counseling
+        columns: [company_id, mpn_signed, entrance_counseling_complete]

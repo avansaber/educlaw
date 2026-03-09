@@ -1,0 +1,58 @@
+# ============================================================
+# erpforge.yaml — Project state for EduClaw
+# Auto-updated by: python3 scripts/update_state.py
+# ============================================================
+
+# --- Identity ---
+product: educlaw
+display_name: EduClaw
+description: ""
+status: research
+created: "2026-03-05"
+updated: "2026-03-05"
+
+# --- Git ---
+git:
+  private_repo: null
+  public_repo: avansaber/educlaw
+  branch: main
+  last_commit_sha: null
+  last_commit_msg: null
+
+# --- Foundation ---
+foundation:
+  shared_db: ~/.openclaw/erpclaw/data.sqlite
+  shared_lib: ~/.openclaw/erpclaw/lib/erpclaw_lib/
+  init_db: init_db.py
+  skills: [erpclaw-setup, erpclaw-gl, erpclaw-selling, erpclaw-payments, erpclaw-hr]
+  foundation_actions: 0
+  foundation_tests: 0
+
+# --- Domain Skills (add with scaffold_skill.py) ---
+skills: []
+
+# --- Research State ---
+research:
+  status: pending
+  competitors:
+    open_source: []
+    commercial: []
+  repos_cloned: false
+  schema_analysis: pending
+  compliance_docs: []
+  market_analysis: pending
+  outputs: []
+
+# --- Totals (auto-calculated by update_state.py) ---
+totals:
+  foundation_actions: 0
+  new_actions_planned: 0
+  new_actions_built: 0
+  new_tests: 0
+  total_actions: 0
+  total_tests: 0
+  total_tables: 0
+  total_skills: 0
+
+# --- Session History (auto-appended by update_state.py) ---
+sessions: []

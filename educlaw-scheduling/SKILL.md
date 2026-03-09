@@ -37,17 +37,17 @@ assignment, and instructor constraints.
 
 ```bash
 # 1. Define a schedule pattern
-python3 db_query.py --action add-schedule-pattern \
+python3 db_query.py --action schedule-add-schedule-pattern \
   --name "Traditional 7-Period" --pattern-type traditional --cycle-days 1 --company-id <id>
-python3 db_query.py --action add-day-type \
+python3 db_query.py --action schedule-add-day-type \
   --schedule-pattern-id <id> --code "MON-FRI" --name "Regular Day"
-python3 db_query.py --action add-bell-period \
+python3 db_query.py --action schedule-add-bell-period \
   --schedule-pattern-id <id> --period-number 1 --period-name "Period 1" \
   --start-time "08:00" --end-time "08:50" --duration-minutes 50
-python3 db_query.py --action activate-schedule-pattern --pattern-id <id>
+python3 db_query.py --action schedule-activate-schedule-pattern --pattern-id <id>
 
 # 2. Build and publish master schedule
-python3 db_query.py --action create-master-schedule \
+python3 db_query.py --action schedule-create-master-schedule \
   --academic-term-id <id> --schedule-pattern-id <id> --name "Fall 2026" --company-id <id>
 python3 db_query.py --action place-section-meeting \
   --master-schedule-id <id> --section-id <id> --day-type-id <id> --bell-period-id <id>
@@ -59,7 +59,7 @@ python3 db_query.py --action publish-master-schedule --master-schedule-id <id>
 
 ## Tier 1 — Core Scheduling Workflow
 
-### `add-schedule-pattern`
+### `schedule-add-schedule-pattern`
 Create a named, reusable schedule structure.
 
 | Parameter | Required | Description |
@@ -72,7 +72,7 @@ Create a named, reusable schedule structure.
 | `--notes` | | Internal notes |
 | `--total-periods-per-cycle` | | Pre-computed total periods (informational) |
 
-### `add-day-type`
+### `schedule-add-day-type`
 Add a named day type to a pattern (e.g., "Day A", "Day B").
 
 | Parameter | Required | Description |
@@ -82,7 +82,7 @@ Add a named day type to a pattern (e.g., "Day A", "Day B").
 | `--name` | ✓ | Display name |
 | `--sort-order` | | Display order (default: 0) |
 
-### `add-bell-period`
+### `schedule-add-bell-period`
 Add a named time slot to a pattern.
 
 | Parameter | Required | Description |
@@ -97,11 +97,11 @@ Add a named time slot to a pattern.
 | `--sort-order` | | Display order |
 | `--applies-to-day-types` | | JSON array of day_type IDs; empty = all |
 
-### `activate-schedule-pattern`
+### `schedule-activate-schedule-pattern`
 Activate a pattern after defining its day types and bell periods.
 **Required:** `--pattern-id`
 
-### `create-master-schedule`
+### `schedule-create-master-schedule`
 Create a master schedule container for an academic term.
 
 | Parameter | Required | Description |
@@ -142,66 +142,66 @@ Publish the master schedule (blocks if open CRITICAL conflicts exist).
 
 ## Tier 2 — Schedule Patterns & Master Schedule
 
-`update-schedule-pattern` **Req:** `--pattern-id`. Opt: `--name`, `--description`, `--notes`
-`get-schedule-pattern` **Req:** `--pattern-id`
-`list-schedule-patterns` Opt: `--company-id`, `--pattern-type`, `--is-active`, `--search`, `--limit`
+`schedule-update-schedule-pattern` **Req:** `--pattern-id`. Opt: `--name`, `--description`, `--notes`
+`schedule-get-schedule-pattern` **Req:** `--pattern-id`
+`schedule-list-schedule-patterns` Opt: `--company-id`, `--pattern-type`, `--is-active`, `--search`, `--limit`
 `map-day-type-to-dates` **Req:** `--pattern-id`, `--date-range-start`, `--date-range-end`
-`get-pattern-calendar` **Req:** `--pattern-id`
+`schedule-get-pattern-calendar` **Req:** `--pattern-id`
 `calculate-contact-hours` **Req:** `--pattern-id`. Opt: `--section-id`, `--master-schedule-id`
-`update-master-schedule` **Req:** `--master-schedule-id`. Opt: `--name`, `--build-notes`, `--schedule-status`
-`get-master-schedule` Opt: `--master-schedule-id`, `--naming-series`
-`list-master-schedules` Opt: `--company-id`, `--schedule-status`, `--academic-term-id`
-`add-section-to-schedule` **Req:** `--master-schedule-id`, `--section-id`
+`schedule-update-master-schedule` **Req:** `--master-schedule-id`. Opt: `--name`, `--build-notes`, `--schedule-status`
+`schedule-get-master-schedule` Opt: `--master-schedule-id`, `--naming-series`
+`schedule-list-master-schedules` Opt: `--company-id`, `--schedule-status`, `--academic-term-id`
+`schedule-add-section-to-schedule` **Req:** `--master-schedule-id`, `--section-id`
 `remove-section-meeting` **Req:** `--section-meeting-id`
-`list-section-meetings` **Req:** `--master-schedule-id`. Opt: `--section-id`, `--day-type-id`, `--instructor-id`, `--room-id`
-`get-schedule-matrix` **Req:** `--master-schedule-id`
+`schedule-list-section-meetings` **Req:** `--master-schedule-id`. Opt: `--section-id`, `--day-type-id`, `--instructor-id`, `--room-id`
+`schedule-get-schedule-matrix` **Req:** `--master-schedule-id`
 `lock-master-schedule` **Req:** `--master-schedule-id`. Opt: `--locked-by`
 `clone-master-schedule` **Req:** `--master-schedule-id`, `--target-academic-term-id`. Opt: `--name`, `--company-id`
 
 ## Tier 2 — Course Requests
 
 `open-course-requests` **Req:** `--academic-term-id`
-`submit-course-request` **Req:** `--student-id`, `--academic-term-id`, `--course-id`. Opt: `--request-priority`, `--is-alternate`, `--alternate-for-course-id`, `--has-iep-flag`, `--prerequisite-override`, `--prerequisite-override-by`, `--prerequisite-override-note`, `--submitted-by`, `--company-id`
-`approve-course-requests` **Req:** `--academic-term-id`, `--approved-by`. Opt: `--course-id`
-`get-demand-report` **Req:** `--academic-term-id`
-`get-singleton-analysis` **Req:** `--academic-term-id`. Opt: `--min-requests`
+`schedule-submit-course-request` **Req:** `--student-id`, `--academic-term-id`, `--course-id`. Opt: `--request-priority`, `--is-alternate`, `--alternate-for-course-id`, `--has-iep-flag`, `--prerequisite-override`, `--prerequisite-override-by`, `--prerequisite-override-note`, `--submitted-by`, `--company-id`
+`schedule-approve-course-requests` **Req:** `--academic-term-id`, `--approved-by`. Opt: `--course-id`
+`schedule-get-demand-report` **Req:** `--academic-term-id`
+`schedule-get-singleton-analysis` **Req:** `--academic-term-id`. Opt: `--min-requests`
 `analyze-course-demand` **Req:** `--academic-term-id`
-`get-fulfillment-report` Opt: `--master-schedule-id`, `--academic-term-id`
-`get-load-balance-report` **Req:** `--master-schedule-id`
-`update-course-request` **Req:** `--course-request-id`. Opt: `--request-priority`, `--is-alternate`, `--has-iep-flag`
-`get-course-request` **Req:** `--course-request-id`
-`list-course-requests` Opt: `--student-id`, `--academic-term-id`, `--course-id`, `--request-status`
+`schedule-get-fulfillment-report` Opt: `--master-schedule-id`, `--academic-term-id`
+`schedule-get-load-balance-report` **Req:** `--master-schedule-id`
+`schedule-update-course-request` **Req:** `--course-request-id`. Opt: `--request-priority`, `--is-alternate`, `--has-iep-flag`
+`schedule-get-course-request` **Req:** `--course-request-id`
+`schedule-list-course-requests` Opt: `--student-id`, `--academic-term-id`, `--course-id`, `--request-status`
 `close-course-requests` **Req:** `--academic-term-id`
 
 ## Tier 2 — Conflict Resolution
 
-`list-conflicts` **Req:** `--master-schedule-id`. Opt: `--conflict-type`, `--severity`, `--conflict-status`
-`get-conflict` **Req:** `--conflict-id`
+`schedule-list-conflicts` **Req:** `--master-schedule-id`. Opt: `--conflict-type`, `--severity`, `--conflict-status`
+`schedule-get-conflict` **Req:** `--conflict-id`
 `resolve-conflict` **Req:** `--conflict-id`, `--resolution-notes`. Opt: `--resolved-by`
-`accept-conflict` **Req:** `--conflict-id` (not CRITICAL). Opt: `--resolution-notes`, `--resolved-by`
-`get-conflict-summary` **Req:** `--master-schedule-id`
-`get-singleton-conflict-map` **Req:** `--master-schedule-id`
-`get-student-conflict-report` **Req:** `--master-schedule-id`
+`schedule-accept-conflict` **Req:** `--conflict-id` (not CRITICAL). Opt: `--resolution-notes`, `--resolved-by`
+`schedule-get-conflict-summary` **Req:** `--master-schedule-id`
+`schedule-get-singleton-conflict-map` **Req:** `--master-schedule-id`
+`schedule-get-student-conflict-report` **Req:** `--master-schedule-id`
 
 ## Tier 2 — Room Assignment
 
-`assign-room` **Req:** `--section-meeting-id`, `--room-id`. Opt: `--booking-type`, `--accessibility-required`, `--booked-by`
+`schedule-assign-room` **Req:** `--section-meeting-id`, `--room-id`. Opt: `--booking-type`, `--accessibility-required`, `--booked-by`
 `suggest-room` **Req:** `--section-meeting-id`. Opt: `--room-type`, `--accessibility-required`
 `bulk-assign-rooms` **Req:** `--master-schedule-id`. Opt: `--room-type`
 `unassign-room` Opt: `--section-meeting-id`, `--booking-id`
 `block-room` **Req:** `--room-id`, `--day-type-id`, `--bell-period-id`, `--booking-title`. Opt: `--booked-by`, `--booking-type`
 `swap-rooms` **Req:** `--section-meeting-id` (A), `--section-meeting-id-b` (B)
-`get-room-availability` **Req:** `--room-id`, `--master-schedule-id`
-`get-room-utilization-report` **Req:** `--master-schedule-id`
+`schedule-get-room-availability` **Req:** `--room-id`, `--master-schedule-id`
+`schedule-get-room-utilization-report` **Req:** `--master-schedule-id`
 `search-rooms-by-features` Opt: `--company-id`, `--room-type`, `--capacity`, `--building`, `--features` (JSON)
 `emergency-reassign-room` **Req:** `--room-id`, `--target-room-id`, `--master-schedule-id`
 
 ## Tier 3 — Instructor Constraints
 
-`add-instructor-constraint` **Req:** `--instructor-id`, `--academic-term-id`, `--constraint-type` (`unavailable`, `preferred`, `max_periods_per_day`, `max_consecutive_periods`, `requires_prep_period`, `preferred_building`). Opt: `--day-type-id`, `--bell-period-id`, `--constraint-value`, `--constraint-notes`, `--priority` (`hard`, `soft`, `preference`)
-`update-instructor-constraint` **Req:** `--constraint-id`. Opt: `--constraint-value`, `--constraint-notes`, `--priority`, `--is-active`
-`list-instructor-constraints` Opt: `--instructor-id`, `--academic-term-id`, `--constraint-type`, `--is-active`
-`delete-instructor-constraint` **Req:** `--constraint-id`
+`schedule-add-instructor-constraint` **Req:** `--instructor-id`, `--academic-term-id`, `--constraint-type` (`unavailable`, `preferred`, `max_periods_per_day`, `max_consecutive_periods`, `requires_prep_period`, `preferred_building`). Opt: `--day-type-id`, `--bell-period-id`, `--constraint-value`, `--constraint-notes`, `--priority` (`hard`, `soft`, `preference`)
+`schedule-update-instructor-constraint` **Req:** `--constraint-id`. Opt: `--constraint-value`, `--constraint-notes`, `--priority`, `--is-active`
+`schedule-list-instructor-constraints` Opt: `--instructor-id`, `--academic-term-id`, `--constraint-type`, `--is-active`
+`schedule-delete-instructor-constraint` **Req:** `--constraint-id`
 
 ---
 

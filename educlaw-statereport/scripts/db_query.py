@@ -41,7 +41,7 @@ from submission_tracking import ACTIONS as SUBMISSION_TRACKING_ACTIONS
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
 # ---------------------------------------------------------------------------
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 REQUIRED_TABLES = ["company", "educlaw_student", "sr_collection_window"]
 
 ACTIONS = {}
@@ -62,7 +62,7 @@ ACTIONS["status"] = lambda conn, args: ok({
 
 
 def main():
-    parser = argparse.ArgumentParser(description="educlaw-statereport")
+    parser = argparse.ArgumentParser(description="statereport-educlaw-statereport")
     parser.add_argument("--action", required=True, choices=sorted(ACTIONS.keys()))
     parser.add_argument("--db-path", default=None)
 

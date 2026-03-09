@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-finaid"
+SKILL = "finaid-educlaw-finaid"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 _today = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -80,7 +80,7 @@ def add_work_study_job(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Failed to create work study job: {e}")
 
-    audit(conn, SKILL, "add-work-study-job", "finaid_work_study_job", job_id,
+    audit(conn, SKILL, "finaid-add-work-study-job", "finaid_work_study_job", job_id,
           new_values={"job_title": job_title, "job_type": job_type, "status": "open"})
     conn.commit()
     ok({
@@ -296,7 +296,7 @@ def assign_student_to_job(conn, args):
         (new_filled, new_status, now, job_id)
     )
 
-    audit(conn, SKILL, "assign-student-to-job", "finaid_work_study_assignment", assignment_id,
+    audit(conn, SKILL, "finaid-assign-student-to-job", "finaid_work_study_assignment", assignment_id,
           new_values={"student_id": student_id, "job_id": job_id, "status": "active"})
     conn.commit()
     ok({
@@ -437,7 +437,7 @@ def terminate_work_study_assignment(conn, args):
             (new_filled, new_job_status, now, job["id"])
         )
 
-    audit(conn, SKILL, "terminate-work-study-assignment", "finaid_work_study_assignment",
+    audit(conn, SKILL, "finaid-terminate-work-study-assignment", "finaid_work_study_assignment",
           assignment_id, new_values={"status": "terminated"})
     conn.commit()
     ok({"id": assignment_id, "status": "terminated"})
@@ -531,7 +531,7 @@ def submit_work_study_timesheet(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Failed to submit timesheet: {e}")
 
-    audit(conn, SKILL, "submit-work-study-timesheet", "finaid_work_study_timesheet",
+    audit(conn, SKILL, "finaid-submit-work-study-timesheet", "finaid_work_study_timesheet",
           timesheet_id,
           new_values={"assignment_id": assignment_id, "hours_worked": str(hours),
                       "earnings": str(earnings)})
@@ -662,7 +662,7 @@ def approve_work_study_timesheet(conn, args):
         (float(earnings), now, ts["assignment_id"])
     )
 
-    audit(conn, SKILL, "approve-work-study-timesheet", "finaid_work_study_timesheet",
+    audit(conn, SKILL, "finaid-approve-work-study-timesheet", "finaid_work_study_timesheet",
           timesheet_id,
           new_values={"supervisor_approval_status": "approved",
                       "supervisor_approved_by": supervisor_approved_by})
@@ -707,7 +707,7 @@ def reject_work_study_timesheet(conn, args):
         (supervisor_approved_by, rejection_reason, now, timesheet_id)
     )
 
-    audit(conn, SKILL, "reject-work-study-timesheet", "finaid_work_study_timesheet",
+    audit(conn, SKILL, "finaid-reject-work-study-timesheet", "finaid_work_study_timesheet",
           timesheet_id,
           new_values={"supervisor_approval_status": "rejected",
                       "supervisor_approved_by": supervisor_approved_by})
@@ -927,22 +927,22 @@ def get_work_study_earnings_summary(conn, args):
 # ---------------------------------------------------------------------------
 
 ACTIONS = {
-    "add-work-study-job": add_work_study_job,
-    "update-work-study-job": update_work_study_job,
-    "get-work-study-job": get_work_study_job,
-    "list-work-study-jobs": list_work_study_jobs,
-    "terminate-work-study-job": close_work_study_job,
-    "assign-student-to-job": assign_student_to_job,
-    "update-work-study-assignment": update_work_study_assignment,
-    "get-work-study-assignment": get_work_study_assignment,
-    "list-work-study-assignments": list_work_study_assignments,
-    "terminate-work-study-assignment": terminate_work_study_assignment,
-    "submit-work-study-timesheet": submit_work_study_timesheet,
-    "update-work-study-timesheet": update_work_study_timesheet,
-    "approve-work-study-timesheet": approve_work_study_timesheet,
-    "deny-work-study-timesheet": reject_work_study_timesheet,
-    "get-work-study-timesheet": get_work_study_timesheet,
-    "list-work-study-timesheets": list_work_study_timesheets,
-    "generate-payroll-export": export_work_study_payroll,
-    "get-work-study-earnings-summary": get_work_study_earnings_summary,
+    "finaid-add-work-study-job": add_work_study_job,
+    "finaid-update-work-study-job": update_work_study_job,
+    "finaid-get-work-study-job": get_work_study_job,
+    "finaid-list-work-study-jobs": list_work_study_jobs,
+    "finaid-terminate-work-study-job": close_work_study_job,
+    "finaid-assign-student-to-job": assign_student_to_job,
+    "finaid-update-work-study-assignment": update_work_study_assignment,
+    "finaid-get-work-study-assignment": get_work_study_assignment,
+    "finaid-list-work-study-assignments": list_work_study_assignments,
+    "finaid-terminate-work-study-assignment": terminate_work_study_assignment,
+    "finaid-submit-work-study-timesheet": submit_work_study_timesheet,
+    "finaid-update-work-study-timesheet": update_work_study_timesheet,
+    "finaid-approve-work-study-timesheet": approve_work_study_timesheet,
+    "finaid-deny-work-study-timesheet": reject_work_study_timesheet,
+    "finaid-get-work-study-timesheet": get_work_study_timesheet,
+    "finaid-list-work-study-timesheets": list_work_study_timesheets,
+    "finaid-generate-payroll-export": export_work_study_payroll,
+    "finaid-get-work-study-earnings-summary": get_work_study_earnings_summary,
 }

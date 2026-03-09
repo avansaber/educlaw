@@ -1,0 +1,295 @@
+# EduClaw Advanced Scheduling — Schema Definition
+# Sub-vertical of educlaw | 9 new tables | product: educlaw-scheduling
+# Domains: schedule_patterns, master_schedule, conflict_resolution, room_assignment
+#
+# Table naming: uses educlaw_ prefix (same namespace as parent)
+# Parent: educlaw — parent tables included via --parent-init-db flag
+# Dependency order: schedule_pattern → day_type + bell_period → master_schedule
+#                   → section_meeting → room_booking + schedule_conflict
+#                   instructor_constraint depends on day_type + bell_period
+#                   course_request has no new-table deps (all parent FKs)
+
+product: educlaw-scheduling
+tables:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # DOMAIN: schedule_patterns
+  # Named reusable scheduling structures (Traditional, Block, Rotating, etc.)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  educlaw_schedule_pattern:
+    owner: schedule_patterns
+    columns:
+      id: TEXT PRIMARY KEY
+      name: "TEXT NOT NULL DEFAULT ''"
+      description: "TEXT NOT NULL DEFAULT ''"
+      pattern_type: "TEXT NOT NULL DEFAULT '' CHECK(pattern_type IN ('traditional','block_4x4','block_ab','trimester','rotating_drop','semester','custom'))"
+      cycle_days: "INTEGER NOT NULL DEFAULT 1 CHECK(cycle_days >= 1)"
+      total_periods_per_cycle: "INTEGER NOT NULL DEFAULT 0"
+      notes: "TEXT NOT NULL DEFAULT ''"
+      is_active: "INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_schedule_pattern_company_type
+        columns: [company_id, pattern_type]
+      - name: idx_schedule_pattern_company_active
+        columns: [company_id, is_active]
+
+  educlaw_day_type:
+    owner: schedule_patterns
+    columns:
+      id: TEXT PRIMARY KEY
+      schedule_pattern_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_schedule_pattern(id) ON DELETE RESTRICT"
+      code: "TEXT NOT NULL DEFAULT ''"
+      name: "TEXT NOT NULL DEFAULT ''"
+      sort_order: "INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0)"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_day_type_pattern_code: UNIQUE (schedule_pattern_id, code)
+    indexes:
+      - name: idx_day_type_pattern_sort
+        columns: [schedule_pattern_id, sort_order]
+
+  educlaw_bell_period:
+    owner: schedule_patterns
+    columns:
+      id: TEXT PRIMARY KEY
+      schedule_pattern_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_schedule_pattern(id) ON DELETE RESTRICT"
+      period_number: "TEXT NOT NULL DEFAULT ''"
+      period_name: "TEXT NOT NULL DEFAULT ''"
+      start_time: "TEXT NOT NULL DEFAULT ''"
+      end_time: "TEXT NOT NULL DEFAULT ''"
+      duration_minutes: "INTEGER NOT NULL DEFAULT 0 CHECK(duration_minutes > 0)"
+      period_type: "TEXT NOT NULL DEFAULT 'class' CHECK(period_type IN ('class','break','lunch','homeroom','advisory','flex','passing'))"
+      applies_to_day_types: "TEXT NOT NULL DEFAULT '[]'"
+      sort_order: "INTEGER NOT NULL DEFAULT 0"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_bell_period_pattern_number: UNIQUE (schedule_pattern_id, period_number)
+    indexes:
+      - name: idx_bell_period_pattern_sort
+        columns: [schedule_pattern_id, sort_order]
+      - name: idx_bell_period_pattern_type
+        columns: [schedule_pattern_id, period_type]
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # DOMAIN: master_schedule
+  # Term master schedule lifecycle; course requests; section placement
+  # ──────────────────────────────────────────────────────────────────────────
+
+  educlaw_master_schedule:
+    owner: master_schedule
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL DEFAULT '' UNIQUE"
+      name: "TEXT NOT NULL DEFAULT ''"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT UNIQUE"
+      schedule_pattern_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_schedule_pattern(id) ON DELETE RESTRICT"
+      build_notes: "TEXT NOT NULL DEFAULT ''"
+      total_sections: "INTEGER NOT NULL DEFAULT 0"
+      sections_placed: "INTEGER NOT NULL DEFAULT 0"
+      sections_with_room: "INTEGER NOT NULL DEFAULT 0"
+      open_conflicts: "INTEGER NOT NULL DEFAULT 0"
+      fulfillment_rate: "TEXT NOT NULL DEFAULT ''"
+      schedule_status: "TEXT NOT NULL DEFAULT 'draft' CHECK(schedule_status IN ('draft','building','review','published','locked','archived'))"
+      published_at: "TEXT NOT NULL DEFAULT ''"
+      published_by: "TEXT NOT NULL DEFAULT ''"
+      locked_at: "TEXT NOT NULL DEFAULT ''"
+      locked_by: "TEXT NOT NULL DEFAULT ''"
+      cloned_from_id: "TEXT REFERENCES educlaw_master_schedule(id) ON DELETE RESTRICT"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_master_schedule_term
+        columns: [academic_term_id]
+      - name: idx_master_schedule_company_status
+        columns: [company_id, schedule_status]
+      - name: idx_master_schedule_series
+        columns: [naming_series]
+
+  educlaw_course_request:
+    owner: master_schedule
+    columns:
+      id: TEXT PRIMARY KEY
+      naming_series: "TEXT NOT NULL DEFAULT '' UNIQUE"
+      student_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      course_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_course(id) ON DELETE RESTRICT"
+      request_priority: "INTEGER NOT NULL DEFAULT 1"
+      is_alternate: "INTEGER NOT NULL DEFAULT 0 CHECK(is_alternate IN (0, 1))"
+      alternate_for_course_id: "TEXT REFERENCES educlaw_course(id) ON DELETE RESTRICT"
+      request_status: "TEXT NOT NULL DEFAULT 'submitted' CHECK(request_status IN ('draft','submitted','approved','scheduled','alternate_used','unfulfilled','withdrawn'))"
+      fulfilled_section_id: "TEXT REFERENCES educlaw_section(id) ON DELETE RESTRICT"
+      prerequisite_override: "INTEGER NOT NULL DEFAULT 0 CHECK(prerequisite_override IN (0, 1))"
+      prerequisite_override_by: "TEXT NOT NULL DEFAULT ''"
+      prerequisite_override_note: "TEXT NOT NULL DEFAULT ''"
+      has_iep_flag: "INTEGER NOT NULL DEFAULT 0 CHECK(has_iep_flag IN (0, 1))"
+      submitted_by: "TEXT NOT NULL DEFAULT ''"
+      approved_by: "TEXT NOT NULL DEFAULT ''"
+      approved_at: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_course_request_student_term_course: UNIQUE (student_id, academic_term_id, course_id)
+    indexes:
+      - name: idx_course_request_student_term_course
+        columns: [student_id, academic_term_id, course_id]
+      - name: idx_course_request_term_course_status
+        columns: [academic_term_id, course_id, request_status]
+      - name: idx_course_request_student_term
+        columns: [student_id, academic_term_id, request_status]
+      - name: idx_course_request_term_status
+        columns: [academic_term_id, request_status]
+      - name: idx_course_request_series
+        columns: [naming_series]
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # DOMAIN: master_schedule (section placement — depends on master_schedule,
+  #          day_type, bell_period)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  educlaw_section_meeting:
+    owner: master_schedule
+    columns:
+      id: TEXT PRIMARY KEY
+      section_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_section(id) ON DELETE RESTRICT"
+      master_schedule_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_master_schedule(id) ON DELETE RESTRICT"
+      day_type_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_day_type(id) ON DELETE RESTRICT"
+      bell_period_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_bell_period(id) ON DELETE RESTRICT"
+      room_id: "TEXT REFERENCES educlaw_room(id) ON DELETE RESTRICT"
+      instructor_id: "TEXT REFERENCES educlaw_instructor(id) ON DELETE RESTRICT"
+      meeting_type: "TEXT NOT NULL DEFAULT 'regular' CHECK(meeting_type IN ('regular','lab','exam','field_trip','make_up'))"
+      meeting_mode: "TEXT NOT NULL DEFAULT 'in_person' CHECK(meeting_mode IN ('in_person','hybrid','online'))"
+      is_active: "INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))"
+      notes: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+      CONSTRAINT uq_section_meeting_slot: UNIQUE (section_id, day_type_id, bell_period_id)
+    indexes:
+      - name: idx_section_meeting_section_slot
+        columns: [section_id, day_type_id, bell_period_id]
+      - name: idx_section_meeting_master_slot
+        columns: [master_schedule_id, day_type_id, bell_period_id]
+      - name: idx_section_meeting_instructor_slot
+        columns: [instructor_id, day_type_id, bell_period_id]
+      - name: idx_section_meeting_room_slot
+        columns: [room_id, day_type_id, bell_period_id]
+      - name: idx_section_meeting_master_section
+        columns: [master_schedule_id, section_id]
+      - name: idx_section_meeting_active
+        columns: [master_schedule_id, is_active]
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # DOMAIN: conflict_resolution
+  # Detect, categorize, track, and resolve 11 scheduling conflict types
+  # ──────────────────────────────────────────────────────────────────────────
+
+  educlaw_schedule_conflict:
+    owner: conflict_resolution
+    columns:
+      id: TEXT PRIMARY KEY
+      master_schedule_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_master_schedule(id) ON DELETE RESTRICT"
+      conflict_type: "TEXT NOT NULL DEFAULT '' CHECK(conflict_type IN ('instructor_double_booking','room_double_booking','student_conflict','instructor_overload','instructor_contract_violation','capacity_exceeded','room_type_mismatch','credential_mismatch','singleton_overlap','contact_hours_deficit','room_shortage'))"
+      severity: "TEXT NOT NULL DEFAULT 'high' CHECK(severity IN ('critical','high','medium','low'))"
+      section_meeting_id_a: "TEXT REFERENCES educlaw_section_meeting(id) ON DELETE RESTRICT"
+      # FK intentionally omitted here: generator can't handle two REFERENCES to the
+      # same table in one CREATE TABLE (duplicate-ref topological sort bug).
+      # The REFERENCES educlaw_section_meeting(id) ON DELETE RESTRICT FK is restored
+      # in init_db.py via post-processing — same pattern as educlaw prerequisite_course_id.
+      section_meeting_id_b: "TEXT"
+      instructor_id: "TEXT REFERENCES educlaw_instructor(id) ON DELETE RESTRICT"
+      room_id: "TEXT REFERENCES educlaw_room(id) ON DELETE RESTRICT"
+      student_id: "TEXT REFERENCES educlaw_student(id) ON DELETE RESTRICT"
+      description: "TEXT NOT NULL DEFAULT ''"
+      conflict_status: "TEXT NOT NULL DEFAULT 'open' CHECK(conflict_status IN ('open','resolving','resolved','accepted','superseded'))"
+      resolution_notes: "TEXT NOT NULL DEFAULT ''"
+      resolved_by: "TEXT NOT NULL DEFAULT ''"
+      resolved_at: "TEXT NOT NULL DEFAULT ''"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_schedule_conflict_master_status_sev
+        columns: [master_schedule_id, conflict_status, severity]
+      - name: idx_schedule_conflict_master_type
+        columns: [master_schedule_id, conflict_type]
+      - name: idx_schedule_conflict_instructor
+        columns: [instructor_id, conflict_status]
+      - name: idx_schedule_conflict_room
+        columns: [room_id, conflict_status]
+      - name: idx_schedule_conflict_meeting_a
+        columns: [section_meeting_id_a]
+      - name: idx_schedule_conflict_company_status
+        columns: [company_id, conflict_status]
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # DOMAIN: room_assignment
+  # Room bookings, instructor constraints, smart assignment
+  # ──────────────────────────────────────────────────────────────────────────
+
+  educlaw_room_booking:
+    owner: room_assignment
+    columns:
+      id: TEXT PRIMARY KEY
+      room_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_room(id) ON DELETE RESTRICT"
+      master_schedule_id: "TEXT REFERENCES educlaw_master_schedule(id) ON DELETE RESTRICT"
+      section_meeting_id: "TEXT REFERENCES educlaw_section_meeting(id) ON DELETE RESTRICT"
+      day_type_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_day_type(id) ON DELETE RESTRICT"
+      bell_period_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_bell_period(id) ON DELETE RESTRICT"
+      booking_type: "TEXT NOT NULL DEFAULT 'class' CHECK(booking_type IN ('class','exam','event','maintenance','admin','other'))"
+      booking_title: "TEXT NOT NULL DEFAULT ''"
+      booked_by: "TEXT NOT NULL DEFAULT ''"
+      booking_status: "TEXT NOT NULL DEFAULT 'confirmed' CHECK(booking_status IN ('confirmed','tentative','cancelled'))"
+      cancellation_reason: "TEXT NOT NULL DEFAULT ''"
+      accessibility_required: "INTEGER NOT NULL DEFAULT 0 CHECK(accessibility_required IN (0, 1))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_room_booking_room_slot_status
+        columns: [room_id, day_type_id, bell_period_id, booking_status]
+      - name: idx_room_booking_meeting
+        columns: [section_meeting_id]
+      - name: idx_room_booking_master_room
+        columns: [master_schedule_id, room_id]
+      - name: idx_room_booking_company_type
+        columns: [company_id, booking_type]
+      - name: idx_room_booking_status
+        columns: [company_id, booking_status]
+
+  educlaw_instructor_constraint:
+    owner: room_assignment
+    columns:
+      id: TEXT PRIMARY KEY
+      instructor_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_instructor(id) ON DELETE RESTRICT"
+      academic_term_id: "TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT"
+      constraint_type: "TEXT NOT NULL DEFAULT '' CHECK(constraint_type IN ('unavailable','preferred','max_periods_per_day','max_consecutive_periods','requires_prep_period','preferred_building'))"
+      day_type_id: "TEXT REFERENCES educlaw_day_type(id) ON DELETE RESTRICT"
+      bell_period_id: "TEXT REFERENCES educlaw_bell_period(id) ON DELETE RESTRICT"
+      constraint_value: "INTEGER NOT NULL DEFAULT 0"
+      constraint_notes: "TEXT NOT NULL DEFAULT ''"
+      priority: "TEXT NOT NULL DEFAULT 'preference' CHECK(priority IN ('hard','soft','preference'))"
+      is_active: "INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))"
+      company_id: "TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT"
+      created_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      updated_at: "TEXT NOT NULL DEFAULT (datetime('now'))"
+      created_by: "TEXT NOT NULL DEFAULT ''"
+    indexes:
+      - name: idx_instructor_constraint_inst_term
+        columns: [instructor_id, academic_term_id, is_active]
+      - name: idx_instructor_constraint_inst_type
+        columns: [instructor_id, academic_term_id, constraint_type]
+      - name: idx_instructor_constraint_term_type
+        columns: [academic_term_id, constraint_type]

@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-scheduling"
+SKILL = "schedule-educlaw-scheduling"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_BOOKING_TYPES = ("class", "exam", "event", "maintenance", "admin", "other")
@@ -174,7 +174,7 @@ def assign_room(conn, args):
 
     _refresh_sections_with_room(conn, master_id)
 
-    audit(conn, SKILL, "assign-room", "educlaw_section_meeting", meeting_id,
+    audit(conn, SKILL, "schedule-assign-room", "educlaw_section_meeting", meeting_id,
           new_values={"room_id": room_id, "booking_id": booking_id})
     conn.commit()
     ok({"meeting_id": meeting_id, "room_id": room_id, "booking_id": booking_id,
@@ -367,7 +367,7 @@ def bulk_assign_rooms(conn, args):
 
     _refresh_sections_with_room(conn, master_id)
 
-    audit(conn, SKILL, "assign-rooms", "educlaw_master_schedule", master_id,
+    audit(conn, SKILL, "schedule-assign-rooms", "educlaw_master_schedule", master_id,
           new_values={"assigned": assigned_count, "failed": failed_count})
     conn.commit()
     ok({
@@ -414,7 +414,7 @@ def unassign_room(conn, args):
         )
         _refresh_sections_with_room(conn, master_id)
 
-        audit(conn, SKILL, "delete-room-assignment", "educlaw_section_meeting", meeting_id,
+        audit(conn, SKILL, "schedule-delete-room-assignment", "educlaw_section_meeting", meeting_id,
               old_values={"room_id": old_room})
         conn.commit()
         ok({"meeting_id": meeting_id, "room_unassigned": old_room,
@@ -444,7 +444,7 @@ def unassign_room(conn, args):
             if booking.get("master_schedule_id"):
                 _refresh_sections_with_room(conn, booking["master_schedule_id"])
 
-        audit(conn, SKILL, "delete-room-assignment", "educlaw_room_booking", booking_id,
+        audit(conn, SKILL, "schedule-delete-room-assignment", "educlaw_room_booking", booking_id,
               old_values={"booking_status": booking["booking_status"]})
         conn.commit()
         ok({"booking_id": booking_id, "room_id": booking["room_id"],
@@ -502,7 +502,7 @@ def block_room(conn, args):
          company_id, now, now, getattr(args, "user_id", None) or "")
     )
 
-    audit(conn, SKILL, "add-room-block", "educlaw_room_booking", booking_id,
+    audit(conn, SKILL, "schedule-add-room-block", "educlaw_room_booking", booking_id,
           new_values={"room_id": room_id, "booking_type": booking_type, "title": booking_title})
     conn.commit()
     ok({"booking_id": booking_id, "room_id": room_id, "booking_type": booking_type,
@@ -609,7 +609,7 @@ def swap_rooms(conn, args):
 
     _refresh_sections_with_room(conn, master_id)
 
-    audit(conn, SKILL, "update-room-swap", "educlaw_section_meeting", meeting_id_a,
+    audit(conn, SKILL, "schedule-update-room-swap", "educlaw_section_meeting", meeting_id_a,
           new_values={"swapped_with": meeting_id_b, "room_a": room_a, "room_b": room_b})
     conn.commit()
     ok({"meeting_a": meeting_id_a, "meeting_b": meeting_id_b,
@@ -896,7 +896,7 @@ def emergency_reassign_room(conn, args):
             )
         moved += 1
 
-    audit(conn, SKILL, "assign-room-emergency", "educlaw_room_booking", master_id,
+    audit(conn, SKILL, "schedule-assign-room-emergency", "educlaw_room_booking", master_id,
           new_values={"source_room": source_room_id, "target_room": target_room_id,
                       "bookings_moved": moved})
     conn.commit()
@@ -979,7 +979,7 @@ def add_instructor_constraint(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Constraint creation failed: {e}")
 
-    audit(conn, SKILL, "add-instructor-constraint", "educlaw_instructor_constraint", constraint_id,
+    audit(conn, SKILL, "schedule-add-instructor-constraint", "educlaw_instructor_constraint", constraint_id,
           new_values={"instructor_id": instructor_id, "constraint_type": constraint_type,
                       "academic_term_id": academic_term_id})
     conn.commit()
@@ -1024,7 +1024,7 @@ def update_instructor_constraint(conn, args):
     conn.execute(
         f"UPDATE educlaw_instructor_constraint SET {', '.join(updates)} WHERE id = ?", params
     )
-    audit(conn, SKILL, "update-instructor-constraint", "educlaw_instructor_constraint",
+    audit(conn, SKILL, "schedule-update-instructor-constraint", "educlaw_instructor_constraint",
           constraint_id, new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": constraint_id, "updated_fields": changed})
@@ -1070,7 +1070,7 @@ def delete_instructor_constraint(conn, args):
     constraint = dict(row)
     conn.execute("DELETE FROM educlaw_instructor_constraint WHERE id = ?", (constraint_id,))
 
-    audit(conn, SKILL, "delete-instructor-constraint", "educlaw_instructor_constraint",
+    audit(conn, SKILL, "schedule-delete-instructor-constraint", "educlaw_instructor_constraint",
           constraint_id, old_values={"constraint_type": constraint["constraint_type"],
                                      "instructor_id": constraint["instructor_id"]})
     conn.commit()
@@ -1085,19 +1085,19 @@ def delete_instructor_constraint(conn, args):
 
 ACTIONS = {
     # Room booking
-    "assign-room":                  assign_room,
-    "propose-room":                 suggest_room,
-    "assign-rooms":                 bulk_assign_rooms,
-    "delete-room-assignment":       unassign_room,
-    "add-room-block":               block_room,
-    "update-room-swap":             swap_rooms,
-    "get-room-availability":        get_room_availability,
-    "get-room-utilization-report":  get_room_utilization_report,
-    "list-rooms-by-features":       search_rooms_by_features,
-    "assign-room-emergency":        emergency_reassign_room,
+    "schedule-assign-room":                  assign_room,
+    "schedule-propose-room":                 suggest_room,
+    "schedule-assign-rooms":                 bulk_assign_rooms,
+    "schedule-delete-room-assignment":       unassign_room,
+    "schedule-add-room-block":               block_room,
+    "schedule-update-room-swap":             swap_rooms,
+    "schedule-get-room-availability":        get_room_availability,
+    "schedule-get-room-utilization-report":  get_room_utilization_report,
+    "schedule-list-rooms-by-features":       search_rooms_by_features,
+    "schedule-assign-room-emergency":        emergency_reassign_room,
     # Instructor constraints
-    "add-instructor-constraint":    add_instructor_constraint,
-    "update-instructor-constraint": update_instructor_constraint,
-    "list-instructor-constraints":  list_instructor_constraints,
-    "delete-instructor-constraint": delete_instructor_constraint,
+    "schedule-add-instructor-constraint":    add_instructor_constraint,
+    "schedule-update-instructor-constraint": update_instructor_constraint,
+    "schedule-list-instructor-constraints":  list_instructor_constraints,
+    "schedule-delete-instructor-constraint": delete_instructor_constraint,
 }

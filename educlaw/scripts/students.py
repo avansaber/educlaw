@@ -156,7 +156,7 @@ def add_student_applicant(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Applicant creation failed: {e}")
 
-    audit(conn, SKILL, "add-student-applicant", "educlaw_student_applicant", applicant_id,
+    audit(conn, SKILL, "edu-add-student-applicant", "educlaw_student_applicant", applicant_id,
           new_values={"naming_series": naming, "first_name": first_name, "last_name": last_name})
     conn.commit()
     ok({"id": applicant_id, "naming_series": naming, "first_name": first_name,
@@ -222,7 +222,7 @@ def update_student_applicant(conn, args):
     conn.execute(
         f"UPDATE educlaw_student_applicant SET {', '.join(updates)} WHERE id = ?", params
     )
-    audit(conn, SKILL, "update-student-applicant", "educlaw_student_applicant", applicant_id,
+    audit(conn, SKILL, "edu-update-student-applicant", "educlaw_student_applicant", applicant_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": applicant_id, "updated_fields": changed})
@@ -327,7 +327,7 @@ def review_applicant(conn, args):
              "educlaw_student_applicant", applicant_id, r["company_id"], now, reviewed_by)
         )
 
-    audit(conn, SKILL, "review-applicant", "educlaw_student_applicant", applicant_id,
+    audit(conn, SKILL, "edu-review-applicant", "educlaw_student_applicant", applicant_id,
           new_values={"old_status": r["status"], "new_status": new_status})
     conn.commit()
     ok({"id": applicant_id, "applicant_status": new_status, "reviewed_by": reviewed_by})
@@ -398,7 +398,7 @@ def convert_applicant_to_student(conn, args):
         "UPDATE educlaw_student_applicant SET status = 'enrolled', updated_at = datetime('now') WHERE id = ?",
         (applicant_id,)
     )
-    audit(conn, SKILL, "convert-applicant-to-student", "educlaw_student", student_id,
+    audit(conn, SKILL, "edu-convert-applicant-to-student", "educlaw_student", student_id,
           new_values={"naming_series": naming, "applicant_id": applicant_id})
     conn.commit()
     ok({"id": student_id, "naming_series": naming, "full_name": full_name,
@@ -477,7 +477,7 @@ def add_student(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Student creation failed: {e}")
 
-    audit(conn, SKILL, "add-student", "educlaw_student", student_id,
+    audit(conn, SKILL, "edu-add-student", "educlaw_student", student_id,
           new_values={"naming_series": naming, "first_name": first_name, "last_name": last_name})
     conn.commit()
     ok({"id": student_id, "naming_series": naming, "full_name": full_name,
@@ -543,7 +543,7 @@ def update_student(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(student_id)
     conn.execute(f"UPDATE educlaw_student SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-student", "educlaw_student", student_id,
+    audit(conn, SKILL, "edu-update-student", "educlaw_student", student_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": student_id, "updated_fields": changed})
@@ -638,7 +638,7 @@ def change_student_status(conn, args):
         "UPDATE educlaw_student SET status = ?, updated_at = datetime('now') WHERE id = ?",
         (new_status, student_id)
     )
-    audit(conn, SKILL, "change-student-status", "educlaw_student", student_id,
+    audit(conn, SKILL, "edu-change-student-status", "educlaw_student", student_id,
           new_values={"old_status": r["status"], "new_status": new_status, "reason": reason})
     conn.commit()
     ok({"id": student_id, "old_status": r["status"], "student_status": new_status, "reason": reason})
@@ -679,7 +679,7 @@ def graduate_student(conn, args):
             (prog_enr["id"],)
         )
 
-    audit(conn, SKILL, "graduate-student", "educlaw_student", student_id,
+    audit(conn, SKILL, "edu-graduate-student", "educlaw_student", student_id,
           new_values={"graduation_date": graduation_date})
     conn.commit()
     ok({"id": student_id, "student_status": "graduated", "graduation_date": graduation_date})
@@ -760,7 +760,7 @@ def add_guardian(conn, args):
         except sqlite3.IntegrityError:
             pass
 
-    audit(conn, SKILL, "add-guardian", "educlaw_guardian", guardian_id,
+    audit(conn, SKILL, "edu-add-guardian", "educlaw_guardian", guardian_id,
           new_values={"first_name": first_name, "last_name": last_name})
     conn.commit()
     ok({"id": guardian_id, "full_name": full_name, "relationship": relationship,
@@ -805,7 +805,7 @@ def update_guardian(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(guardian_id)
     conn.execute(f"UPDATE educlaw_guardian SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-guardian", "educlaw_guardian", guardian_id,
+    audit(conn, SKILL, "edu-update-guardian", "educlaw_guardian", guardian_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": guardian_id, "updated_fields": changed})
@@ -904,7 +904,7 @@ def link_guardian_to_student(conn, args):
          int(getattr(args, "is_emergency_contact", None) or 0),
          now, getattr(args, "user_id", None) or "")
     )
-    audit(conn, SKILL, "link-guardian-to-student", "educlaw_student_guardian", link_id,
+    audit(conn, SKILL, "edu-link-guardian-to-student", "educlaw_student_guardian", link_id,
           new_values={"student_id": student_id, "guardian_id": guardian_id})
     conn.commit()
     ok({"id": link_id, "student_id": student_id, "guardian_id": guardian_id,
@@ -1001,7 +1001,7 @@ def add_consent_record(conn, args):
          getattr(args, "purpose", None) or "",
          company_id, now, now, getattr(args, "user_id", None) or "")
     )
-    audit(conn, SKILL, "add-consent-record", "educlaw_consent_record", consent_id,
+    audit(conn, SKILL, "edu-add-consent-record", "educlaw_consent_record", consent_id,
           new_values={"consent_type": consent_type, "student_id": student_id})
     conn.commit()
     ok({"id": consent_id, "consent_type": consent_type, "student_id": student_id})
@@ -1029,7 +1029,7 @@ def revoke_consent(conn, args):
            WHERE id = ?""",
         (revoked_date, consent_id)
     )
-    audit(conn, SKILL, "revoke-consent", "educlaw_consent_record", consent_id,
+    audit(conn, SKILL, "edu-revoke-consent", "educlaw_consent_record", consent_id,
           new_values={"is_revoked": 1, "revoked_date": revoked_date})
     conn.commit()
     ok({"id": consent_id, "is_revoked": 1, "revoked_date": revoked_date})
@@ -1105,25 +1105,25 @@ def export_student_record(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-student-applicant": add_student_applicant,
-    "update-student-applicant": update_student_applicant,
-    "get-applicant": get_applicant,
-    "list-applicants": list_applicants,
-    "approve-applicant": review_applicant,
-    "convert-applicant-to-student": convert_applicant_to_student,
-    "add-student": add_student,
-    "update-student": update_student,
-    "get-student": get_student,
-    "list-students": list_students,
-    "update-student-status": change_student_status,
-    "complete-graduation": graduate_student,
-    "add-guardian": add_guardian,
-    "update-guardian": update_guardian,
-    "get-guardian": get_guardian,
-    "list-guardians": list_guardians,
-    "assign-guardian": link_guardian_to_student,
-    "record-data-access": log_data_access,
-    "add-consent-record": add_consent_record,
-    "cancel-consent": revoke_consent,
-    "generate-student-record": export_student_record,
+    "edu-add-student-applicant": add_student_applicant,
+    "edu-update-student-applicant": update_student_applicant,
+    "edu-get-applicant": get_applicant,
+    "edu-list-applicants": list_applicants,
+    "edu-approve-applicant": review_applicant,
+    "edu-convert-applicant-to-student": convert_applicant_to_student,
+    "edu-add-student": add_student,
+    "edu-update-student": update_student,
+    "edu-get-student": get_student,
+    "edu-list-students": list_students,
+    "edu-update-student-status": change_student_status,
+    "edu-complete-graduation": graduate_student,
+    "edu-add-guardian": add_guardian,
+    "edu-update-guardian": update_guardian,
+    "edu-get-guardian": get_guardian,
+    "edu-list-guardians": list_guardians,
+    "edu-assign-guardian": link_guardian_to_student,
+    "edu-record-data-access": log_data_access,
+    "edu-add-consent-record": add_consent_record,
+    "edu-cancel-consent": revoke_consent,
+    "edu-generate-student-record": export_student_record,
 }

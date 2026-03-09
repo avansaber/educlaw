@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_SUBMISSION_TYPES = ("initial", "amendment", "correction")
@@ -480,13 +480,13 @@ def get_submission_audit_trail(conn, args):
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-submission": add_submission,
-    "update-submission-status": update_submission_status,
-    "get-submission": get_submission,
-    "list-submissions": list_submissions,
-    "approve-submission": certify_submission,
-    "create-amendment": create_amendment,
-    "get-submission-history": get_submission_history,
-    "generate-submission-package": export_submission_package,
-    "get-submission-audit-trail": get_submission_audit_trail,
+    "statereport-add-submission": add_submission,
+    "statereport-update-submission-status": update_submission_status,
+    "statereport-get-submission": get_submission,
+    "statereport-list-submissions": list_submissions,
+    "statereport-approve-submission": certify_submission,
+    "statereport-create-amendment": create_amendment,
+    "statereport-get-submission-history": get_submission_history,
+    "statereport-generate-submission-package": export_submission_package,
+    "statereport-get-submission-audit-trail": get_submission_audit_trail,
 }

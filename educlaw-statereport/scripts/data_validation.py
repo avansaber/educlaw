@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_CATEGORIES = (
@@ -1002,19 +1002,19 @@ def escalate_error(conn, args):
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-validation-rule": add_validation_rule,
-    "update-validation-rule": update_validation_rule,
-    "get-validation-rule": get_validation_rule,
-    "list-validation-rules": list_validation_rules,
-    "update-validation-rule-status": toggle_validation_rule,
-    "import-validation-rules": seed_validation_rules,
-    "apply-validation": run_validation,
-    "apply-student-validation": run_validation_for_student,
-    "get-validation-results": get_validation_results,
-    "assign-submission-error": assign_submission_error,
-    "update-error-resolution": update_error_resolution,
-    "list-submission-errors": list_submission_errors,
-    "get-error-dashboard": get_error_dashboard,
-    "assign-errors": bulk_assign_errors,
-    "submit-error-escalation": escalate_error,
+    "statereport-add-validation-rule": add_validation_rule,
+    "statereport-update-validation-rule": update_validation_rule,
+    "statereport-get-validation-rule": get_validation_rule,
+    "statereport-list-validation-rules": list_validation_rules,
+    "statereport-update-validation-rule-status": toggle_validation_rule,
+    "statereport-import-validation-rules": seed_validation_rules,
+    "statereport-apply-validation": run_validation,
+    "statereport-apply-student-validation": run_validation_for_student,
+    "statereport-get-validation-results": get_validation_results,
+    "statereport-assign-submission-error": assign_submission_error,
+    "statereport-update-error-resolution": update_error_resolution,
+    "statereport-list-submission-errors": list_submission_errors,
+    "statereport-get-error-dashboard": get_error_dashboard,
+    "statereport-assign-errors": bulk_assign_errors,
+    "statereport-submit-error-escalation": escalate_error,
 }

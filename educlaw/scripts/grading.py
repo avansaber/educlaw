@@ -122,7 +122,7 @@ def add_grading_scale(conn, args):
              now, getattr(args, "user_id", None) or "")
         )
 
-    audit(conn, SKILL, "add-grading-scale", "educlaw_grading_scale", scale_id,
+    audit(conn, SKILL, "edu-add-grading-scale", "educlaw_grading_scale", scale_id,
           new_values={"name": name, "entry_count": len(entries)})
     conn.commit()
     ok({"id": scale_id, "name": name, "is_default": is_default, "entry_count": len(entries)})
@@ -194,7 +194,7 @@ def update_grading_scale(conn, args):
     if updates[:-1]:  # Only update if there are non-timestamp changes
         conn.execute(f"UPDATE educlaw_grading_scale SET {', '.join(updates)} WHERE id = ?", params)
 
-    audit(conn, SKILL, "update-grading-scale", "educlaw_grading_scale", scale_id,
+    audit(conn, SKILL, "edu-update-grading-scale", "educlaw_grading_scale", scale_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": scale_id, "updated_fields": changed})
@@ -301,7 +301,7 @@ def add_assessment_plan(conn, args):
              cat.get("sort_order", i + 1), now, getattr(args, "user_id", None) or "")
         )
 
-    audit(conn, SKILL, "add-assessment-plan", "educlaw_assessment_plan", plan_id,
+    audit(conn, SKILL, "edu-add-assessment-plan", "educlaw_assessment_plan", plan_id,
           new_values={"section_id": section_id, "category_count": len(categories)})
     conn.commit()
     ok({"id": plan_id, "section_id": section_id, "category_count": len(categories)})
@@ -363,7 +363,7 @@ def update_assessment_plan(conn, args):
     if updates[:-1]:
         conn.execute(f"UPDATE educlaw_assessment_plan SET {', '.join(updates)} WHERE id = ?", params)
 
-    audit(conn, SKILL, "update-assessment-plan", "educlaw_assessment_plan", plan_id,
+    audit(conn, SKILL, "edu-update-assessment-plan", "educlaw_assessment_plan", plan_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": plan_id, "updated_fields": changed})
@@ -476,7 +476,7 @@ def add_assessment(conn, args):
             except sqlite3.IntegrityError:
                 pass
 
-    audit(conn, SKILL, "add-assessment", "educlaw_assessment", assessment_id,
+    audit(conn, SKILL, "edu-add-assessment", "educlaw_assessment", assessment_id,
           new_values={"name": name, "plan_id": plan_id, "result_stubs_created": result_count})
     conn.commit()
     ok({"id": assessment_id, "name": name, "max_points": str(_d(max_points)),
@@ -521,7 +521,7 @@ def update_assessment(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(assessment_id)
     conn.execute(f"UPDATE educlaw_assessment SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-assessment", "educlaw_assessment", assessment_id,
+    audit(conn, SKILL, "edu-update-assessment", "educlaw_assessment", assessment_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": assessment_id, "updated_fields": changed})
@@ -992,7 +992,7 @@ def amend_grade(conn, args):
     # Recalculate GPA
     _calculate_gpa_internal(conn, r["student_id"])
 
-    audit(conn, SKILL, "amend-grade", "educlaw_grade_amendment", amendment_id,
+    audit(conn, SKILL, "edu-amend-grade", "educlaw_grade_amendment", amendment_id,
           new_values={"old_grade": r["final_letter_grade"], "new_grade": new_letter_grade})
     conn.commit()
     ok({"amendment_id": amendment_id, "enrollment_id": enrollment_id,
@@ -1247,23 +1247,23 @@ def list_grades(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-grading-scale": add_grading_scale,
-    "update-grading-scale": update_grading_scale,
-    "list-grading-scales": list_grading_scales,
-    "get-grading-scale": get_grading_scale,
-    "add-assessment-plan": add_assessment_plan,
-    "update-assessment-plan": update_assessment_plan,
-    "get-assessment-plan": get_assessment_plan,
-    "add-assessment": add_assessment,
-    "update-assessment": update_assessment,
-    "list-assessments": list_assessments,
-    "record-assessment-result": enter_assessment_result,
-    "record-batch-results": batch_enter_results,
-    "generate-section-grade": calculate_section_grade,
-    "submit-grades": submit_grades,
-    "update-grade": amend_grade,
-    "generate-gpa": calculate_gpa,
-    "generate-transcript": generate_transcript,
-    "generate-report-card": generate_report_card,
-    "list-grades": list_grades,
+    "edu-add-grading-scale": add_grading_scale,
+    "edu-update-grading-scale": update_grading_scale,
+    "edu-list-grading-scales": list_grading_scales,
+    "edu-get-grading-scale": get_grading_scale,
+    "edu-add-assessment-plan": add_assessment_plan,
+    "edu-update-assessment-plan": update_assessment_plan,
+    "edu-get-assessment-plan": get_assessment_plan,
+    "edu-add-assessment": add_assessment,
+    "edu-update-assessment": update_assessment,
+    "edu-list-assessments": list_assessments,
+    "edu-record-assessment-result": enter_assessment_result,
+    "edu-record-batch-results": batch_enter_results,
+    "edu-generate-section-grade": calculate_section_grade,
+    "edu-submit-grades": submit_grades,
+    "edu-update-grade": amend_grade,
+    "edu-generate-gpa": calculate_gpa,
+    "edu-generate-transcript": generate_transcript,
+    "edu-generate-report-card": generate_report_card,
+    "edu-list-grades": list_grades,
 }

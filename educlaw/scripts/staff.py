@@ -94,7 +94,7 @@ def add_instructor(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Instructor creation failed: {e}")
 
-    audit(conn, SKILL, "add-instructor", "educlaw_instructor", instructor_id,
+    audit(conn, SKILL, "edu-add-instructor", "educlaw_instructor", instructor_id,
           new_values={"naming_series": naming, "employee_id": employee_id})
     conn.commit()
     ok({"id": instructor_id, "naming_series": naming, "employee_id": employee_id})
@@ -139,7 +139,7 @@ def update_instructor(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(instructor_id)
     conn.execute(f"UPDATE educlaw_instructor SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-instructor", "educlaw_instructor", instructor_id,
+    audit(conn, SKILL, "edu-update-instructor", "educlaw_instructor", instructor_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": instructor_id, "updated_fields": changed})
@@ -263,9 +263,9 @@ def get_teaching_load(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-instructor": add_instructor,
-    "update-instructor": update_instructor,
-    "get-instructor": get_instructor,
-    "list-instructors": list_instructors,
-    "get-teaching-load": get_teaching_load,
+    "edu-add-instructor": add_instructor,
+    "edu-update-instructor": update_instructor,
+    "edu-get-instructor": get_instructor,
+    "edu-list-instructors": list_instructors,
+    "edu-get-teaching-load": get_teaching_load,
 }

@@ -22,8 +22,12 @@ try:
     from erpclaw_lib.crypto import decrypt_field as _decrypt_field_raw
     from erpclaw_lib.crypto import derive_key
 
-    # Derive a stable field-encryption key from env passphrase (or fixed default)
-    _FIELD_PASSPHRASE = os.environ.get("ERPCLAW_FIELD_KEY", "educlaw-statereport-default-key")
+    # Derive a stable field-encryption key from env passphrase
+    _FIELD_PASSPHRASE = os.environ.get("ERPCLAW_FIELD_KEY")
+    if not _FIELD_PASSPHRASE:
+        import secrets
+        _FIELD_PASSPHRASE = secrets.token_hex(32)
+        print("WARNING: ERPCLAW_FIELD_KEY not set. Using random key — encrypted fields will not persist across restarts. Set ERPCLAW_FIELD_KEY env var for production use.", file=sys.stderr)
     _FIELD_SALT = b"educlaw_statereport_edfi_salt_v1"
     _FIELD_KEY = derive_key(_FIELD_PASSPHRASE, _FIELD_SALT)
 
@@ -37,7 +41,7 @@ except ImportError:
     def encrypt_field(v): return f"ENC:{v}"
     def decrypt_field(v): return v.replace("ENC:", "") if v.startswith("ENC:") else v
 
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_API_VERSIONS = ("5", "6", "7")
@@ -1011,28 +1015,28 @@ def retry_failed_syncs(conn, args):
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-edfi-config": add_edfi_config,
-    "update-edfi-config": update_edfi_config,
-    "get-edfi-config": get_edfi_config,
-    "list-edfi-configs": list_edfi_configs,
-    "get-edfi-connection-test": test_edfi_connection,
-    "add-org-mapping": add_org_mapping,
-    "update-org-mapping": update_org_mapping,
-    "get-org-mapping": get_org_mapping,
-    "list-org-mappings": list_org_mappings,
-    "add-descriptor-mapping": add_descriptor_mapping,
-    "update-descriptor-mapping": update_descriptor_mapping,
-    "import-descriptor-mappings": bulk_import_descriptor_mappings,
-    "list-descriptor-mappings": list_descriptor_mappings,
-    "delete-descriptor-mapping": delete_descriptor_mapping,
-    "submit-student-to-edfi": sync_student_to_edfi,
-    "submit-enrollment-to-edfi": sync_enrollment_to_edfi,
-    "submit-attendance-to-edfi": sync_attendance_to_edfi,
-    "submit-sped-to-edfi": sync_sped_to_edfi,
-    "submit-el-to-edfi": sync_el_to_edfi,
-    "submit-discipline-to-edfi": sync_discipline_to_edfi,
-    "submit-staff-to-edfi": sync_staff_to_edfi,
-    "get-edfi-sync-log": get_edfi_sync_log,
-    "list-edfi-sync-errors": list_edfi_sync_errors,
-    "submit-failed-syncs": retry_failed_syncs,
+    "statereport-add-edfi-config": add_edfi_config,
+    "statereport-update-edfi-config": update_edfi_config,
+    "statereport-get-edfi-config": get_edfi_config,
+    "statereport-list-edfi-configs": list_edfi_configs,
+    "statereport-get-edfi-connection-test": test_edfi_connection,
+    "statereport-add-org-mapping": add_org_mapping,
+    "statereport-update-org-mapping": update_org_mapping,
+    "statereport-get-org-mapping": get_org_mapping,
+    "statereport-list-org-mappings": list_org_mappings,
+    "statereport-add-descriptor-mapping": add_descriptor_mapping,
+    "statereport-update-descriptor-mapping": update_descriptor_mapping,
+    "statereport-import-descriptor-mappings": bulk_import_descriptor_mappings,
+    "statereport-list-descriptor-mappings": list_descriptor_mappings,
+    "statereport-delete-descriptor-mapping": delete_descriptor_mapping,
+    "statereport-submit-student-to-edfi": sync_student_to_edfi,
+    "statereport-submit-enrollment-to-edfi": sync_enrollment_to_edfi,
+    "statereport-submit-attendance-to-edfi": sync_attendance_to_edfi,
+    "statereport-submit-sped-to-edfi": sync_sped_to_edfi,
+    "statereport-submit-el-to-edfi": sync_el_to_edfi,
+    "statereport-submit-discipline-to-edfi": sync_discipline_to_edfi,
+    "statereport-submit-staff-to-edfi": sync_staff_to_edfi,
+    "statereport-get-edfi-sync-log": get_edfi_sync_log,
+    "statereport-list-edfi-sync-errors": list_edfi_sync_errors,
+    "statereport-submit-failed-syncs": retry_failed_syncs,
 }

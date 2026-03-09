@@ -23,7 +23,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-lms"
+SKILL = "lms-educlaw-lms"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_GRADE_SCHEMES = ("points", "percentage", "pass_fail", "letter_grade")
@@ -243,7 +243,7 @@ def push_assessment_to_lms(conn, args):
         pass
 
     try:
-        audit(conn, SKILL, "submit-assessment-to-lms", "educlaw_lms_assignment_mapping", mapping_id,
+        audit(conn, SKILL, "lms-submit-assessment-to-lms", "educlaw_lms_assignment_mapping", mapping_id,
               new_values={"assessment_id": assessment_id, "lms_assignment_id": lms_assignment_id,
                           "sync_status": sync_status})
     except Exception:
@@ -551,7 +551,7 @@ def sync_assessment_update(conn, args):
         conn.commit()
 
     try:
-        audit(conn, SKILL, "apply-assessment-update", "educlaw_lms_assignment_mapping", mapping["id"],
+        audit(conn, SKILL, "lms-apply-assessment-update", "educlaw_lms_assignment_mapping", mapping["id"],
               new_values={"updated": updated, "warning": warning})
     except Exception:
         pass
@@ -645,7 +645,7 @@ def unlink_lms_assignment(conn, args):
         (_now_iso(), mapping["id"])
     )
     try:
-        audit(conn, SKILL, "delete-lms-assignment", "educlaw_lms_assignment_mapping", mapping["id"],
+        audit(conn, SKILL, "lms-delete-lms-assignment", "educlaw_lms_assignment_mapping", mapping["id"],
               new_values={"sync_status": "error", "sync_error": "unlinked by user"})
     except Exception:
         pass
@@ -664,9 +664,9 @@ def unlink_lms_assignment(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "submit-assessment-to-lms": push_assessment_to_lms,
-    "import-lms-assignments": pull_lms_assignments,
-    "apply-assessment-update": sync_assessment_update,
-    "list-lms-assignments": list_lms_assignments,
-    "delete-lms-assignment": unlink_lms_assignment,
+    "lms-submit-assessment-to-lms": push_assessment_to_lms,
+    "lms-import-lms-assignments": pull_lms_assignments,
+    "lms-apply-assessment-update": sync_assessment_update,
+    "lms-list-lms-assignments": list_lms_assignments,
+    "lms-delete-lms-assignment": unlink_lms_assignment,
 }

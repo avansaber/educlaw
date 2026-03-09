@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-lms"
+SKILL = "lms-educlaw-lms"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_LMS_TYPES = ("canvas", "moodle", "google_classroom", "oneroster_csv")
@@ -246,7 +246,7 @@ def add_lms_connection(conn, args):
         err(f"LMS connection creation failed: {e}")
 
     try:
-        audit(conn, SKILL, "add-lms-connection", "educlaw_lms_connection", conn_id,
+        audit(conn, SKILL, "lms-add-lms-connection", "educlaw_lms_connection", conn_id,
               new_values={"display_name": display_name, "lms_type": lms_type,
                           "connection_status": "draft"})
     except Exception:
@@ -360,7 +360,7 @@ def update_lms_connection(conn, args):
         params
     )
     try:
-        audit(conn, SKILL, "update-lms-connection", "educlaw_lms_connection", conn_id,
+        audit(conn, SKILL, "lms-update-lms-connection", "educlaw_lms_connection", conn_id,
               new_values={"fields_updated": [u.split(" =")[0] for u in updates if "updated_at" not in u]})
     except Exception:
         pass
@@ -505,7 +505,7 @@ def test_lms_connection(conn, args):
              _now_iso(), conn_id)
         )
         try:
-            audit(conn, SKILL, "activate-lms-connection", "educlaw_lms_connection", conn_id,
+            audit(conn, SKILL, "lms-activate-lms-connection", "educlaw_lms_connection", conn_id,
                   new_values={"connection_status": new_status,
                               "site_name": result.get("site_name", "")})
         except Exception:
@@ -1121,7 +1121,7 @@ def resolve_sync_conflict(conn, args):
             (new_status, now, row["id"])
         )
         try:
-            audit(conn, SKILL, "apply-sync-resolution", "educlaw_lms_user_mapping", row["id"],
+            audit(conn, SKILL, "lms-apply-sync-resolution", "educlaw_lms_user_mapping", row["id"],
                   new_values={"resolution": resolution, "sync_status": new_status})
         except Exception:
             pass
@@ -1159,7 +1159,7 @@ def resolve_sync_conflict(conn, args):
             (new_status, now, row["id"])
         )
         try:
-            audit(conn, SKILL, "apply-sync-resolution", "educlaw_lms_course_mapping", row["id"],
+            audit(conn, SKILL, "lms-apply-sync-resolution", "educlaw_lms_course_mapping", row["id"],
                   new_values={"resolution": resolution, "sync_status": new_status})
         except Exception:
             pass
@@ -1178,13 +1178,13 @@ def resolve_sync_conflict(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-lms-connection": add_lms_connection,
-    "update-lms-connection": update_lms_connection,
-    "get-lms-connection": get_lms_connection,
-    "list-lms-connections": list_lms_connections,
-    "activate-lms-connection": test_lms_connection,
-    "apply-course-sync": sync_courses,
-    "list-sync-logs": list_sync_logs,
-    "get-sync-log": get_sync_log,
-    "apply-sync-resolution": resolve_sync_conflict,
+    "lms-add-lms-connection": add_lms_connection,
+    "lms-update-lms-connection": update_lms_connection,
+    "lms-get-lms-connection": get_lms_connection,
+    "lms-list-lms-connections": list_lms_connections,
+    "lms-activate-lms-connection": test_lms_connection,
+    "lms-apply-course-sync": sync_courses,
+    "lms-list-sync-logs": list_sync_logs,
+    "lms-get-sync-log": get_sync_log,
+    "lms-apply-sync-resolution": resolve_sync_conflict,
 }

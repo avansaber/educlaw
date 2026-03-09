@@ -39,7 +39,7 @@ from course_materials import ACTIONS as MATERIALS_ACTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 # Merge domain actions into single router
 # ─────────────────────────────────────────────────────────────────────────────
-SKILL = "educlaw-lms"
+SKILL = "lms-educlaw-lms"
 REQUIRED_TABLES = ["company", "educlaw_lms_connection"]
 
 ACTIONS = {}

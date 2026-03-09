@@ -186,7 +186,7 @@ def add_announcement(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Announcement creation failed: {e}")
 
-    audit(conn, SKILL, "add-announcement", "educlaw_announcement", ann_id,
+    audit(conn, SKILL, "edu-add-announcement", "educlaw_announcement", ann_id,
           new_values={"title": title, "audience_type": audience_type})
     conn.commit()
     ok({"id": ann_id, "announcement_status": "draft", "title": title})
@@ -237,7 +237,7 @@ def update_announcement(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(announcement_id)
     conn.execute(f"UPDATE educlaw_announcement SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, SKILL, "update-announcement", "educlaw_announcement", announcement_id,
+    audit(conn, SKILL, "edu-update-announcement", "educlaw_announcement", announcement_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": announcement_id, "updated_fields": changed})
@@ -288,7 +288,7 @@ def publish_announcement(conn, args):
         )
         notif_count += 1
 
-    audit(conn, SKILL, "publish-announcement", "educlaw_announcement", announcement_id,
+    audit(conn, SKILL, "edu-publish-announcement", "educlaw_announcement", announcement_id,
           new_values={"published_by": published_by, "notifications_created": notif_count})
     conn.commit()
     ok({"id": announcement_id, "announcement_status": "published",
@@ -615,7 +615,7 @@ def send_emergency_alert(conn, args):
         notif_count += 1
 
     # Enhanced audit logging
-    audit(conn, SKILL, "send-emergency-alert", "educlaw_announcement", ann_id,
+    audit(conn, SKILL, "edu-send-emergency-alert", "educlaw_announcement", ann_id,
           new_values={
               "title": title,
               "sent_by": sent_by,
@@ -639,13 +639,13 @@ def send_emergency_alert(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-announcement": add_announcement,
-    "update-announcement": update_announcement,
-    "submit-announcement": publish_announcement,
-    "list-announcements": list_announcements,
-    "get-announcement": get_announcement,
-    "submit-notification": send_notification,
-    "list-notifications": list_notifications,
-    "generate-progress-report": send_progress_report,
-    "submit-emergency-alert": send_emergency_alert,
+    "edu-add-announcement": add_announcement,
+    "edu-update-announcement": update_announcement,
+    "edu-submit-announcement": publish_announcement,
+    "edu-list-announcements": list_announcements,
+    "edu-get-announcement": get_announcement,
+    "edu-submit-notification": send_notification,
+    "edu-list-notifications": list_notifications,
+    "edu-generate-progress-report": send_progress_report,
+    "edu-submit-emergency-alert": send_emergency_alert,
 }

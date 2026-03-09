@@ -72,7 +72,7 @@ python3 {baseDir}/scripts/db_query.py --action status
 
 ```
 # Step 1 — Create connection in draft status
---action add-lms-connection \
+--action lms-add-lms-connection \
   --lms-type canvas \
   --display-name "Jefferson High — Canvas" \
   --endpoint-url "https://canvas.jefferson.edu" \
@@ -85,10 +85,10 @@ python3 {baseDir}/scripts/db_query.py --action status
   --company-id {company_id}
 
 # Step 2 — Test credentials and activate
---action activate-lms-connection --connection-id {connection_id}
+--action lms-activate-lms-connection --connection-id {connection_id}
 
 # Step 3 — View connection details (credentials masked)
---action get-lms-connection --connection-id {connection_id}
+--action lms-get-lms-connection --connection-id {connection_id}
 ```
 
 ### Workflow 2: Sync a Term's Roster to LMS
@@ -101,10 +101,10 @@ python3 {baseDir}/scripts/db_query.py --action status
   --company-id {company_id}
 
 # Check sync results
---action get-sync-log --sync-log-id {sync_log_id}
+--action lms-get-sync-log --sync-log-id {sync_log_id}
 
 # List all sync runs
---action list-sync-logs --connection-id {connection_id}
+--action lms-list-sync-logs --connection-id {connection_id}
 ```
 
 ### Workflow 3: Push Assignments and Pull Grades
@@ -121,12 +121,12 @@ python3 {baseDir}/scripts/db_query.py --action status
   --section-id {section_id}
 
 # Review the unified gradebook
---action get-online-gradebook \
+--action lms-get-online-gradebook \
   --section-id {section_id} \
   --connection-id {connection_id}
 
 # Resolve any grade conflicts
---action list-grade-conflicts --connection-id {connection_id} --section-id {section_id}
+--action lms-list-grade-conflicts --connection-id {connection_id} --section-id {section_id}
 --action resolve-grade-conflict \
   --grade-sync-id {grade_sync_id} \
   --resolution lms_wins \
@@ -137,7 +137,7 @@ python3 {baseDir}/scripts/db_query.py --action status
 
 ```
 # Add a syllabus URL
---action add-course-material \
+--action lms-add-course-material \
   --section-id {section_id} \
   --name "Course Syllabus Fall 2026" \
   --material-type syllabus \
@@ -146,7 +146,7 @@ python3 {baseDir}/scripts/db_query.py --action status
   --company-id {company_id}
 
 # List all materials for a section
---action list-course-materials --section-id {section_id}
+--action lms-list-course-materials --section-id {section_id}
 ```
 
 ### Workflow 5: Export OneRoster CSV
@@ -185,14 +185,14 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 
 | Action | Key Parameters | Description |
 |---|---|---|
-| `add-lms-connection` | --lms-type --display-name --company-id | Create LMS connection in `draft` status. Encrypts credentials before storage. No API call. |
-| `update-lms-connection` | --connection-id [fields] | Update connection settings. Re-encrypts credentials if provided. Cannot update inactive/error connections without first resetting. |
-| `get-lms-connection` | --connection-id | Get full connection record. Credentials masked (last 4 chars only). Shows `last_sync_at`, `connection_status`. |
-| `list-lms-connections` | --company-id [--lms-type --connection-status] | List all connections. Returns id, display_name, lms_type, status, last_sync_at, has_dpa_signed, is_coppa_verified. |
+| `lms-add-lms-connection` | --lms-type --display-name --company-id | Create LMS connection in `draft` status. Encrypts credentials before storage. No API call. |
+| `lms-update-lms-connection` | --connection-id [fields] | Update connection settings. Re-encrypts credentials if provided. Cannot update inactive/error connections without first resetting. |
+| `lms-get-lms-connection` | --connection-id | Get full connection record. Credentials masked (last 4 chars only). Shows `last_sync_at`, `connection_status`. |
+| `lms-list-lms-connections` | --company-id [--lms-type --connection-status] | List all connections. Returns id, display_name, lms_type, status, last_sync_at, has_dpa_signed, is_coppa_verified. |
 | `test-lms-connection` | --connection-id | Make live API call to validate credentials. On success: sets `status = 'active'`, populates `lms_version`/`lms_site_name`. On failure: sets `status = 'error'`. Requires `has_dpa_signed = 1`. |
 | `sync-courses` | --connection-id --academic-term-id --company-id [--section-id] | Full roster push for a term. Syncs: term→sections→users→enrollments. Creates sync log. FERPA disclosure per student. COPPA-restricted students skipped. Blocks concurrent runs. |
-| `list-sync-logs` | --connection-id [--sync-type --sync-status --from-date --to-date] | List sync run history. Returns summary stats per run (sections, students, grades, conflicts, errors). |
-| `get-sync-log` | --sync-log-id | Get full sync run details including `error_summary` JSON array. |
+| `lms-list-sync-logs` | --connection-id [--sync-type --sync-status --from-date --to-date] | List sync run history. Returns summary stats per run (sections, students, grades, conflicts, errors). |
+| `lms-get-sync-log` | --sync-log-id | Get full sync run details including `error_summary` JSON array. |
 | `resolve-sync-conflict` | --connection-id --entity-type --entity-id --resolution | Resolve user/course mapping conflict. Resolution: `sis_wins` (re-push), `lms_wins` (accept LMS state), `dismiss` (mark reviewed). |
 
 ### Assignments Domain (`assignments.py`)
@@ -202,7 +202,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `push-assessment-to-lms` | --assessment-id --connection-id [--section-id] | Push SIS assessment to LMS as assignment. Idempotent (skips if already mapped). Creates `educlaw_lms_assignment_mapping`. Logs FERPA disclosure. |
 | `pull-lms-assignments` | --connection-id --section-id [--create-assessments --plan-id --category-id] | Pull LMS assignments not yet in EduClaw. Optionally creates stub `educlaw_assessment` records. Sets `push_direction = 'lms_to_sis'`. |
 | `sync-assessment-update` | --assessment-id --connection-id | Push updated assessment fields (name, max_points, due_date, is_published) to LMS. Warns if max_points changed. |
-| `list-lms-assignments` | --connection-id [--section-id --assignment-sync-status] | List assessments with LMS mappings. Shows SIS details + LMS URL, `is_published_in_lms`, `assignment_sync_status`. |
+| `lms-list-lms-assignments` | --connection-id [--section-id --assignment-sync-status] | List assessments with LMS mappings. Shows SIS details + LMS URL, `is_published_in_lms`, `assignment_sync_status`. |
 | `unlink-lms-assignment` | --assessment-id --connection-id | Remove LMS mapping (soft delete via `sync_status = 'error'`). Does NOT delete LMS assignment. |
 
 ### Online Gradebook Domain (`online_gradebook.py`)
@@ -210,8 +210,8 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | Action | Key Parameters | Description |
 |---|---|---|
 | `pull-grades` | --connection-id --section-id [--assessment-id --academic-term-id] | Pull LMS grades into staging (`educlaw_lms_grade_sync`). Auto-applies new grades if `grade_direction = 'lms_to_sis'` and no SIS score. Submitted grades flagged as `submitted_grade_locked` conflict — never auto-overwritten. Logs FERPA pull per student. |
-| `get-online-gradebook` | --section-id --connection-id | Return unified SIS+LMS gradebook matrix. Student rows × Assessment columns. Each cell: SIS score, LMS score, conflict flag, LMS URL. |
-| `list-grade-conflicts` | --connection-id [--section-id --conflict-type --conflict-status] | List grade conflicts for review. Shows student name, assessment, SIS score, LMS score, `is_grade_submitted`. |
+| `lms-get-online-gradebook` | --section-id --connection-id | Return unified SIS+LMS gradebook matrix. Student rows × Assessment columns. Each cell: SIS score, LMS score, conflict flag, LMS URL. |
+| `lms-list-grade-conflicts` | --connection-id [--section-id --conflict-type --conflict-status] | List grade conflicts for review. Shows student name, assessment, SIS score, LMS score, `is_grade_submitted`. |
 | `resolve-grade-conflict` | --grade-sync-id --resolution --resolved-by [--new-score --push-to-lms] | Resolve grade conflict. Options: `lms_wins` (apply LMS score), `sis_wins` (dismiss; optionally push SIS back), `manual` (enter custom score via `--new-score`). Submitted-grade conflicts route through amendment workflow. |
 | `export-oneroster-csv` | --academic-term-id --output-dir --company-id [--include-grades] | Generate OneRoster 1.1 CSV zip package. Base: 6 files (orgs, academicSessions, courses, classes, users, enrollments). With `--include-grades`: adds lineItems.csv + results.csv. COPPA minimization applied. |
 | `close-lms-course` | --section-id --connection-id | Mark LMS course mapping as `closed`. Blocks further grade pulls. Call after `submit-grades` in parent educlaw. |
@@ -220,11 +220,11 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 
 | Action | Key Parameters | Description |
 |---|---|---|
-| `add-course-material` | --section-id --name --material-type --access-type --company-id | Create course material. For `url`: requires `--external-url`. For `file_attachment`: requires `--file-path`. For `lms_linked`: requires `--lms-connection-id`. |
-| `update-course-material` | --material-id [fields] | Update material metadata. Cannot change `section_id`. |
-| `list-course-materials` | --section-id [--material-type --is-visible-to-students --include-archived] | List materials for section. Ordered by `sort_order` ASC. Excludes archived by default. |
-| `get-course-material` | --material-id | Get full material record including LMS link details. |
-| `delete-course-material` | --material-id | Archive material (soft delete). Sets `status = 'archived'`. Idempotent. |
+| `lms-add-course-material` | --section-id --name --material-type --access-type --company-id | Create course material. For `url`: requires `--external-url`. For `file_attachment`: requires `--file-path`. For `lms_linked`: requires `--lms-connection-id`. |
+| `lms-update-course-material` | --material-id [fields] | Update material metadata. Cannot change `section_id`. |
+| `lms-list-course-materials` | --section-id [--material-type --is-visible-to-students --include-archived] | List materials for section. Ordered by `sort_order` ASC. Excludes archived by default. |
+| `lms-get-course-material` | --material-id | Get full material record including LMS link details. |
+| `lms-delete-course-material` | --material-id | Archive material (soft delete). Sets `status = 'archived'`. Idempotent. |
 
 ---
 
@@ -234,7 +234,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 |---|---|
 | `lms_to_sis` (default) | New grades auto-applied to `educlaw_assessment_result`. Existing grades create conflicts. Submitted grades always conflict. |
 | `sis_to_lms` | Grade pull is skipped entirely — no `educlaw_lms_grade_sync` records created. |
-| `manual` | All pulled grades remain `sync_status = 'pulled'` pending admin review via `list-grade-conflicts`. |
+| `manual` | All pulled grades remain `sync_status = 'pulled'` pending admin review via `lms-list-grade-conflicts`. |
 
 ### Conflict Types
 

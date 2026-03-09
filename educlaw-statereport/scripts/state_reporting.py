@@ -26,7 +26,7 @@ except ImportError:
         except Exception:
             return Decimal("0")
 
-SKILL = "educlaw-statereport"
+SKILL = "statereport-educlaw-statereport"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_WINDOW_TYPES = (
@@ -946,18 +946,18 @@ def generate_crdc_report(conn, args):
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-collection-window": add_collection_window,
-    "update-collection-window": update_collection_window,
-    "get-collection-window": get_collection_window,
-    "list-collection-windows": list_collection_windows,
-    "apply-window-status": advance_window_status,
-    "create-snapshot": take_snapshot,
-    "get-snapshot": get_snapshot,
-    "list-snapshot-records": list_snapshot_records,
-    "generate-ada": calculate_ada,
-    "get-ada-dashboard": get_ada_dashboard,
-    "list-chronic-absenteeism": identify_chronic_absenteeism,
-    "get-data-readiness-report": get_data_readiness_report,
-    "generate-enrollment-report": generate_enrollment_report,
-    "generate-crdc-report": generate_crdc_report,
+    "statereport-add-collection-window": add_collection_window,
+    "statereport-update-collection-window": update_collection_window,
+    "statereport-get-collection-window": get_collection_window,
+    "statereport-list-collection-windows": list_collection_windows,
+    "statereport-apply-window-status": advance_window_status,
+    "statereport-create-snapshot": take_snapshot,
+    "statereport-get-snapshot": get_snapshot,
+    "statereport-list-snapshot-records": list_snapshot_records,
+    "statereport-generate-ada": calculate_ada,
+    "statereport-get-ada-dashboard": get_ada_dashboard,
+    "statereport-list-chronic-absenteeism": identify_chronic_absenteeism,
+    "statereport-get-data-readiness-report": get_data_readiness_report,
+    "statereport-generate-enrollment-report": generate_enrollment_report,
+    "statereport-generate-crdc-report": generate_crdc_report,
 }

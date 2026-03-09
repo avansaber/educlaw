@@ -1,0 +1,11 @@
+publish/
+plan/
+research/
+educlaw-lms/
+schema.yaml
+tests/
+__pycache__/
+*.pyc
+.DS_Store
+.git/
+.github/

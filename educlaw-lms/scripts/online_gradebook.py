@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-lms"
+SKILL = "lms-educlaw-lms"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_RESOLUTIONS = ("lms_wins", "sis_wins", "manual")
@@ -822,7 +822,7 @@ def resolve_grade_conflict(conn, args):
          assessment_result_id, grade_sync_id)
     )
     try:
-        audit(conn, SKILL, "apply-grade-resolution", "educlaw_lms_grade_sync", grade_sync_id,
+        audit(conn, SKILL, "lms-apply-grade-resolution", "educlaw_lms_grade_sync", grade_sync_id,
               new_values={"resolution": resolution, "grade_sync_status": new_sync_status})
     except Exception:
         pass
@@ -1006,7 +1006,7 @@ def close_lms_course(conn, args):
     )
 
     try:
-        audit(conn, SKILL, "complete-lms-course", "educlaw_lms_course_mapping", mapping["id"],
+        audit(conn, SKILL, "lms-complete-lms-course", "educlaw_lms_course_mapping", mapping["id"],
               new_values={"sync_status": "closed"})
     except Exception:
         pass
@@ -1027,10 +1027,10 @@ def close_lms_course(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "import-grades": pull_grades,
-    "get-online-gradebook": get_online_gradebook,
-    "list-grade-conflicts": list_grade_conflicts,
-    "apply-grade-resolution": resolve_grade_conflict,
-    "generate-oneroster-csv": export_oneroster_csv,
-    "complete-lms-course": close_lms_course,
+    "lms-import-grades": pull_grades,
+    "lms-get-online-gradebook": get_online_gradebook,
+    "lms-list-grade-conflicts": list_grade_conflicts,
+    "lms-apply-grade-resolution": resolve_grade_conflict,
+    "lms-generate-oneroster-csv": export_oneroster_csv,
+    "lms-complete-lms-course": close_lms_course,
 }

@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-scheduling"
+SKILL = "schedule-educlaw-scheduling"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_PATTERN_TYPES = (
@@ -107,7 +107,7 @@ def add_schedule_pattern(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Schedule pattern creation failed: {e}")
 
-    audit(conn, SKILL, "add-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
+    audit(conn, SKILL, "schedule-add-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
           new_values={"name": name, "pattern_type": pattern_type, "cycle_days": cycle_days})
     conn.commit()
     ok({"id": pattern_id, "name": name, "pattern_type": pattern_type,
@@ -148,7 +148,7 @@ def update_schedule_pattern(conn, args):
     conn.execute(
         f"UPDATE educlaw_schedule_pattern SET {', '.join(updates)} WHERE id = ?", params
     )
-    audit(conn, SKILL, "update-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
+    audit(conn, SKILL, "schedule-update-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
           new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": pattern_id, "updated_fields": changed})
@@ -259,7 +259,7 @@ def add_day_type(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Day type creation failed (code may already exist in this pattern): {e}")
 
-    audit(conn, SKILL, "add-day-type", "educlaw_day_type", day_type_id,
+    audit(conn, SKILL, "schedule-add-day-type", "educlaw_day_type", day_type_id,
           new_values={"schedule_pattern_id": schedule_pattern_id, "code": code, "name": name})
     conn.commit()
     ok({"id": day_type_id, "schedule_pattern_id": schedule_pattern_id,
@@ -328,7 +328,7 @@ def add_bell_period(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Bell period creation failed (period_number may already exist in this pattern): {e}")
 
-    audit(conn, SKILL, "add-bell-period", "educlaw_bell_period", period_id,
+    audit(conn, SKILL, "schedule-add-bell-period", "educlaw_bell_period", period_id,
           new_values={"schedule_pattern_id": schedule_pattern_id,
                       "period_number": period_number, "period_name": period_name})
     conn.commit()
@@ -373,7 +373,7 @@ def activate_schedule_pattern(conn, args):
         "UPDATE educlaw_schedule_pattern SET is_active = 1, updated_at = datetime('now') WHERE id = ?",
         (pattern_id,)
     )
-    audit(conn, SKILL, "activate-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
+    audit(conn, SKILL, "schedule-activate-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
           new_values={"is_active": 1})
     conn.commit()
     ok({"id": pattern_id, "is_active": 1,
@@ -604,14 +604,14 @@ def calculate_contact_hours(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-schedule-pattern":    add_schedule_pattern,
-    "update-schedule-pattern": update_schedule_pattern,
-    "get-schedule-pattern":    get_schedule_pattern,
-    "list-schedule-patterns":  list_schedule_patterns,
-    "add-day-type":            add_day_type,
-    "add-bell-period":         add_bell_period,
-    "activate-schedule-pattern": activate_schedule_pattern,
-    "get-day-type-calendar":   map_day_type_to_dates,
-    "get-pattern-calendar":    get_pattern_calendar,
-    "get-contact-hours":       calculate_contact_hours,
+    "schedule-add-schedule-pattern":    add_schedule_pattern,
+    "schedule-update-schedule-pattern": update_schedule_pattern,
+    "schedule-get-schedule-pattern":    get_schedule_pattern,
+    "schedule-list-schedule-patterns":  list_schedule_patterns,
+    "schedule-add-day-type":            add_day_type,
+    "schedule-add-bell-period":         add_bell_period,
+    "schedule-activate-schedule-pattern": activate_schedule_pattern,
+    "schedule-get-day-type-calendar":   map_day_type_to_dates,
+    "schedule-get-pattern-calendar":    get_pattern_calendar,
+    "schedule-get-contact-hours":       calculate_contact_hours,
 }

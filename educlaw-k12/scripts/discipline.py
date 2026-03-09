@@ -22,7 +22,7 @@ from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
 
-SKILL = "educlaw-k12"
+SKILL = "k12-educlaw-k12"
 
 SUSPENSION_TYPES = {"in_school_suspension", "out_of_school_suspension"}
 
@@ -186,7 +186,7 @@ def add_discipline_incident(conn, args):
          company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-discipline-incident", "educlaw_k12_discipline_incident",
+    audit(conn, SKILL, "k12-add-discipline-incident", "educlaw_k12_discipline_incident",
           incident_id, description=f"Created incident {naming_series}")
     return ok({"id": incident_id, "naming_series": naming_series,
                "incident_status": "open", "message": "Discipline incident created"})
@@ -242,7 +242,7 @@ def update_discipline_incident(conn, args):
         list(updates.values()) + [incident_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-discipline-incident", "educlaw_k12_discipline_incident",
+    audit(conn, SKILL, "k12-update-discipline-incident", "educlaw_k12_discipline_incident",
           incident_id)
     return ok({"id": incident_id, "message": "Discipline incident updated"})
 
@@ -296,7 +296,7 @@ def add_discipline_student(conn, args):
         (ds_id, incident_id, student_id, role, is_idea_eligible, notes, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-discipline-student", "educlaw_k12_discipline_student", ds_id)
+    audit(conn, SKILL, "k12-add-discipline-student", "educlaw_k12_discipline_student", ds_id)
     return ok({"id": ds_id, "message": "Student added to discipline incident"})
 
 
@@ -358,7 +358,7 @@ def add_discipline_action(conn, args):
             mdr_required = cumulative_dec >= to_decimal("10")
 
     conn.commit()
-    audit(conn, SKILL, "add-discipline-action", "educlaw_k12_discipline_action", action_id)
+    audit(conn, SKILL, "k12-add-discipline-action", "educlaw_k12_discipline_action", action_id)
 
     response = {
         "id": action_id,
@@ -404,7 +404,7 @@ def close_discipline_incident(conn, args):
         (reviewed_by, now, now, incident_id)
     )
     conn.commit()
-    audit(conn, SKILL, "complete-discipline-incident", "educlaw_k12_discipline_incident",
+    audit(conn, SKILL, "k12-complete-discipline-incident", "educlaw_k12_discipline_incident",
           incident_id, description="Incident closed")
     return ok({"id": incident_id, "incident_status": "closed",
                "reviewed_at": now, "message": "Incident closed successfully"})
@@ -678,7 +678,7 @@ def add_manifestation_review(conn, args):
          notes, company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-manifestation-review", "educlaw_k12_manifestation_review", mdr_id)
+    audit(conn, SKILL, "k12-add-manifestation-review", "educlaw_k12_manifestation_review", mdr_id)
     return ok({"id": mdr_id, "message": "Manifestation Determination Review created",
                "determination": "pending"})
 
@@ -721,7 +721,7 @@ def update_manifestation_review(conn, args):
         list(updates.values()) + [mdr_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-manifestation-review", "educlaw_k12_manifestation_review", mdr_id)
+    audit(conn, SKILL, "k12-update-manifestation-review", "educlaw_k12_manifestation_review", mdr_id)
     return ok({"id": mdr_id, "message": "Manifestation review updated"})
 
 
@@ -792,7 +792,7 @@ def add_pbis_recognition(conn, args):
         (ds_id, incident_id, student_id, "PBIS positive recognition", now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-pbis-recognition", "educlaw_k12_discipline_incident",
+    audit(conn, SKILL, "k12-add-pbis-recognition", "educlaw_k12_discipline_incident",
           incident_id, description=f"PBIS recognition for student {student_id}")
     return ok({"id": incident_id, "discipline_student_id": ds_id,
                "naming_series": naming_series, "message": "PBIS recognition recorded"})
@@ -1067,19 +1067,19 @@ def generate_discipline_state_report(conn, args):
 
 # ─── ACTIONS registry ────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-discipline-incident": add_discipline_incident,
-    "update-discipline-incident": update_discipline_incident,
-    "add-discipline-student": add_discipline_student,
-    "add-discipline-action": add_discipline_action,
-    "complete-discipline-incident": close_discipline_incident,
-    "get-discipline-incident": get_discipline_incident,
-    "list-discipline-incidents": list_discipline_incidents,
-    "get-discipline-history": get_discipline_history,
-    "get-cumulative-suspension-days": get_cumulative_suspension_days,
-    "add-manifestation-review": add_manifestation_review,
-    "update-manifestation-review": update_manifestation_review,
-    "add-pbis-recognition": add_pbis_recognition,
-    "add-discipline-notification": notify_guardians_discipline,
-    "generate-discipline-report": generate_discipline_report,
-    "generate-discipline-state-report": generate_discipline_state_report,
+    "k12-add-discipline-incident": add_discipline_incident,
+    "k12-update-discipline-incident": update_discipline_incident,
+    "k12-add-discipline-student": add_discipline_student,
+    "k12-add-discipline-action": add_discipline_action,
+    "k12-complete-discipline-incident": close_discipline_incident,
+    "k12-get-discipline-incident": get_discipline_incident,
+    "k12-list-discipline-incidents": list_discipline_incidents,
+    "k12-get-discipline-history": get_discipline_history,
+    "k12-get-cumulative-suspension-days": get_cumulative_suspension_days,
+    "k12-add-manifestation-review": add_manifestation_review,
+    "k12-update-manifestation-review": update_manifestation_review,
+    "k12-add-pbis-recognition": add_pbis_recognition,
+    "k12-add-discipline-notification": notify_guardians_discipline,
+    "k12-generate-discipline-report": generate_discipline_report,
+    "k12-generate-discipline-state-report": generate_discipline_state_report,
 }

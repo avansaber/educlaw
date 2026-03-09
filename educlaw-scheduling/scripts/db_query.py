@@ -40,7 +40,7 @@ from room_assignment import ACTIONS as ROOM_ASSIGNMENT_ACTIONS
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
 # ---------------------------------------------------------------------------
-SKILL = "educlaw-scheduling"
+SKILL = "schedule-educlaw-scheduling"
 REQUIRED_TABLES = ["company", "educlaw_schedule_pattern"]
 
 ACTIONS = {}
@@ -59,7 +59,7 @@ ACTIONS["status"] = lambda conn, args: ok({
 
 
 def main():
-    parser = argparse.ArgumentParser(description="educlaw-scheduling")
+    parser = argparse.ArgumentParser(description="schedule-educlaw-scheduling")
     parser.add_argument("--action", required=True, choices=sorted(ACTIONS.keys()))
     parser.add_argument("--db-path", default=None)
 

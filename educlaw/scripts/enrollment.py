@@ -101,7 +101,7 @@ def enroll_in_program(conn, args):
          getattr(args, "user_id", None) or "")
     )
 
-    audit(conn, SKILL, "enroll-in-program", "educlaw_program_enrollment", enr_id,
+    audit(conn, SKILL, "edu-enroll-in-program", "educlaw_program_enrollment", enr_id,
           new_values={"naming_series": naming, "student_id": student_id,
                       "program_id": program_id, "academic_year_id": academic_year_id})
     conn.commit()
@@ -145,7 +145,7 @@ def withdraw_from_program(conn, args):
          getattr(args, "user_id", None) or "")
     )
 
-    audit(conn, SKILL, "withdraw-from-program", "educlaw_program_enrollment", enrollment_id,
+    audit(conn, SKILL, "edu-withdraw-from-program", "educlaw_program_enrollment", enrollment_id,
           new_values={"enrollment_status": "withdrawn"})
     conn.commit()
     ok({"id": enrollment_id, "enrollment_status": "withdrawn"})
@@ -343,7 +343,7 @@ def enroll_in_section(conn, args):
         (section_id,)
     )
 
-    audit(conn, SKILL, "enroll-in-section", "educlaw_course_enrollment", enr_id,
+    audit(conn, SKILL, "edu-enroll-in-section", "educlaw_course_enrollment", enr_id,
           new_values={"student_id": student_id, "section_id": section_id})
     conn.commit()
     ok({"id": enr_id, "enrollment_status": "enrolled", "student_id": student_id,
@@ -390,7 +390,7 @@ def drop_enrollment(conn, args):
     if section_row and dict(section_row)["waitlist_enabled"]:
         _advance_waitlist(conn, r["section_id"], dict(section_row)["company_id"], now)
 
-    audit(conn, SKILL, "drop-enrollment", "educlaw_course_enrollment", enrollment_id,
+    audit(conn, SKILL, "edu-drop-enrollment", "educlaw_course_enrollment", enrollment_id,
           new_values={"enrollment_status": "dropped", "drop_reason": drop_reason})
     conn.commit()
     ok({"id": enrollment_id, "enrollment_status": "dropped", "drop_date": now[:10]})
@@ -429,7 +429,7 @@ def withdraw_enrollment(conn, args):
         (r["section_id"],)
     )
 
-    audit(conn, SKILL, "withdraw-enrollment", "educlaw_course_enrollment", enrollment_id,
+    audit(conn, SKILL, "edu-withdraw-enrollment", "educlaw_course_enrollment", enrollment_id,
           new_values={"enrollment_status": "withdrawn", "final_letter_grade": "W"})
     conn.commit()
     ok({"id": enrollment_id, "enrollment_status": "withdrawn",
@@ -575,14 +575,14 @@ def list_waitlist(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "create-program-enrollment": enroll_in_program,
-    "cancel-program-enrollment": withdraw_from_program,
-    "list-program-enrollments": list_program_enrollments,
-    "create-section-enrollment": enroll_in_section,
-    "cancel-enrollment": drop_enrollment,
-    "terminate-enrollment": withdraw_enrollment,
-    "get-enrollment": get_enrollment,
-    "list-enrollments": list_enrollments,
-    "apply-waitlist": process_waitlist,
-    "list-waitlist": list_waitlist,
+    "edu-create-program-enrollment": enroll_in_program,
+    "edu-cancel-program-enrollment": withdraw_from_program,
+    "edu-list-program-enrollments": list_program_enrollments,
+    "edu-create-section-enrollment": enroll_in_section,
+    "edu-cancel-enrollment": drop_enrollment,
+    "edu-terminate-enrollment": withdraw_enrollment,
+    "edu-get-enrollment": get_enrollment,
+    "edu-list-enrollments": list_enrollments,
+    "edu-apply-waitlist": process_waitlist,
+    "edu-list-waitlist": list_waitlist,
 }

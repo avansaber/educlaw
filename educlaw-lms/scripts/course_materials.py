@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-SKILL = "educlaw-lms"
+SKILL = "lms-educlaw-lms"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_MATERIAL_TYPES = ("syllabus", "reading", "video_link", "assignment_guide", "rubric", "other")
@@ -132,7 +132,7 @@ def add_course_material(conn, args):
         err(f"Failed to create course material: {e}")
 
     try:
-        audit(conn, SKILL, "add-course-material", "educlaw_lms_course_material", material_id,
+        audit(conn, SKILL, "lms-add-course-material", "educlaw_lms_course_material", material_id,
               new_values={"name": name, "material_type": material_type, "access_type": access_type})
     except Exception:
         pass
@@ -226,7 +226,7 @@ def update_course_material(conn, args):
         params
     )
     try:
-        audit(conn, SKILL, "update-course-material", "educlaw_lms_course_material", material_id,
+        audit(conn, SKILL, "lms-update-course-material", "educlaw_lms_course_material", material_id,
               new_values={"fields_updated": [u.split(" =")[0] for u in updates if "updated_at" not in u]})
     except Exception:
         pass
@@ -332,7 +332,7 @@ def delete_course_material(conn, args):
         (_now_iso(), material_id)
     )
     try:
-        audit(conn, SKILL, "delete-course-material", "educlaw_lms_course_material", material_id,
+        audit(conn, SKILL, "lms-delete-course-material", "educlaw_lms_course_material", material_id,
               new_values={"material_status": "archived"})
     except Exception:
         pass
@@ -350,9 +350,9 @@ def delete_course_material(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "add-course-material": add_course_material,
-    "update-course-material": update_course_material,
-    "list-course-materials": list_course_materials,
-    "get-course-material": get_course_material,
-    "delete-course-material": delete_course_material,
+    "lms-add-course-material": add_course_material,
+    "lms-update-course-material": update_course_material,
+    "lms-list-course-materials": list_course_materials,
+    "lms-get-course-material": get_course_material,
+    "lms-delete-course-material": delete_course_material,
 }

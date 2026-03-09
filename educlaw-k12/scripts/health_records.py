@@ -23,7 +23,7 @@ from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
 
-SKILL = "educlaw-k12"
+SKILL = "k12-educlaw-k12"
 
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -132,7 +132,7 @@ def add_health_profile(conn, args):
          emergency_instructions, company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-health-profile", "educlaw_k12_health_profile", profile_id)
+    audit(conn, SKILL, "k12-add-health-profile", "educlaw_k12_health_profile", profile_id)
     return ok({"id": profile_id, "student_id": student_id,
                "profile_status": "incomplete", "message": "Health profile created"})
 
@@ -196,7 +196,7 @@ def update_health_profile(conn, args):
         list(updates.values()) + [profile_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-health-profile", "educlaw_k12_health_profile", profile_id)
+    audit(conn, SKILL, "k12-update-health-profile", "educlaw_k12_health_profile", profile_id)
     return ok({"id": profile_id, "message": "Health profile updated"})
 
 
@@ -263,7 +263,7 @@ def verify_health_profile(conn, args):
         (last_verified_date, last_verified_by, now, profile_id)
     )
     conn.commit()
-    audit(conn, SKILL, "submit-health-profile-verification", "educlaw_k12_health_profile", profile_id)
+    audit(conn, SKILL, "k12-submit-health-profile-verification", "educlaw_k12_health_profile", profile_id)
     return ok({"id": profile_id, "profile_status": "active",
                "last_verified_date": last_verified_date,
                "message": "Health profile verified"})
@@ -407,7 +407,7 @@ def add_office_visit(conn, args):
     _log_ferpa(conn, created_by, student_id, "health", company_id,
                access_reason="nurse_visit_recorded")
     conn.commit()
-    audit(conn, SKILL, "add-office-visit", "educlaw_k12_health_visit", visit_id)
+    audit(conn, SKILL, "k12-add-office-visit", "educlaw_k12_health_visit", visit_id)
     return ok({"id": visit_id, "visit_date": visit_date, "disposition": disposition,
                "message": "Office visit recorded"})
 
@@ -538,7 +538,7 @@ def add_student_medication(conn, args):
          company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-student-medication", "educlaw_k12_student_medication", med_id)
+    audit(conn, SKILL, "k12-add-student-medication", "educlaw_k12_student_medication", med_id)
     return ok({"id": med_id, "medication_name": medication_name,
                "medication_status": "active", "message": "Student medication added"})
 
@@ -585,7 +585,7 @@ def update_student_medication(conn, args):
         list(updates.values()) + [medication_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-student-medication", "educlaw_k12_student_medication", medication_id)
+    audit(conn, SKILL, "k12-update-student-medication", "educlaw_k12_student_medication", medication_id)
     return ok({"id": medication_id, "message": "Student medication updated"})
 
 
@@ -687,7 +687,7 @@ def log_medication_admin(conn, args):
         )
 
     conn.commit()
-    audit(conn, SKILL, "record-medication-admin", "educlaw_k12_medication_log", log_id)
+    audit(conn, SKILL, "k12-record-medication-admin", "educlaw_k12_medication_log", log_id)
 
     # Check supply threshold
     updated_med = conn.execute(
@@ -785,7 +785,7 @@ def add_immunization(conn, args):
          iis_record_id, corrects_record_id, company_id, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-immunization", "educlaw_k12_immunization", imm_id)
+    audit(conn, SKILL, "k12-add-immunization", "educlaw_k12_immunization", imm_id)
     return ok({"id": imm_id, "vaccine_name": vaccine_name, "dose_number": dose_number,
                "message": "Immunization record added"})
 
@@ -835,7 +835,7 @@ def add_immunization_waiver(conn, args):
          issuing_physician, issue_date, expiry_date, company_id, now, now, created_by)
     )
     conn.commit()
-    audit(conn, SKILL, "add-immunization-waiver", "educlaw_k12_immunization_waiver", waiver_id)
+    audit(conn, SKILL, "k12-add-immunization-waiver", "educlaw_k12_immunization_waiver", waiver_id)
     return ok({"id": waiver_id, "vaccine_name": vaccine_name, "waiver_type": waiver_type,
                "waiver_status": "active", "message": "Immunization waiver added"})
 
@@ -872,7 +872,7 @@ def update_immunization_waiver(conn, args):
         list(updates.values()) + [waiver_id]
     )
     conn.commit()
-    audit(conn, SKILL, "update-immunization-waiver", "educlaw_k12_immunization_waiver", waiver_id)
+    audit(conn, SKILL, "k12-update-immunization-waiver", "educlaw_k12_immunization_waiver", waiver_id)
     return ok({"id": waiver_id, "message": "Immunization waiver updated"})
 
 
@@ -1267,24 +1267,24 @@ def generate_immunization_report(conn, args):
 
 # ─── ACTIONS registry ────────────────────────────────────────────────────────
 ACTIONS = {
-    "add-health-profile": add_health_profile,
-    "update-health-profile": update_health_profile,
-    "get-health-profile": get_health_profile,
-    "submit-health-profile-verification": verify_health_profile,
-    "get-emergency-health-info": get_emergency_health_info,
-    "add-office-visit": add_office_visit,
-    "list-office-visits": list_office_visits,
-    "get-office-visit": get_office_visit,
-    "add-student-medication": add_student_medication,
-    "update-student-medication": update_student_medication,
-    "list-student-medications": list_student_medications,
-    "record-medication-admin": log_medication_admin,
-    "list-medication-logs": list_medication_logs,
-    "add-immunization": add_immunization,
-    "add-immunization-waiver": add_immunization_waiver,
-    "update-immunization-waiver": update_immunization_waiver,
-    "get-immunization-record": get_immunization_record,
-    "get-immunization-compliance": check_immunization_compliance,
-    "list-health-alerts": list_health_alerts,
-    "generate-immunization-report": generate_immunization_report,
+    "k12-add-health-profile": add_health_profile,
+    "k12-update-health-profile": update_health_profile,
+    "k12-get-health-profile": get_health_profile,
+    "k12-submit-health-profile-verification": verify_health_profile,
+    "k12-get-emergency-health-info": get_emergency_health_info,
+    "k12-add-office-visit": add_office_visit,
+    "k12-list-office-visits": list_office_visits,
+    "k12-get-office-visit": get_office_visit,
+    "k12-add-student-medication": add_student_medication,
+    "k12-update-student-medication": update_student_medication,
+    "k12-list-student-medications": list_student_medications,
+    "k12-record-medication-admin": log_medication_admin,
+    "k12-list-medication-logs": list_medication_logs,
+    "k12-add-immunization": add_immunization,
+    "k12-add-immunization-waiver": add_immunization_waiver,
+    "k12-update-immunization-waiver": update_immunization_waiver,
+    "k12-get-immunization-record": get_immunization_record,
+    "k12-get-immunization-compliance": check_immunization_compliance,
+    "k12-list-health-alerts": list_health_alerts,
+    "k12-generate-immunization-report": generate_immunization_report,
 }
