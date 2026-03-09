@@ -1,45 +1,22 @@
 ---
 name: educlaw-highered
-display_name: EduClaw Higher Education
 version: 1.0.0
 description: >
-  Higher education administration: registrar (degree programs, courses, sections,
-  enrollments), student records (transcripts, GPA, degree audit, holds), financial
-  aid (packages, disbursements, SAP), alumni relations (giving, events), and
-  faculty management (assignments, research grants).
-author: ERPForge
+  Higher education administration: registrar, student records, financial aid,
+  alumni relations, faculty management, and admissions. 60 actions across 7 domains.
+  12 own tables (6 tables merged into educlaw base schema).
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
-parent: educlaw
+tier: 4
+category: education
+requires: [erpclaw, educlaw]
+database: ~/.openclaw/erpclaw/data.sqlite
+user-invocable: true
+tags: [educlaw, highered, registrar, student-records, financial-aid, alumni, faculty, admissions, degree-audit, transcript]
 scripts:
   - scripts/db_query.py
-domains:
-  - registrar
-  - records
-  - finaid
-  - alumni
-  - faculty
-  - admissions
-  - reports
-total_actions: 60
-tables:
-  - highered_degree_program
-  - highered_course
-  - highered_section
-  - highered_enrollment
-  - highered_student_record
-  - highered_hold
-  - highered_aid_package
-  - highered_disbursement
-  - highered_alumnus
-  - highered_alumni_event
-  - highered_giving_record
-  - highered_faculty
-  - highered_course_assignment
-  - highered_research_grant
-  - highered_transcript
-  - highered_academic_standing
-  - highered_application
-  - highered_admission_decision
+metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
 # EduClaw Higher Education

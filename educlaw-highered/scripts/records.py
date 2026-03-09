@@ -15,7 +15,7 @@ try:
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
 
-    ENTITY_PREFIXES.setdefault("highered_student_record", "HSTU-")
+    ENTITY_PREFIXES.setdefault("educlaw_student", "HSTU-")
 except ImportError:
     pass
 
@@ -46,9 +46,9 @@ def get_student_record(conn, args):
     if not record_id and not student_id:
         return err("--id or --student-id is required")
     if record_id:
-        row = conn.execute("SELECT * FROM highered_student_record WHERE id=?", (record_id,)).fetchone()
+        row = conn.execute("SELECT * FROM educlaw_student WHERE id=?", (record_id,)).fetchone()
     else:
-        row = conn.execute("SELECT * FROM highered_student_record WHERE student_id=?", (student_id,)).fetchone()
+        row = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
     if not row:
         return err("Student record not found")
     ok(dict(row))
@@ -58,7 +58,7 @@ def list_student_records(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_student_record WHERE company_id=?"
+    q = "SELECT * FROM educlaw_student WHERE company_id=?"
     params = [company_id]
     program_id = getattr(args, "program_id", None)
     if program_id:
@@ -84,16 +84,16 @@ def generate_transcript(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM highered_student_record WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
 
     enrollments = conn.execute("""
         SELECT e.*, c.code as course_code, c.name as course_name,
                c.credits as course_credits, s.term, s.year
-        FROM highered_enrollment e
-        JOIN highered_section s ON e.section_id = s.id
-        JOIN highered_course c ON s.course_id = c.id
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
         WHERE e.student_id=?
         ORDER BY s.year, s.term
     """, (student_id,)).fetchall()
@@ -127,15 +127,15 @@ def calculate_gpa(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM highered_student_record WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
 
     enrollments = conn.execute("""
         SELECT e.grade, c.credits
-        FROM highered_enrollment e
-        JOIN highered_section s ON e.section_id = s.id
-        JOIN highered_course c ON s.course_id = c.id
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
         WHERE e.student_id=? AND e.enrollment_status='completed' AND e.grade != ''
     """, (student_id,)).fetchall()
 
@@ -154,7 +154,7 @@ def calculate_gpa(conn, args):
 
     now = _now_iso()
     conn.execute(
-        "UPDATE highered_student_record SET gpa=?, total_credits=?, updated_at=? WHERE student_id=?",
+        "UPDATE educlaw_student SET gpa=?, total_credits=?, updated_at=? WHERE student_id=?",
         (gpa, total_credits, now, student_id)
     )
     conn.commit()
@@ -169,7 +169,7 @@ def degree_audit(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM highered_student_record WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
 
@@ -179,9 +179,9 @@ def degree_audit(conn, args):
 
     completed = conn.execute("""
         SELECT c.code, c.name, c.credits, e.grade
-        FROM highered_enrollment e
-        JOIN highered_section s ON e.section_id = s.id
-        JOIN highered_course c ON s.course_id = c.id
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
         WHERE e.student_id=? AND e.enrollment_status='completed' AND e.grade NOT IN ('F', '')
     """, (student_id,)).fetchall()
 
@@ -217,17 +217,17 @@ def update_academic_standing(conn, args):
     if academic_standing not in VALID_STANDINGS:
         return err(f"Invalid standing: {academic_standing}. Must be one of: {', '.join(VALID_STANDINGS)}")
 
-    row = conn.execute("SELECT * FROM highered_student_record WHERE student_id=?", (student_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
     if not row:
         return err("Student record not found")
 
     old_standing = row["academic_standing"]
     now = _now_iso()
     conn.execute(
-        "UPDATE highered_student_record SET academic_standing=?, updated_at=? WHERE student_id=?",
+        "UPDATE educlaw_student SET academic_standing=?, updated_at=? WHERE student_id=?",
         (academic_standing, now, student_id)
     )
-    audit(conn, SKILL, "highered-update-academic-standing", "highered_student_record", row["id"],
+    audit(conn, SKILL, "highered-update-academic-standing", "educlaw_student", row["id"],
           old_values={"academic_standing": old_standing},
           new_values={"academic_standing": academic_standing})
     conn.commit()
@@ -317,7 +317,7 @@ def academic_standing_report(conn, args):
         return err("--company-id is required")
     rows = conn.execute("""
         SELECT academic_standing, COUNT(*) as count
-        FROM highered_student_record
+        FROM educlaw_student
         WHERE company_id=?
         GROUP BY academic_standing
         ORDER BY count DESC

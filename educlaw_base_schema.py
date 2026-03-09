@@ -4,6 +4,10 @@
 Extracted from educlaw/educlaw/init_db.py (the canonical source).
 Sub-verticals import this instead of duplicating 600+ lines of DDL.
 
+Columns include highered-specific extensions (prerequisites, rank,
+tenure_status, gpa, academic_standing, grade_points, FAFSA fields)
+so educlaw-highered can use these base tables directly.
+
 Usage:
     from educlaw_base_schema import ensure_educlaw_base_tables
     ensure_educlaw_base_tables(conn)  # idempotent — skips if already created
@@ -92,11 +96,15 @@ BASE_TABLES_DDL = """
     CREATE TABLE IF NOT EXISTS educlaw_course (
         id TEXT PRIMARY KEY,
         course_code TEXT NOT NULL DEFAULT '',
+        code TEXT NOT NULL DEFAULT '',
         name TEXT NOT NULL DEFAULT '',
         description TEXT NOT NULL DEFAULT '',
         credit_hours TEXT NOT NULL DEFAULT '0',
+        credits INTEGER NOT NULL DEFAULT 0,
         department_id TEXT REFERENCES department(id) ON DELETE RESTRICT,
+        department TEXT NOT NULL DEFAULT '',
         course_type TEXT NOT NULL DEFAULT 'lecture' CHECK(course_type IN ('lecture','lab','seminar','independent_study','internship','online')),
+        prerequisites TEXT NOT NULL DEFAULT '',
         grade_level TEXT NOT NULL DEFAULT '',
         max_enrollment INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
@@ -188,13 +196,19 @@ BASE_TABLES_DDL = """
     CREATE TABLE IF NOT EXISTS educlaw_instructor (
         id TEXT PRIMARY KEY,
         naming_series TEXT NOT NULL UNIQUE DEFAULT '',
-        employee_id TEXT NOT NULL UNIQUE DEFAULT '' REFERENCES employee(id) ON DELETE RESTRICT,
+        employee_id TEXT UNIQUE DEFAULT '',
+        name TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        department TEXT NOT NULL DEFAULT '',
         credentials TEXT NOT NULL DEFAULT '[]',
         specializations TEXT NOT NULL DEFAULT '[]',
         max_teaching_load_hours INTEGER NOT NULL DEFAULT 0,
         office_location TEXT NOT NULL DEFAULT '',
         office_hours TEXT NOT NULL DEFAULT '[]',
         bio TEXT NOT NULL DEFAULT '',
+        rank TEXT NOT NULL DEFAULT '' CHECK(rank IN ('','adjunct','instructor','assistant_professor','associate_professor','professor','emeritus')),
+        tenure_status TEXT NOT NULL DEFAULT '' CHECK(tenure_status IN ('','non_tenure','tenure_track','tenured')),
+        hire_date TEXT NOT NULL DEFAULT '',
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -304,22 +318,30 @@ BASE_TABLES_DDL = """
         naming_series TEXT NOT NULL UNIQUE DEFAULT '',
         section_number TEXT NOT NULL DEFAULT '',
         course_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_course(id) ON DELETE RESTRICT,
-        academic_term_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
+        academic_term_id TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
         instructor_id TEXT REFERENCES educlaw_instructor(id) ON DELETE RESTRICT,
+        instructor TEXT NOT NULL DEFAULT '',
+        term TEXT NOT NULL DEFAULT '',
+        year INTEGER NOT NULL DEFAULT 0,
         room_id TEXT REFERENCES educlaw_room(id) ON DELETE RESTRICT,
         days_of_week TEXT NOT NULL DEFAULT '[]',
         start_time TEXT NOT NULL DEFAULT '',
         end_time TEXT NOT NULL DEFAULT '',
+        schedule TEXT NOT NULL DEFAULT '',
+        location TEXT NOT NULL DEFAULT '',
         max_enrollment INTEGER NOT NULL DEFAULT 0,
+        capacity INTEGER NOT NULL DEFAULT 0,
         current_enrollment INTEGER NOT NULL DEFAULT 0,
+        enrolled INTEGER NOT NULL DEFAULT 0,
         waitlist_enabled INTEGER NOT NULL DEFAULT 0,
         waitlist_max INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','scheduled','open','closed','cancelled')),
+        section_status TEXT NOT NULL DEFAULT '' CHECK(section_status IN ('','open','closed','cancelled')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         created_by TEXT NOT NULL DEFAULT '',
-        CHECK(max_enrollment > 0),
+        CHECK(max_enrollment >= 0),
         CHECK(current_enrollment >= 0)
     );
 
@@ -397,10 +419,12 @@ BASE_TABLES_DDL = """
     CREATE TABLE IF NOT EXISTS educlaw_student (
         id TEXT PRIMARY KEY,
         naming_series TEXT NOT NULL UNIQUE DEFAULT '',
+        student_id TEXT NOT NULL DEFAULT '',
         first_name TEXT NOT NULL DEFAULT '',
         middle_name TEXT NOT NULL DEFAULT '',
         last_name TEXT NOT NULL DEFAULT '',
         full_name TEXT NOT NULL DEFAULT '',
+        name TEXT NOT NULL DEFAULT '',
         date_of_birth TEXT NOT NULL DEFAULT '',
         gender TEXT NOT NULL DEFAULT '' CHECK(gender IN ('male','female','non_binary','prefer_not_to_say','')),
         email TEXT NOT NULL DEFAULT '',
@@ -410,11 +434,15 @@ BASE_TABLES_DDL = """
         student_applicant_id TEXT REFERENCES educlaw_student_applicant(id) ON DELETE RESTRICT,
         customer_id TEXT REFERENCES customer(id) ON DELETE RESTRICT,
         current_program_id TEXT REFERENCES educlaw_program(id) ON DELETE RESTRICT,
+        program_id TEXT NOT NULL DEFAULT '',
         grade_level TEXT NOT NULL DEFAULT '',
         cohort_year INTEGER NOT NULL DEFAULT 0,
         cumulative_gpa TEXT NOT NULL DEFAULT '',
+        gpa TEXT NOT NULL DEFAULT '',
         total_credits_earned TEXT NOT NULL DEFAULT '0',
-        academic_standing TEXT NOT NULL DEFAULT 'good' CHECK(academic_standing IN ('good','deans_list','honor_roll','probation','suspension')),
+        total_credits INTEGER NOT NULL DEFAULT 0,
+        academic_standing TEXT NOT NULL DEFAULT 'good' CHECK(academic_standing IN ('good','deans_list','honor_roll','probation','suspension','dismissal','dean_list')),
+        expected_graduation TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','graduated','withdrawn','suspended','expelled','transferred','inactive')),
         registration_hold INTEGER NOT NULL DEFAULT 0,
         directory_info_opt_out INTEGER NOT NULL DEFAULT 0,
@@ -453,12 +481,14 @@ BASE_TABLES_DDL = """
     -- educlaw_course_enrollment
     CREATE TABLE IF NOT EXISTS educlaw_course_enrollment (
         id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT,
-        section_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_section(id) ON DELETE RESTRICT,
+        student_id TEXT NOT NULL DEFAULT '',
+        section_id TEXT NOT NULL DEFAULT '',
         enrollment_date TEXT NOT NULL DEFAULT '',
         enrollment_status TEXT NOT NULL DEFAULT 'enrolled' CHECK(enrollment_status IN ('enrolled','completed','dropped','withdrawn','incomplete','waitlisted')),
         drop_date TEXT NOT NULL DEFAULT '',
         drop_reason TEXT NOT NULL DEFAULT '',
+        grade TEXT NOT NULL DEFAULT '',
+        grade_points TEXT NOT NULL DEFAULT '',
         final_letter_grade TEXT NOT NULL DEFAULT '',
         final_grade_points TEXT NOT NULL DEFAULT '0',
         final_percentage TEXT NOT NULL DEFAULT '0',
@@ -539,15 +569,29 @@ BASE_TABLES_DDL = """
     -- educlaw_scholarship
     CREATE TABLE IF NOT EXISTS educlaw_scholarship (
         id TEXT PRIMARY KEY,
+        naming_series TEXT NOT NULL DEFAULT '',
         name TEXT NOT NULL DEFAULT '',
-        student_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_student(id) ON DELETE RESTRICT,
+        student_id TEXT NOT NULL DEFAULT '',
         academic_term_id TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
-        discount_type TEXT NOT NULL DEFAULT '' CHECK(discount_type IN ('fixed','percentage')),
+        discount_type TEXT NOT NULL DEFAULT '' CHECK(discount_type IN ('fixed','percentage','')),
         discount_amount TEXT NOT NULL DEFAULT '0',
         applies_to_category_id TEXT REFERENCES educlaw_fee_category(id) ON DELETE RESTRICT,
         scholarship_status TEXT NOT NULL DEFAULT 'active' CHECK(scholarship_status IN ('active','expired','revoked')),
         reason TEXT NOT NULL DEFAULT '',
         approved_by TEXT NOT NULL DEFAULT '',
+        aid_year TEXT NOT NULL DEFAULT '',
+        total_cost TEXT NOT NULL DEFAULT '0',
+        efc TEXT NOT NULL DEFAULT '0',
+        total_need TEXT NOT NULL DEFAULT '0',
+        grants TEXT NOT NULL DEFAULT '0',
+        scholarships TEXT NOT NULL DEFAULT '0',
+        federal_aid TEXT NOT NULL DEFAULT '0',
+        state_aid TEXT NOT NULL DEFAULT '0',
+        institutional_aid TEXT NOT NULL DEFAULT '0',
+        loans TEXT NOT NULL DEFAULT '0',
+        work_study TEXT NOT NULL DEFAULT '0',
+        total_aid TEXT NOT NULL DEFAULT '0',
+        package_status TEXT NOT NULL DEFAULT '' CHECK(package_status IN ('','draft','offered','accepted','revised','cancelled')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -613,6 +657,7 @@ BASE_TABLES_DDL = """
     CREATE INDEX IF NOT EXISTS idx_announcement_company_status ON educlaw_announcement(company_id, announcement_status, publish_date);
     CREATE INDEX IF NOT EXISTS idx_announcement_audience ON educlaw_announcement(audience_type);
     CREATE INDEX IF NOT EXISTS idx_course_company_code ON educlaw_course(company_id, course_code);
+    CREATE INDEX IF NOT EXISTS idx_course_code_company ON educlaw_course(code, company_id);
     CREATE INDEX IF NOT EXISTS idx_course_department ON educlaw_course(department_id);
     CREATE INDEX IF NOT EXISTS idx_course_grade_level ON educlaw_course(grade_level);
     CREATE INDEX IF NOT EXISTS idx_course_active ON educlaw_course(company_id, is_active);
@@ -649,6 +694,8 @@ BASE_TABLES_DDL = """
     CREATE INDEX IF NOT EXISTS idx_section_room_term ON educlaw_section(room_id, academic_term_id);
     CREATE INDEX IF NOT EXISTS idx_section_company_status ON educlaw_section(company_id, status);
     CREATE INDEX IF NOT EXISTS idx_section_series ON educlaw_section(naming_series);
+    CREATE INDEX IF NOT EXISTS idx_section_term_year ON educlaw_section(term, year);
+    CREATE INDEX IF NOT EXISTS idx_section_company_secstatus ON educlaw_section(company_id, section_status);
     CREATE INDEX IF NOT EXISTS idx_assessment_plan_section ON educlaw_assessment_plan(section_id);
     CREATE INDEX IF NOT EXISTS idx_assessment_category_plan ON educlaw_assessment_category(assessment_plan_id);
     CREATE INDEX IF NOT EXISTS idx_assessment_category_sort ON educlaw_assessment_category(assessment_plan_id, sort_order);
@@ -662,6 +709,8 @@ BASE_TABLES_DDL = """
     CREATE INDEX IF NOT EXISTS idx_student_customer ON educlaw_student(customer_id);
     CREATE INDEX IF NOT EXISTS idx_student_program ON educlaw_student(current_program_id);
     CREATE INDEX IF NOT EXISTS idx_student_series ON educlaw_student(naming_series);
+    CREATE INDEX IF NOT EXISTS idx_student_student_id ON educlaw_student(student_id);
+    CREATE INDEX IF NOT EXISTS idx_student_program_id ON educlaw_student(program_id);
     CREATE INDEX IF NOT EXISTS idx_student_coppa ON educlaw_student(is_coppa_applicable);
     CREATE INDEX IF NOT EXISTS idx_consent_student_type ON educlaw_consent_record(student_id, consent_type);
     CREATE INDEX IF NOT EXISTS idx_consent_company_type ON educlaw_consent_record(company_id, consent_type);

@@ -81,7 +81,7 @@ def add_discipline_incident(conn, args):
 
     try:
         conn.execute(
-            """INSERT INTO sr_discipline_incident
+            """INSERT INTO educlaw_k12_discipline_incident
                (id, naming_series, company_id, school_year, incident_date, incident_time,
                 incident_type, incident_description, campus_location, reported_by,
                 student_count_involved, created_at, updated_at, created_by)
@@ -99,7 +99,7 @@ def add_discipline_incident(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create discipline incident: {e}")
 
-    audit(conn, "sr_discipline_incident", incident_id, "INSERT", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_incident", incident_id, "INSERT", getattr(args, "user_id", None) or "")
     ok({"id": incident_id, "naming_series": naming_series, "message": "Discipline incident created"})
 
 
@@ -108,7 +108,7 @@ def update_discipline_incident(conn, args):
     if not incident_id:
         err("--incident-id is required")
 
-    row = conn.execute("SELECT id FROM sr_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
+    row = conn.execute("SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
     if not row:
         err(f"Discipline incident {incident_id} not found")
 
@@ -130,11 +130,11 @@ def update_discipline_incident(conn, args):
     updates["updated_at"] = _now_iso()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
-        f"UPDATE sr_discipline_incident SET {set_clause} WHERE id = ?",
+        f"UPDATE educlaw_k12_discipline_incident SET {set_clause} WHERE id = ?",
         list(updates.values()) + [incident_id]
     )
     conn.commit()
-    audit(conn, "sr_discipline_incident", incident_id, "UPDATE", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_incident", incident_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": incident_id, "message": "Discipline incident updated"})
 
 
@@ -143,7 +143,7 @@ def get_discipline_incident(conn, args):
     if not incident_id:
         err("--incident-id is required")
 
-    row = conn.execute("SELECT * FROM sr_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
     if not row:
         err(f"Discipline incident {incident_id} not found")
 
@@ -152,7 +152,7 @@ def get_discipline_incident(conn, args):
     # Get students involved
     students = conn.execute(
         """SELECT ds.*, s.first_name, s.last_name, s.full_name
-           FROM sr_discipline_student ds
+           FROM educlaw_k12_discipline_student ds
            JOIN educlaw_student s ON s.id = ds.student_id
            WHERE ds.incident_id = ?""",
         (incident_id,)
@@ -161,7 +161,7 @@ def get_discipline_incident(conn, args):
 
     # Get actions
     actions = conn.execute(
-        "SELECT * FROM sr_discipline_action WHERE incident_id = ? ORDER BY created_at",
+        "SELECT * FROM educlaw_k12_discipline_action WHERE incident_id = ? ORDER BY created_at",
         (incident_id,)
     ).fetchall()
     incident["actions"] = [dict(a) for a in actions]
@@ -202,7 +202,7 @@ def list_discipline_incidents(conn, args):
     offset = int(getattr(args, "offset", None) or 0)
 
     rows = conn.execute(
-        f"SELECT * FROM sr_discipline_incident WHERE {where} ORDER BY incident_date DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM educlaw_k12_discipline_incident WHERE {where} ORDER BY incident_date DESC LIMIT ? OFFSET ?",
         params + [limit, offset]
     ).fetchall()
 
@@ -214,20 +214,20 @@ def delete_discipline_incident(conn, args):
     if not incident_id:
         err("--incident-id is required")
 
-    row = conn.execute("SELECT id FROM sr_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
+    row = conn.execute("SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
     if not row:
         err(f"Discipline incident {incident_id} not found")
 
     # Block delete if students are attached
     student_count = conn.execute(
-        "SELECT COUNT(*) FROM sr_discipline_student WHERE incident_id = ?", (incident_id,)
+        "SELECT COUNT(*) FROM educlaw_k12_discipline_student WHERE incident_id = ?", (incident_id,)
     ).fetchone()[0]
     if student_count > 0:
         err(f"Cannot delete incident with {student_count} student(s) attached. Remove students first.")
 
-    conn.execute("DELETE FROM sr_discipline_incident WHERE id = ?", (incident_id,))
+    conn.execute("DELETE FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,))
     conn.commit()
-    audit(conn, "sr_discipline_incident", incident_id, "DELETE", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_incident", incident_id, "DELETE", getattr(args, "user_id", None) or "")
     ok({"id": incident_id, "message": "Discipline incident deleted"})
 
 
@@ -252,7 +252,7 @@ def add_discipline_student(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM sr_discipline_incident WHERE id = ?", (incident_id,)).fetchone():
+    if not conn.execute("SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone():
         err(f"Discipline incident {incident_id} not found")
     if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
         err(f"Student {student_id} not found")
@@ -276,7 +276,7 @@ def add_discipline_student(conn, args):
 
     try:
         conn.execute(
-            """INSERT INTO sr_discipline_student
+            """INSERT INTO educlaw_k12_discipline_student
                (id, incident_id, student_id, role, is_idea_student, is_504_student,
                 company_id, created_at, created_by)
                VALUES (?,?,?,?,?,?,?,?,?)""",
@@ -285,9 +285,9 @@ def add_discipline_student(conn, args):
         )
         # Update student_count_involved on incident
         conn.execute(
-            """UPDATE sr_discipline_incident
+            """UPDATE educlaw_k12_discipline_incident
                SET student_count_involved = (
-                   SELECT COUNT(*) FROM sr_discipline_student WHERE incident_id = ?
+                   SELECT COUNT(*) FROM educlaw_k12_discipline_student WHERE incident_id = ?
                ), updated_at = ?
                WHERE id = ?""",
             (incident_id, now, incident_id)
@@ -296,7 +296,7 @@ def add_discipline_student(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot add student to incident: {e}")
 
-    audit(conn, "sr_discipline_student", ds_id, "INSERT", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_student", ds_id, "INSERT", getattr(args, "user_id", None) or "")
     ok({"id": ds_id, "incident_id": incident_id, "student_id": student_id,
         "is_idea_student": is_idea, "is_504_student": is_504,
         "message": "Student added to discipline incident"})
@@ -308,7 +308,7 @@ def update_discipline_student(conn, args):
         err("--discipline-student-id is required")
 
     row = conn.execute(
-        "SELECT id FROM sr_discipline_student WHERE id = ?", (discipline_student_id,)
+        "SELECT id FROM educlaw_k12_discipline_student WHERE id = ?", (discipline_student_id,)
     ).fetchone()
     if not row:
         err(f"Discipline student record {discipline_student_id} not found")
@@ -330,11 +330,11 @@ def update_discipline_student(conn, args):
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
-        f"UPDATE sr_discipline_student SET {set_clause} WHERE id = ?",
+        f"UPDATE educlaw_k12_discipline_student SET {set_clause} WHERE id = ?",
         list(updates.values()) + [discipline_student_id]
     )
     conn.commit()
-    audit(conn, "sr_discipline_student", discipline_student_id, "UPDATE", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_student", discipline_student_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": discipline_student_id, "message": "Discipline student record updated"})
 
 
@@ -344,7 +344,7 @@ def remove_discipline_student(conn, args):
         err("--discipline-student-id is required")
 
     row = conn.execute(
-        "SELECT id, incident_id FROM sr_discipline_student WHERE id = ?",
+        "SELECT id, incident_id FROM educlaw_k12_discipline_student WHERE id = ?",
         (discipline_student_id,)
     ).fetchone()
     if not row:
@@ -355,22 +355,22 @@ def remove_discipline_student(conn, args):
 
     # Cascade delete their actions
     conn.execute(
-        "DELETE FROM sr_discipline_action WHERE discipline_student_id = ?",
+        "DELETE FROM educlaw_k12_discipline_action WHERE discipline_student_id = ?",
         (discipline_student_id,)
     )
-    conn.execute("DELETE FROM sr_discipline_student WHERE id = ?", (discipline_student_id,))
+    conn.execute("DELETE FROM educlaw_k12_discipline_student WHERE id = ?", (discipline_student_id,))
 
     # Update student count
     conn.execute(
-        """UPDATE sr_discipline_incident
+        """UPDATE educlaw_k12_discipline_incident
            SET student_count_involved = (
-               SELECT COUNT(*) FROM sr_discipline_student WHERE incident_id = ?
+               SELECT COUNT(*) FROM educlaw_k12_discipline_student WHERE incident_id = ?
            ), updated_at = ?
            WHERE id = ?""",
         (incident_id, now, incident_id)
     )
     conn.commit()
-    audit(conn, "sr_discipline_student", discipline_student_id, "DELETE", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_student", discipline_student_id, "DELETE", getattr(args, "user_id", None) or "")
     ok({"id": discipline_student_id, "message": "Student removed from incident"})
 
 
@@ -381,7 +381,7 @@ def list_discipline_students(conn, args):
 
     rows = conn.execute(
         """SELECT ds.*, s.first_name, s.last_name, s.full_name, s.grade_level
-           FROM sr_discipline_student ds
+           FROM educlaw_k12_discipline_student ds
            JOIN educlaw_student s ON s.id = ds.student_id
            WHERE ds.incident_id = ?
            ORDER BY ds.role, s.last_name""",
@@ -410,7 +410,7 @@ def add_discipline_action(conn, args):
         err("--company-id is required")
 
     ds_row = conn.execute(
-        "SELECT id, incident_id, student_id, is_idea_student FROM sr_discipline_student WHERE id = ?",
+        "SELECT id, incident_id, student_id, is_idea_student FROM educlaw_k12_discipline_student WHERE id = ?",
         (discipline_student_id,)
     ).fetchone()
     if not ds_row:
@@ -442,7 +442,7 @@ def add_discipline_action(conn, args):
 
     try:
         conn.execute(
-            """INSERT INTO sr_discipline_action
+            """INSERT INTO educlaw_k12_discipline_action
                (id, discipline_student_id, incident_id, student_id, action_type,
                 start_date, end_date, days_removed, alternative_services_provided,
                 alternative_services_description, mdr_required, mdr_outcome, mdr_date,
@@ -462,7 +462,7 @@ def add_discipline_action(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create discipline action: {e}")
 
-    audit(conn, "sr_discipline_action", action_id, "INSERT", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_action", action_id, "INSERT", getattr(args, "user_id", None) or "")
     ok({"id": action_id, "action_type": action_type, "mdr_required": mdr_required,
         "message": "Discipline action added"})
 
@@ -472,7 +472,7 @@ def update_discipline_action(conn, args):
     if not action_id:
         err("--action-id is required")
 
-    row = conn.execute("SELECT id FROM sr_discipline_action WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute("SELECT id FROM educlaw_k12_discipline_action WHERE id = ?", (action_id,)).fetchone()
     if not row:
         err(f"Discipline action {action_id} not found")
 
@@ -497,11 +497,11 @@ def update_discipline_action(conn, args):
     updates["updated_at"] = _now_iso()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
-        f"UPDATE sr_discipline_action SET {set_clause} WHERE id = ?",
+        f"UPDATE educlaw_k12_discipline_action SET {set_clause} WHERE id = ?",
         list(updates.values()) + [action_id]
     )
     conn.commit()
-    audit(conn, "sr_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": action_id, "message": "Discipline action updated"})
 
 
@@ -517,19 +517,19 @@ def record_mdr_outcome(conn, args):
     if mdr_outcome not in VALID_MDR_OUTCOMES:
         err(f"--mdr-outcome must be one of: {', '.join(VALID_MDR_OUTCOMES)}")
 
-    row = conn.execute("SELECT id FROM sr_discipline_action WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute("SELECT id FROM educlaw_k12_discipline_action WHERE id = ?", (action_id,)).fetchone()
     if not row:
         err(f"Discipline action {action_id} not found")
 
     now = _now_iso()
     conn.execute(
-        """UPDATE sr_discipline_action
+        """UPDATE educlaw_k12_discipline_action
            SET mdr_outcome = ?, mdr_date = ?, updated_at = ?
            WHERE id = ?""",
         (mdr_outcome, mdr_date or now[:10], now, action_id)
     )
     conn.commit()
-    audit(conn, "sr_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
+    audit(conn, "educlaw_k12_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": action_id, "mdr_outcome": mdr_outcome, "message": "MDR outcome recorded"})
 
 
@@ -538,7 +538,7 @@ def get_discipline_action(conn, args):
     if not action_id:
         err("--action-id is required")
 
-    row = conn.execute("SELECT * FROM sr_discipline_action WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_k12_discipline_action WHERE id = ?", (action_id,)).fetchone()
     if not row:
         err(f"Discipline action {action_id} not found")
 
@@ -579,7 +579,7 @@ def list_discipline_actions(conn, args):
     offset = int(getattr(args, "offset", None) or 0)
 
     rows = conn.execute(
-        f"SELECT * FROM sr_discipline_action {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM educlaw_k12_discipline_action {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
         params + [limit, offset]
     ).fetchall()
 
@@ -604,11 +604,11 @@ def get_discipline_summary(conn, args):
                ds.is_idea_student,
                COUNT(*) as count,
                SUM(da.days_removed) as total_days_removed
-           FROM sr_discipline_action da
-           JOIN sr_discipline_student ds ON ds.id = da.discipline_student_id
+           FROM educlaw_k12_discipline_action da
+           JOIN educlaw_k12_discipline_student ds ON ds.id = da.discipline_student_id
            JOIN educlaw_student s ON s.id = da.student_id
            LEFT JOIN sr_student_supplement ss ON ss.student_id = da.student_id
-           JOIN sr_discipline_incident di ON di.id = da.incident_id
+           JOIN educlaw_k12_discipline_incident di ON di.id = da.incident_id
            WHERE da.company_id = ? AND di.school_year = ?
            GROUP BY da.action_type, ss.race_federal_rollup, s.gender, ds.is_idea_student
            ORDER BY da.action_type, ss.race_federal_rollup""",
@@ -617,23 +617,23 @@ def get_discipline_summary(conn, args):
 
     # Total incident count
     incident_count = conn.execute(
-        "SELECT COUNT(*) FROM sr_discipline_incident WHERE company_id = ? AND school_year = ?",
+        "SELECT COUNT(*) FROM educlaw_k12_discipline_incident WHERE company_id = ? AND school_year = ?",
         (company_id, int(school_year))
     ).fetchone()[0]
 
     # Total students involved
     student_count = conn.execute(
         """SELECT COUNT(DISTINCT ds.student_id)
-           FROM sr_discipline_student ds
-           JOIN sr_discipline_incident di ON di.id = ds.incident_id
+           FROM educlaw_k12_discipline_student ds
+           JOIN educlaw_k12_discipline_incident di ON di.id = ds.incident_id
            WHERE di.company_id = ? AND di.school_year = ?""",
         (company_id, int(school_year))
     ).fetchone()[0]
 
     # MDR required but pending count
     mdr_pending = conn.execute(
-        """SELECT COUNT(*) FROM sr_discipline_action da
-           JOIN sr_discipline_incident di ON di.id = da.incident_id
+        """SELECT COUNT(*) FROM educlaw_k12_discipline_action da
+           JOIN educlaw_k12_discipline_incident di ON di.id = da.incident_id
            WHERE da.company_id = ? AND di.school_year = ?
            AND da.mdr_required = 1 AND (da.mdr_outcome = '' OR da.mdr_outcome = 'pending')""",
         (company_id, int(school_year))

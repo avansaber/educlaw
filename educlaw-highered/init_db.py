@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""EduClaw Higher Education schema — 14 tables, ~120 columns, ~40 indexes.
+"""EduClaw Higher Education schema — 12 tables, ~80 columns, ~30 indexes.
 
-Domains: registrar (4 tables), records (2 tables), finaid (2 tables),
-         alumni (3 tables), faculty (3 tables including course_assignment)
+6 tables (course, section, enrollment, student_record, aid_package, faculty)
+have been merged into the educlaw base schema. This file creates only the
+highered-specific tables that are NOT shared with other educlaw sub-verticals.
+
+Domains: registrar (1 table), records (2 tables), finaid (1 table),
+         alumni (3 tables), faculty (2 tables), admissions (2 tables),
+         holds (1 table)
 
 Prerequisite: ERPClaw init_db.py must have run first (creates foundation tables).
+              educlaw base schema must also be present (provides educlaw_course,
+              educlaw_section, educlaw_student, educlaw_course_enrollment,
+              educlaw_scholarship, educlaw_instructor).
 Owning skill: educlaw-highered
 Run: python3 init_db.py [db_path]
 """
@@ -28,6 +36,10 @@ def create_educlaw_highered_tables(db_path):
         sys.exit(1)
 
     conn.executescript("""
+    -- ==========================================================
+    -- Registrar domain (1 table — degree programs)
+    -- ==========================================================
+
     CREATE TABLE IF NOT EXISTS highered_degree_program (
         id TEXT PRIMARY KEY,
         naming_series TEXT NOT NULL DEFAULT '',
@@ -43,75 +55,9 @@ def create_educlaw_highered_tables(db_path):
     CREATE INDEX IF NOT EXISTS idx_hdp_company ON highered_degree_program(company_id);
     CREATE INDEX IF NOT EXISTS idx_hdp_dept ON highered_degree_program(department);
 
-    CREATE TABLE IF NOT EXISTS highered_course (
-        id TEXT PRIMARY KEY,
-        code TEXT NOT NULL DEFAULT '',
-        name TEXT NOT NULL DEFAULT '',
-        credits INTEGER NOT NULL DEFAULT 3,
-        department TEXT NOT NULL DEFAULT '',
-        prerequisites TEXT NOT NULL DEFAULT '',
-        description TEXT NOT NULL DEFAULT '',
-        is_active INTEGER NOT NULL DEFAULT 1,
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_hc_company ON highered_course(company_id);
-    CREATE INDEX IF NOT EXISTS idx_hc_code ON highered_course(code);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_hc_code_company ON highered_course(code, company_id);
-
-    CREATE TABLE IF NOT EXISTS highered_section (
-        id TEXT PRIMARY KEY,
-        course_id TEXT NOT NULL DEFAULT '' REFERENCES highered_course(id) ON DELETE RESTRICT,
-        term TEXT NOT NULL DEFAULT '',
-        year INTEGER NOT NULL DEFAULT 0,
-        instructor TEXT NOT NULL DEFAULT '',
-        capacity INTEGER NOT NULL DEFAULT 30,
-        enrolled INTEGER NOT NULL DEFAULT 0,
-        schedule TEXT NOT NULL DEFAULT '',
-        location TEXT NOT NULL DEFAULT '',
-        section_status TEXT NOT NULL DEFAULT 'open' CHECK(section_status IN ('open','closed','cancelled')),
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_hs_company ON highered_section(company_id);
-    CREATE INDEX IF NOT EXISTS idx_hs_course ON highered_section(course_id);
-    CREATE INDEX IF NOT EXISTS idx_hs_term ON highered_section(term, year);
-
-    CREATE TABLE IF NOT EXISTS highered_enrollment (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL DEFAULT '',
-        section_id TEXT NOT NULL DEFAULT '' REFERENCES highered_section(id) ON DELETE RESTRICT,
-        enrollment_date TEXT NOT NULL DEFAULT '',
-        enrollment_status TEXT NOT NULL DEFAULT 'enrolled' CHECK(enrollment_status IN ('enrolled','dropped','withdrawn','completed')),
-        grade TEXT NOT NULL DEFAULT '',
-        grade_points TEXT NOT NULL DEFAULT '',
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_he_student ON highered_enrollment(student_id);
-    CREATE INDEX IF NOT EXISTS idx_he_section ON highered_enrollment(section_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_he_student_section ON highered_enrollment(student_id, section_id);
-
-    CREATE TABLE IF NOT EXISTS highered_student_record (
-        id TEXT PRIMARY KEY,
-        naming_series TEXT NOT NULL DEFAULT '',
-        student_id TEXT NOT NULL DEFAULT '',
-        name TEXT NOT NULL DEFAULT '',
-        email TEXT NOT NULL DEFAULT '',
-        program_id TEXT NOT NULL DEFAULT '' REFERENCES highered_degree_program(id) ON DELETE RESTRICT,
-        enrollment_date TEXT NOT NULL DEFAULT '',
-        expected_graduation TEXT NOT NULL DEFAULT '',
-        total_credits INTEGER NOT NULL DEFAULT 0,
-        gpa TEXT NOT NULL DEFAULT '0.00',
-        academic_standing TEXT NOT NULL DEFAULT 'good' CHECK(academic_standing IN ('good','probation','suspension','dismissal','dean_list')),
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_hsr_company ON highered_student_record(company_id);
-    CREATE INDEX IF NOT EXISTS idx_hsr_student ON highered_student_record(student_id);
-    CREATE INDEX IF NOT EXISTS idx_hsr_program ON highered_student_record(program_id);
+    -- ==========================================================
+    -- Records domain (3 tables — holds, transcript, academic standing)
+    -- ==========================================================
 
     CREATE TABLE IF NOT EXISTS highered_hold (
         id TEXT PRIMARY KEY,
@@ -128,30 +74,47 @@ def create_educlaw_highered_tables(db_path):
     CREATE INDEX IF NOT EXISTS idx_hh_student ON highered_hold(student_id);
     CREATE INDEX IF NOT EXISTS idx_hh_status ON highered_hold(hold_status);
 
-    CREATE TABLE IF NOT EXISTS highered_aid_package (
+    CREATE TABLE IF NOT EXISTS highered_transcript (
         id TEXT PRIMARY KEY,
-        naming_series TEXT NOT NULL DEFAULT '',
         student_id TEXT NOT NULL DEFAULT '',
-        aid_year TEXT NOT NULL DEFAULT '',
-        total_cost TEXT NOT NULL DEFAULT '0.00',
-        efc TEXT NOT NULL DEFAULT '0.00',
-        total_need TEXT NOT NULL DEFAULT '0.00',
-        grants TEXT NOT NULL DEFAULT '0.00',
-        scholarships TEXT NOT NULL DEFAULT '0.00',
-        loans TEXT NOT NULL DEFAULT '0.00',
-        work_study TEXT NOT NULL DEFAULT '0.00',
-        total_aid TEXT NOT NULL DEFAULT '0.00',
-        package_status TEXT NOT NULL DEFAULT 'draft' CHECK(package_status IN ('draft','offered','accepted','revised','cancelled')),
+        section_id TEXT NOT NULL DEFAULT '',
+        course_code TEXT NOT NULL DEFAULT '',
+        course_name TEXT NOT NULL DEFAULT '',
+        credits INTEGER NOT NULL DEFAULT 3,
+        grade TEXT NOT NULL DEFAULT '',
+        grade_points TEXT NOT NULL DEFAULT '0.00',
+        term TEXT NOT NULL DEFAULT '',
+        year INTEGER NOT NULL DEFAULT 0,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE INDEX IF NOT EXISTS idx_hap_student ON highered_aid_package(student_id);
-    CREATE INDEX IF NOT EXISTS idx_hap_company ON highered_aid_package(company_id);
+    CREATE INDEX IF NOT EXISTS idx_ht_student ON highered_transcript(student_id);
+    CREATE INDEX IF NOT EXISTS idx_ht_company ON highered_transcript(company_id);
+
+    CREATE TABLE IF NOT EXISTS highered_academic_standing (
+        id TEXT PRIMARY KEY,
+        student_id TEXT NOT NULL DEFAULT '',
+        term TEXT NOT NULL DEFAULT '',
+        year INTEGER NOT NULL DEFAULT 0,
+        term_gpa TEXT NOT NULL DEFAULT '0.00',
+        cumulative_gpa TEXT NOT NULL DEFAULT '0.00',
+        total_credits INTEGER NOT NULL DEFAULT 0,
+        standing TEXT NOT NULL DEFAULT 'good' CHECK(standing IN ('good','probation','suspension','dismissal','dean_list')),
+        notes TEXT NOT NULL DEFAULT '',
+        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_has_student ON highered_academic_standing(student_id);
+    CREATE INDEX IF NOT EXISTS idx_has_company ON highered_academic_standing(company_id);
+
+    -- ==========================================================
+    -- Financial Aid domain (1 table — disbursements)
+    -- Note: aid_package fields merged into educlaw_scholarship
+    -- ==========================================================
 
     CREATE TABLE IF NOT EXISTS highered_disbursement (
         id TEXT PRIMARY KEY,
-        aid_package_id TEXT NOT NULL DEFAULT '' REFERENCES highered_aid_package(id) ON DELETE RESTRICT,
+        aid_package_id TEXT NOT NULL DEFAULT '',
         disbursement_date TEXT NOT NULL DEFAULT '',
         amount TEXT NOT NULL DEFAULT '0.00',
         aid_type TEXT NOT NULL DEFAULT 'grant' CHECK(aid_type IN ('grant','scholarship','loan','work_study')),
@@ -162,6 +125,10 @@ def create_educlaw_highered_tables(db_path):
     );
     CREATE INDEX IF NOT EXISTS idx_hd_package ON highered_disbursement(aid_package_id);
     CREATE INDEX IF NOT EXISTS idx_hd_company ON highered_disbursement(company_id);
+
+    -- ==========================================================
+    -- Alumni domain (3 tables)
+    -- ==========================================================
 
     CREATE TABLE IF NOT EXISTS highered_alumnus (
         id TEXT PRIMARY KEY,
@@ -205,26 +172,15 @@ def create_educlaw_highered_tables(db_path):
     CREATE INDEX IF NOT EXISTS idx_hgr_alumnus ON highered_giving_record(alumnus_id);
     CREATE INDEX IF NOT EXISTS idx_hgr_company ON highered_giving_record(company_id);
 
-    CREATE TABLE IF NOT EXISTS highered_faculty (
-        id TEXT PRIMARY KEY,
-        naming_series TEXT NOT NULL DEFAULT '',
-        name TEXT NOT NULL DEFAULT '',
-        email TEXT NOT NULL DEFAULT '',
-        department TEXT NOT NULL DEFAULT '',
-        rank TEXT NOT NULL DEFAULT 'instructor' CHECK(rank IN ('adjunct','instructor','assistant_professor','associate_professor','professor','emeritus')),
-        tenure_status TEXT NOT NULL DEFAULT 'non_tenure' CHECK(tenure_status IN ('non_tenure','tenure_track','tenured')),
-        hire_date TEXT NOT NULL DEFAULT '',
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_hf_company ON highered_faculty(company_id);
-    CREATE INDEX IF NOT EXISTS idx_hf_dept ON highered_faculty(department);
+    -- ==========================================================
+    -- Faculty domain (2 tables — course_assignment, research_grant)
+    -- Note: highered_faculty merged into educlaw_instructor
+    -- ==========================================================
 
     CREATE TABLE IF NOT EXISTS highered_course_assignment (
         id TEXT PRIMARY KEY,
-        faculty_id TEXT NOT NULL DEFAULT '' REFERENCES highered_faculty(id) ON DELETE RESTRICT,
-        section_id TEXT NOT NULL DEFAULT '' REFERENCES highered_section(id) ON DELETE RESTRICT,
+        faculty_id TEXT NOT NULL DEFAULT '',
+        section_id TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'primary' CHECK(role IN ('primary','secondary','ta')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -235,7 +191,7 @@ def create_educlaw_highered_tables(db_path):
 
     CREATE TABLE IF NOT EXISTS highered_research_grant (
         id TEXT PRIMARY KEY,
-        faculty_id TEXT NOT NULL DEFAULT '' REFERENCES highered_faculty(id) ON DELETE RESTRICT,
+        faculty_id TEXT NOT NULL DEFAULT '',
         title TEXT NOT NULL DEFAULT '',
         funding_agency TEXT NOT NULL DEFAULT '',
         amount TEXT NOT NULL DEFAULT '0.00',
@@ -247,43 +203,6 @@ def create_educlaw_highered_tables(db_path):
     );
     CREATE INDEX IF NOT EXISTS idx_hrg_faculty ON highered_research_grant(faculty_id);
     CREATE INDEX IF NOT EXISTS idx_hrg_company ON highered_research_grant(company_id);
-
-    -- ==========================================================
-    -- Records extensions (2 tables)
-    -- ==========================================================
-
-    CREATE TABLE IF NOT EXISTS highered_transcript (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL DEFAULT '',
-        section_id TEXT NOT NULL DEFAULT '' REFERENCES highered_section(id) ON DELETE RESTRICT,
-        course_code TEXT NOT NULL DEFAULT '',
-        course_name TEXT NOT NULL DEFAULT '',
-        credits INTEGER NOT NULL DEFAULT 3,
-        grade TEXT NOT NULL DEFAULT '',
-        grade_points TEXT NOT NULL DEFAULT '0.00',
-        term TEXT NOT NULL DEFAULT '',
-        year INTEGER NOT NULL DEFAULT 0,
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_ht_student ON highered_transcript(student_id);
-    CREATE INDEX IF NOT EXISTS idx_ht_company ON highered_transcript(company_id);
-
-    CREATE TABLE IF NOT EXISTS highered_academic_standing (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL DEFAULT '',
-        term TEXT NOT NULL DEFAULT '',
-        year INTEGER NOT NULL DEFAULT 0,
-        term_gpa TEXT NOT NULL DEFAULT '0.00',
-        cumulative_gpa TEXT NOT NULL DEFAULT '0.00',
-        total_credits INTEGER NOT NULL DEFAULT 0,
-        standing TEXT NOT NULL DEFAULT 'good' CHECK(standing IN ('good','probation','suspension','dismissal','dean_list')),
-        notes TEXT NOT NULL DEFAULT '',
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_has_student ON highered_academic_standing(student_id);
-    CREATE INDEX IF NOT EXISTS idx_has_company ON highered_academic_standing(company_id);
 
     -- ==========================================================
     -- Admissions domain (2 tables)
@@ -332,7 +251,7 @@ def create_educlaw_highered_tables(db_path):
 
     conn.commit()
     conn.close()
-    print(f"educlaw-highered: 18 tables created in {db_path}")
+    print(f"educlaw-highered: 12 tables created in {db_path}")
 
 
 if __name__ == "__main__":

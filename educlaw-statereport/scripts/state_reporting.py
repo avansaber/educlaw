@@ -902,10 +902,10 @@ def generate_crdc_report(conn, args):
     # Discipline by race × sex × action_type
     discipline_by_subgroup = conn.execute(
         """SELECT ss.race_federal_rollup, s.gender, da.action_type, COUNT(*) as count
-           FROM sr_discipline_action da
+           FROM educlaw_k12_discipline_action da
            JOIN educlaw_student s ON s.id = da.student_id
            LEFT JOIN sr_student_supplement ss ON ss.student_id = da.student_id
-           JOIN sr_discipline_incident di ON di.id = da.incident_id
+           JOIN educlaw_k12_discipline_incident di ON di.id = da.incident_id
            WHERE da.company_id = ? AND di.school_year = ?
            GROUP BY ss.race_federal_rollup, s.gender, da.action_type""",
         (company_id, yr)

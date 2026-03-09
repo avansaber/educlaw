@@ -26,8 +26,8 @@ def enrollment_report(conn, args):
                SUM(CASE WHEN e.enrollment_status = 'dropped' THEN 1 ELSE 0 END) as dropped,
                SUM(CASE WHEN e.enrollment_status = 'withdrawn' THEN 1 ELSE 0 END) as withdrawn,
                SUM(CASE WHEN e.enrollment_status = 'completed' THEN 1 ELSE 0 END) as completed
-        FROM highered_enrollment e
-        JOIN highered_section s ON e.section_id = s.id
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
         WHERE s.company_id=?
         GROUP BY s.term, s.year
         ORDER BY s.year DESC, s.term
@@ -40,11 +40,11 @@ def retention_report(conn, args):
     if not company_id:
         return err("--company-id is required")
     total = conn.execute(
-        "SELECT COUNT(*) as cnt FROM highered_student_record WHERE company_id=?",
+        "SELECT COUNT(*) as cnt FROM educlaw_student WHERE company_id=?",
         (company_id,)
     ).fetchone()["cnt"]
     active = conn.execute(
-        "SELECT COUNT(*) as cnt FROM highered_student_record WHERE company_id=? AND academic_standing NOT IN ('suspension','dismissal')",
+        "SELECT COUNT(*) as cnt FROM educlaw_student WHERE company_id=? AND academic_standing NOT IN ('suspension','dismissal')",
         (company_id,)
     ).fetchone()["cnt"]
     retention_rate = round(active / total * 100, 1) if total > 0 else 0
@@ -65,7 +65,7 @@ def degree_completion_report(conn, args):
                COUNT(sr.id) as total_students,
                SUM(CASE WHEN sr.total_credits >= dp.credits_required AND sr.gpa >= '2.00'
                    THEN 1 ELSE 0 END) as eligible_for_graduation
-        FROM highered_student_record sr
+        FROM educlaw_student sr
         JOIN highered_degree_program dp ON sr.program_id = dp.id
         WHERE sr.company_id=?
         GROUP BY dp.id
@@ -108,7 +108,7 @@ def faculty_workload_summary(conn, args):
                COUNT(DISTINCT f.id) as faculty_count,
                COUNT(ca.id) as total_assignments,
                ROUND(CAST(COUNT(ca.id) AS REAL) / MAX(COUNT(DISTINCT f.id), 1), 1) as avg_load
-        FROM highered_faculty f
+        FROM educlaw_instructor f
         LEFT JOIN highered_course_assignment ca ON ca.faculty_id = f.id
         WHERE f.company_id=?
         GROUP BY f.department

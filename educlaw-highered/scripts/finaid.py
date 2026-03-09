@@ -15,7 +15,7 @@ try:
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
 
-    ENTITY_PREFIXES.setdefault("highered_aid_package", "HAID-")
+    ENTITY_PREFIXES.setdefault("educlaw_scholarship", "HAID-")
 except ImportError:
     pass
 
@@ -52,9 +52,9 @@ def add_aid_package(conn, args):
     ))
     pkg_id = str(uuid.uuid4())
     now = _now_iso()
-    naming = get_next_name(conn, "highered_aid_package", company_id=company_id)
+    naming = get_next_name(conn, "educlaw_scholarship", company_id=company_id)
     conn.execute("""
-        INSERT INTO highered_aid_package
+        INSERT INTO educlaw_scholarship
         (id, naming_series, student_id, aid_year, total_cost, efc, total_need,
          grants, scholarships, loans, work_study, total_aid,
          package_status, company_id, created_at, updated_at)
@@ -62,7 +62,7 @@ def add_aid_package(conn, args):
     """, (pkg_id, naming, student_id, aid_year, total_cost, efc, total_need,
           grants, scholarships, loans, work_study, total_aid,
           "draft", company_id, now, now))
-    audit(conn, SKILL, "highered-add-aid-package", "highered_aid_package", pkg_id,
+    audit(conn, SKILL, "highered-add-aid-package", "educlaw_scholarship", pkg_id,
           new_values={"student_id": student_id, "total_aid": total_aid})
     conn.commit()
     ok({"id": pkg_id, "naming_series": naming, "student_id": student_id,
@@ -73,7 +73,7 @@ def update_aid_package(conn, args):
     pkg_id = getattr(args, "id", None)
     if not pkg_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_aid_package WHERE id=?", (pkg_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (pkg_id,)).fetchone()
     if not row:
         return err("Aid package not found")
     if row["package_status"] == "cancelled":
@@ -113,7 +113,7 @@ def update_aid_package(conn, args):
     updates.append("updated_at=?")
     params.append(_now_iso())
     params.append(pkg_id)
-    conn.execute(f"UPDATE highered_aid_package SET {','.join(updates)} WHERE id=?", params)
+    conn.execute(f"UPDATE educlaw_scholarship SET {','.join(updates)} WHERE id=?", params)
     conn.commit()
     ok({"id": pkg_id, "updated": True})
 
@@ -122,7 +122,7 @@ def get_aid_package(conn, args):
     pkg_id = getattr(args, "id", None)
     if not pkg_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_aid_package WHERE id=?", (pkg_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (pkg_id,)).fetchone()
     if not row:
         return err("Aid package not found")
     ok(dict(row))
@@ -132,7 +132,7 @@ def list_aid_packages(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_aid_package WHERE company_id=?"
+    q = "SELECT * FROM educlaw_scholarship WHERE company_id=?"
     p = [company_id]
     student_id = getattr(args, "student_id", None)
     if student_id:
@@ -161,7 +161,7 @@ def add_disbursement(conn, args):
     aid_package_id = getattr(args, "aid_package_id", None)
     if not aid_package_id:
         return err("--aid-package-id is required")
-    pkg = conn.execute("SELECT * FROM highered_aid_package WHERE id=?", (aid_package_id,)).fetchone()
+    pkg = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (aid_package_id,)).fetchone()
     if not pkg:
         return err(f"Aid package {aid_package_id} not found")
     if pkg["package_status"] not in ("offered", "accepted"):
@@ -209,22 +209,22 @@ def calculate_sap(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM highered_student_record WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
     program = conn.execute("SELECT * FROM highered_degree_program WHERE id=?", (record["program_id"],)).fetchone()
     attempted = conn.execute("""
         SELECT SUM(c.credits) as total_credits
-        FROM highered_enrollment e
-        JOIN highered_section s ON e.section_id = s.id
-        JOIN highered_course c ON s.course_id = c.id
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
         WHERE e.student_id=? AND e.enrollment_status IN ('completed','dropped','enrolled')
     """, (student_id,)).fetchone()
     completed = conn.execute("""
         SELECT SUM(c.credits) as total_credits
-        FROM highered_enrollment e
-        JOIN highered_section s ON e.section_id = s.id
-        JOIN highered_course c ON s.course_id = c.id
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
         WHERE e.student_id=? AND e.enrollment_status='completed' AND e.grade NOT IN ('F','')
     """, (student_id,)).fetchone()
     attempted_credits = attempted["total_credits"] or 0
@@ -261,7 +261,7 @@ def aid_summary_report(conn, args):
     if not company_id:
         return err("--company-id is required")
     aid_year = getattr(args, "aid_year", None)
-    q = "SELECT package_status, COUNT(*) as count FROM highered_aid_package WHERE company_id=?"
+    q = "SELECT package_status, COUNT(*) as count FROM educlaw_scholarship WHERE company_id=?"
     p = [company_id]
     if aid_year:
         q += " AND aid_year=?"
@@ -275,7 +275,7 @@ def award_letter_report(conn, args):
     pkg_id = getattr(args, "id", None)
     if not pkg_id:
         return err("--id is required")
-    pkg = conn.execute("SELECT * FROM highered_aid_package WHERE id=?", (pkg_id,)).fetchone()
+    pkg = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (pkg_id,)).fetchone()
     if not pkg:
         return err("Aid package not found")
     disbursements = conn.execute("SELECT * FROM highered_disbursement WHERE aid_package_id=?", (pkg_id,)).fetchall()

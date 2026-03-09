@@ -15,7 +15,7 @@ try:
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
 
-    ENTITY_PREFIXES.setdefault("highered_faculty", "HFAC-")
+    ENTITY_PREFIXES.setdefault("educlaw_instructor", "HFAC-")
 except ImportError:
     pass
 
@@ -59,16 +59,16 @@ def add_faculty(conn, args):
 
     fac_id = str(uuid.uuid4())
     now = _now_iso()
-    naming = get_next_name(conn, "highered_faculty", company_id=company_id)
+    naming = get_next_name(conn, "educlaw_instructor", company_id=company_id)
 
     conn.execute("""
-        INSERT INTO highered_faculty
+        INSERT INTO educlaw_instructor
         (id, naming_series, name, email, department, rank, tenure_status,
          hire_date, company_id, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)
     """, (fac_id, naming, name, email, department, rank, tenure_status,
           hire_date, company_id, now, now))
-    audit(conn, SKILL, "highered-add-faculty", "highered_faculty", fac_id,
+    audit(conn, SKILL, "highered-add-faculty", "educlaw_instructor", fac_id,
           new_values={"name": name, "rank": rank})
     conn.commit()
     ok({"id": fac_id, "naming_series": naming, "name": name,
@@ -79,7 +79,7 @@ def update_faculty(conn, args):
     fac_id = getattr(args, "id", None)
     if not fac_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_faculty WHERE id=?", (fac_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_instructor WHERE id=?", (fac_id,)).fetchone()
     if not row:
         return err("Faculty not found")
 
@@ -106,7 +106,7 @@ def update_faculty(conn, args):
     updates.append("updated_at=?")
     params.append(_now_iso())
     params.append(fac_id)
-    conn.execute(f"UPDATE highered_faculty SET {','.join(updates)} WHERE id=?", params)
+    conn.execute(f"UPDATE educlaw_instructor SET {','.join(updates)} WHERE id=?", params)
     conn.commit()
     ok({"id": fac_id, "updated": True})
 
@@ -115,7 +115,7 @@ def list_faculty(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_faculty WHERE company_id=?"
+    q = "SELECT * FROM educlaw_instructor WHERE company_id=?"
     params = [company_id]
     department = getattr(args, "department", None)
     if department:
@@ -148,12 +148,12 @@ def add_course_assignment(conn, args):
     faculty_id = getattr(args, "faculty_id", None)
     if not faculty_id:
         return err("--faculty-id is required")
-    if not conn.execute("SELECT id FROM highered_faculty WHERE id=?", (faculty_id,)).fetchone():
+    if not conn.execute("SELECT id FROM educlaw_instructor WHERE id=?", (faculty_id,)).fetchone():
         return err(f"Faculty {faculty_id} not found")
     section_id = getattr(args, "section_id", None)
     if not section_id:
         return err("--section-id is required")
-    if not conn.execute("SELECT id FROM highered_section WHERE id=?", (section_id,)).fetchone():
+    if not conn.execute("SELECT id FROM educlaw_section WHERE id=?", (section_id,)).fetchone():
         return err(f"Section {section_id} not found")
 
     role = getattr(args, "role", None) or "primary"
@@ -209,7 +209,7 @@ def add_research_grant(conn, args):
     faculty_id = getattr(args, "faculty_id", None)
     if not faculty_id:
         return err("--faculty-id is required")
-    if not conn.execute("SELECT id FROM highered_faculty WHERE id=?", (faculty_id,)).fetchone():
+    if not conn.execute("SELECT id FROM educlaw_instructor WHERE id=?", (faculty_id,)).fetchone():
         return err(f"Faculty {faculty_id} not found")
     title = getattr(args, "title", None)
     if not title:
@@ -271,7 +271,7 @@ def faculty_workload_report(conn, args):
                COUNT(ca.id) as sections_assigned,
                (SELECT COUNT(*) FROM highered_research_grant g
                 WHERE g.faculty_id = f.id AND g.grant_status = 'active') as active_grants
-        FROM highered_faculty f
+        FROM educlaw_instructor f
         LEFT JOIN highered_course_assignment ca ON ca.faculty_id = f.id
         WHERE f.company_id=?
         GROUP BY f.id

@@ -2,16 +2,17 @@
 name: educlaw-lms
 version: 1.0.0
 description: LMS sync, assignments, course materials, and online gradebook for EduClaw. Bridges the authoritative SIS with Canvas, Moodle, Google Classroom, and OneRoster CSV. 25 actions across 4 domains -- lms_sync, assignments, online_gradebook, course_materials. FERPA/COPPA compliant. DPA hard-gated. Credentials AES-256 encrypted at rest.
-author: AvanSaber / Nikhil Jathar
-homepage: https://www.educlaw.ai
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
 tier: 4
 category: education
-requires: [erpclaw-setup, erpclaw-gl, erpclaw-selling, erpclaw-payments, erpclaw-hr, educlaw]
+requires: [erpclaw, educlaw]
 database: ~/.openclaw/erpclaw/data.sqlite
-scripts: scripts/db_query.py
 user-invocable: true
 tags: [educlaw, lms, canvas, moodle, google-classroom, oneroster, sync, gradebook, assignments, course-materials, ferpa, coppa, sis, education]
+scripts:
+  - scripts/db_query.py
 metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":["EDUCLAW_LMS_ENCRYPTION_KEY"],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
@@ -56,8 +57,8 @@ for LMS, sync log, grade conflict, oneroster export, close course.
 # 1. Set encryption key (add to shell profile)
 export EDUCLAW_LMS_ENCRYPTION_KEY="your-secure-passphrase-here"
 
-# 2. Initialize database (erpclaw-setup + educlaw must already be installed)
-python3 {baseDir}/../erpclaw-setup/scripts/db_query.py --action initialize-database
+# 2. Initialize database (erpclaw + educlaw must already be installed)
+python3 {baseDir}/../erpclaw/scripts/erpclaw-setup/db_query.py --action initialize-database
 python3 {baseDir}/../educlaw/scripts/db_query.py --action status
 
 # 3. Initialize LMS tables and verify

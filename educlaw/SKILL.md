@@ -2,16 +2,17 @@
 name: educlaw
 version: 1.0.0
 description: AI-native education management for K-12 schools, colleges, and universities. 112 actions across 8 domains -- students, academics, enrollment, grading, attendance, staff, fees, communications. FERPA/COPPA compliant. Integrates with ERPClaw HR, Selling, and Payments.
-author: AvanSaber / Nikhil Jathar
-homepage: https://www.educlaw.ai
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
 tier: 4
 category: education
-requires: [erpclaw-setup, erpclaw-gl, erpclaw-selling, erpclaw-payments, erpclaw-hr]
+requires: [erpclaw]
 database: ~/.openclaw/erpclaw/data.sqlite
-scripts: scripts/db_query.py
 user-invocable: true
 tags: [educlaw, education, school, university, students, enrollment, grades, attendance, tuition, fees, ferpa, coppa, lms, sis]
+scripts:
+  - scripts/db_query.py
 metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
@@ -42,7 +43,7 @@ school, university, college, report card, progress report.
 ### Setup (First Use Only)
 
 ```
-python3 {baseDir}/../erpclaw-setup/scripts/db_query.py --action initialize-database
+python3 {baseDir}/../erpclaw/scripts/erpclaw-setup/db_query.py --action initialize-database
 python3 {baseDir}/scripts/db_query.py --action status
 ```
 

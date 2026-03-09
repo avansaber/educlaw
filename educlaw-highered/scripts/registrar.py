@@ -150,13 +150,15 @@ def add_course(conn, args):
     course_id = str(uuid.uuid4())
     try:
         conn.execute("""
-            INSERT INTO highered_course
-            (id, code, name, credits, department, prerequisites, description,
+            INSERT INTO educlaw_course
+            (id, course_code, code, name, credits, credit_hours,
+             department, prerequisites, description,
              is_active, company_id, created_at)
-            VALUES (?,?,?,?,?,?,?,1,?,?)
-        """, (course_id, code, name, credits, department, prerequisites,
+            VALUES (?,?,?,?,?,?,?,?,?,1,?,?)
+        """, (course_id, code, code, name, credits, str(credits),
+              department, prerequisites,
               description, company_id, _now_iso()))
-        audit(conn, SKILL, "highered-add-course", "highered_course", course_id,
+        audit(conn, SKILL, "highered-add-course", "educlaw_course", course_id,
               new_values={"code": code, "name": name})
         conn.commit()
         ok({"id": course_id, "code": code, "name": name, "credits": credits})
@@ -170,7 +172,7 @@ def update_course(conn, args):
     course_id = getattr(args, "id", None)
     if not course_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_course WHERE id=?", (course_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_course WHERE id=?", (course_id,)).fetchone()
     if not row:
         return err("Course not found")
 
@@ -191,7 +193,7 @@ def update_course(conn, args):
     if not updates:
         return err("No fields to update")
     params.append(course_id)
-    conn.execute(f"UPDATE highered_course SET {','.join(updates)} WHERE id=?", params)
+    conn.execute(f"UPDATE educlaw_course SET {','.join(updates)} WHERE id=?", params)
     conn.commit()
     ok({"id": course_id, "updated": True})
 
@@ -200,7 +202,7 @@ def list_courses(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_course WHERE company_id=?"
+    q = "SELECT * FROM educlaw_course WHERE company_id=?"
     params = [company_id]
     department = getattr(args, "department", None)
     if department:
@@ -229,7 +231,7 @@ def add_section(conn, args):
     course_id = getattr(args, "course_id", None)
     if not course_id:
         return err("--course-id is required")
-    if not conn.execute("SELECT id FROM highered_course WHERE id=?", (course_id,)).fetchone():
+    if not conn.execute("SELECT id FROM educlaw_course WHERE id=?", (course_id,)).fetchone():
         return err(f"Course {course_id} not found")
     term = getattr(args, "term", None)
     if not term:
@@ -244,14 +246,18 @@ def add_section(conn, args):
     location = getattr(args, "location", None) or ""
 
     section_id = str(uuid.uuid4())
+    ns = f"SEC-{section_id[:8]}"
     conn.execute("""
-        INSERT INTO highered_section
-        (id, course_id, term, year, instructor, capacity, enrolled,
-         schedule, location, section_status, company_id, created_at)
-        VALUES (?,?,?,?,?,?,0,?,?,?,?,?)
-    """, (section_id, course_id, term, year, instructor, capacity,
-          schedule, location, "open", company_id, _now_iso()))
-    audit(conn, SKILL, "highered-add-section", "highered_section", section_id,
+        INSERT INTO educlaw_section
+        (id, naming_series, course_id, term, year, instructor,
+         capacity, max_enrollment, enrolled, current_enrollment,
+         schedule, location, section_status, status,
+         company_id, created_at)
+        VALUES (?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?)
+    """, (section_id, ns, course_id, term, year, instructor,
+          capacity, capacity,
+          schedule, location, "open", "open", company_id, _now_iso()))
+    audit(conn, SKILL, "highered-add-section", "educlaw_section", section_id,
           new_values={"course_id": course_id, "term": term, "year": year})
     conn.commit()
     ok({"id": section_id, "course_id": course_id, "term": term,
@@ -262,7 +268,7 @@ def list_sections(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_section WHERE company_id=?"
+    q = "SELECT * FROM educlaw_section WHERE company_id=?"
     params = [company_id]
     course_id = getattr(args, "course_id", None)
     if course_id:
@@ -303,7 +309,7 @@ def add_enrollment(conn, args):
     if not section_id:
         return err("--section-id is required")
 
-    section = conn.execute("SELECT * FROM highered_section WHERE id=?", (section_id,)).fetchone()
+    section = conn.execute("SELECT * FROM educlaw_section WHERE id=?", (section_id,)).fetchone()
     if not section:
         return err(f"Section {section_id} not found")
     if section["section_status"] != "open":
@@ -313,7 +319,7 @@ def add_enrollment(conn, args):
 
     # Check duplicate
     dup = conn.execute(
-        "SELECT id FROM highered_enrollment WHERE student_id=? AND section_id=? AND enrollment_status='enrolled'",
+        "SELECT id FROM educlaw_course_enrollment WHERE student_id=? AND section_id=? AND enrollment_status='enrolled'",
         (student_id, section_id)
     ).fetchone()
     if dup:
@@ -323,17 +329,17 @@ def add_enrollment(conn, args):
     now = _now_iso()
     enrollment_date = getattr(args, "enrollment_date", None) or _today()
     conn.execute("""
-        INSERT INTO highered_enrollment
+        INSERT INTO educlaw_course_enrollment
         (id, student_id, section_id, enrollment_date, enrollment_status,
          grade, grade_points, company_id, created_at, updated_at)
         VALUES (?,?,?,?,'enrolled','','',?,?,?)
     """, (enrollment_id, student_id, section_id, enrollment_date,
           company_id, now, now))
     conn.execute(
-        "UPDATE highered_section SET enrolled = enrolled + 1 WHERE id=?",
+        "UPDATE educlaw_section SET enrolled = enrolled + 1 WHERE id=?",
         (section_id,)
     )
-    audit(conn, SKILL, "highered-add-enrollment", "highered_enrollment", enrollment_id,
+    audit(conn, SKILL, "highered-add-enrollment", "educlaw_course_enrollment", enrollment_id,
           new_values={"student_id": student_id, "section_id": section_id})
     conn.commit()
     ok({"id": enrollment_id, "student_id": student_id,
@@ -344,7 +350,7 @@ def drop_enrollment(conn, args):
     enrollment_id = getattr(args, "id", None)
     if not enrollment_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_enrollment WHERE id=?", (enrollment_id,)).fetchone()
+    row = conn.execute("SELECT * FROM educlaw_course_enrollment WHERE id=?", (enrollment_id,)).fetchone()
     if not row:
         return err("Enrollment not found")
     if row["enrollment_status"] != "enrolled":
@@ -352,11 +358,11 @@ def drop_enrollment(conn, args):
 
     now = _now_iso()
     conn.execute(
-        "UPDATE highered_enrollment SET enrollment_status='dropped', updated_at=? WHERE id=?",
+        "UPDATE educlaw_course_enrollment SET enrollment_status='dropped', updated_at=? WHERE id=?",
         (now, enrollment_id)
     )
     conn.execute(
-        "UPDATE highered_section SET enrolled = MAX(enrolled - 1, 0) WHERE id=?",
+        "UPDATE educlaw_section SET enrolled = MAX(enrolled - 1, 0) WHERE id=?",
         (row["section_id"],)
     )
     conn.commit()
@@ -367,7 +373,7 @@ def list_enrollments(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_enrollment WHERE company_id=?"
+    q = "SELECT * FROM educlaw_course_enrollment WHERE company_id=?"
     params = [company_id]
     student_id = getattr(args, "student_id", None)
     if student_id:
@@ -402,7 +408,7 @@ def academic_calendar_report(conn, args):
         SELECT s.term, s.year, COUNT(*) as total_sections,
                SUM(s.enrolled) as total_enrolled,
                SUM(s.capacity) as total_capacity
-        FROM highered_section s
+        FROM educlaw_section s
         WHERE s.company_id=?
     """
     params = [company_id]

@@ -2,23 +2,20 @@
 name: educlaw-statereport
 version: 1.0.0
 description: >
-  EduClaw State Reporting — State reporting, Ed-Fi integration, data validation,
-  and submission tracking for K-12 LEAs. Transforms operational EduClaw data into
-  compliant state/federal reporting submissions (Ed-Fi ODS/API, EDFacts, CRDC, IDEA 618).
-author: ERPForge
+  EduClaw State Reporting -- State reporting, Ed-Fi integration, data validation,
+  and submission tracking for K-12 LEAs. 98 actions across 6 domains.
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
+tier: 4
+category: education
+requires: [erpclaw, educlaw, educlaw-k12]
+database: ~/.openclaw/erpclaw/data.sqlite
+user-invocable: true
+tags: [educlaw, state-reporting, ed-fi, crdc, edfacts, idea-618, data-validation, submission-tracking]
 scripts:
   - scripts/db_query.py
-parent: educlaw
-table_prefix: sr_
-domains:
-  - demographics
-  - discipline
-  - ed_fi
-  - state_reporting
-  - data_validation
-  - submission_tracking
-total_actions: 98
+metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
 # EduClaw State Reporting
@@ -30,7 +27,7 @@ for K-12 Local Education Agencies (LEAs).
 
 - **Local-only data**: All records stored in `~/.openclaw/erpclaw/data.sqlite`
 - **Fully offline by default**: No network activity during data entry, validation, snapshot, or submission tracking
-- **No credentials required for core operations**: Uses erpclaw_lib shared library (installed by erpclaw-setup)
+- **No credentials required for core operations**: Uses erpclaw_lib shared library (installed by erpclaw)
 - **SQL injection safe**: All queries use parameterized statements
 - **Ed-Fi sync is opt-in**: The `submit-*-to-edfi` and `statereport-get-edfi-connection-test` actions make outbound HTTPS calls to a configured ODS endpoint only when explicitly invoked. These are the sole source of external network activity.
 - **Credential protection**: OAuth client secrets are encrypted before database insertion. Decrypted values are never returned in action output, logs, or error messages.

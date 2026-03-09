@@ -1,0 +1,127 @@
+ocui_version: "1.0"
+skill: educlaw-highered
+skill_version: "1.0.0"
+display_name: Higher Education
+icon: graduation-cap
+color: "#4338ca"
+default_entity: degree_program
+
+domains:
+  - key: registrar
+    label: Registrar
+    entities: [degree_program, course, section, enrollment]
+  - key: student_records
+    label: Student Records
+    entities: [student_record, hold]
+  - key: financial_aid
+    label: Financial Aid
+    entities: [aid_package, disbursement]
+  - key: alumni
+    label: Alumni
+    entities: [alumnus, alumni_event, giving_record]
+  - key: admissions
+    label: Admissions
+    entities: [application, admission_decision]
+  - key: faculty
+    label: Faculty
+    entities: [faculty, course_assignment, research_grant]
+
+dashboard:
+  kpis:
+    - key: degree_programs
+      label: "Degree Programs"
+      type: count
+      action: highered-list-degree-programs
+      icon: award
+      drill_action: highered-list-degree-programs
+    - key: active_enrollments
+      label: "Enrollments"
+      type: count
+      action: highered-list-enrollments
+      icon: book-open
+      drill_action: highered-list-enrollments
+    - key: pending_applications
+      label: "Pending Applications"
+      type: count
+      action: highered-list-applications
+      filter: { status: submitted }
+      severity: warning
+      icon: inbox
+      drill_action: highered-list-applications
+      drill_filter: { status: submitted }
+    - key: active_aid
+      label: "Aid Packages"
+      type: count
+      action: highered-list-aid-packages
+      icon: dollar-sign
+      drill_action: highered-list-aid-packages
+    - key: faculty_count
+      label: "Faculty"
+      type: count
+      action: highered-list-faculty
+      icon: users
+      drill_action: highered-list-faculty
+    - key: alumni_count
+      label: "Alumni"
+      type: count
+      action: highered-list-alumni
+      icon: graduation-cap
+      drill_action: highered-list-alumni
+  quick_actions:
+    - action: highered-add-degree-program
+      label: "New Degree Program"
+      icon: award
+    - action: highered-add-course
+      label: "New Course"
+      icon: book
+    - action: highered-add-enrollment
+      label: "New Enrollment"
+      icon: book-open
+    - action: highered-add-application
+      label: "New Application"
+      icon: inbox
+    - action: highered-add-faculty
+      label: "New Faculty"
+      icon: user-plus
+    - action: highered-add-aid-package
+      label: "New Aid Package"
+      icon: dollar-sign
+
+workflows:
+  - after: highered-add-degree-program
+    suggest:
+      - action: highered-add-course
+        label: "Add a course"
+  - after: highered-add-course
+    suggest:
+      - action: highered-add-section
+        label: "Create a section"
+  - after: highered-add-section
+    suggest:
+      - action: highered-add-enrollment
+        label: "Enroll students"
+      - action: highered-add-course-assignment
+        label: "Assign faculty"
+  - after: highered-add-application
+    suggest:
+      - action: highered-add-admission-decision
+        label: "Record decision"
+        pass: { application-id: id }
+  - after: highered-add-enrollment
+    suggest:
+      - action: highered-add-aid-package
+        label: "Create aid package"
+        pass: { student-id: student_id }
+  - after: highered-add-aid-package
+    suggest:
+      - action: highered-add-disbursement
+        label: "Record disbursement"
+        pass: { aid-package-id: id }
+  - after: highered-add-faculty
+    suggest:
+      - action: highered-add-course-assignment
+        label: "Assign to course"
+        pass: { faculty-id: id }
+      - action: highered-add-research-grant
+        label: "Record research grant"
+        pass: { faculty-id: id }

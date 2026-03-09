@@ -1,45 +1,22 @@
 ---
 name: educlaw-finaid
-display_name: EduClaw Financial Aid
 version: 1.0.0
 description: >
   Federal, state, and institutional financial aid management with Title IV compliance.
   ISIR processing, SAP evaluation, R2T4 calculations, award packaging, disbursements,
-  COD origination, scholarships, work-study, and loan tracking.
-author: ERPForge
+  COD origination, scholarships, work-study, and loan tracking. 116 actions.
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
-parent: educlaw
+tier: 4
+category: education
+requires: [erpclaw, educlaw]
+database: ~/.openclaw/erpclaw/data.sqlite
+user-invocable: true
+tags: [educlaw, finaid, financial-aid, title-iv, isir, sap, r2t4, pell, scholarship, work-study, loan, fafsa]
 scripts:
   - scripts/db_query.py
-domains:
-  - financial_aid
-  - scholarships
-  - work_study
-  - loan_tracking
-total_actions: 116
-tables:
-  - finaid_aid_year
-  - finaid_pell_schedule
-  - finaid_fund_allocation
-  - finaid_cost_of_attendance
-  - finaid_isir
-  - finaid_isir_cflag
-  - finaid_verification_request
-  - finaid_verification_document
-  - finaid_award_package
-  - finaid_award
-  - finaid_disbursement
-  - finaid_sap_evaluation
-  - finaid_sap_appeal
-  - finaid_r2t4_calculation
-  - finaid_professional_judgment
-  - finaid_scholarship_program
-  - finaid_scholarship_application
-  - finaid_scholarship_renewal
-  - finaid_work_study_job
-  - finaid_work_study_assignment
-  - finaid_work_study_timesheet
-  - finaid_loan
+metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
 # EduClaw Financial Aid
@@ -52,7 +29,7 @@ professional judgment, COD origination, scholarships, work-study, and loan track
 
 - **Local-only**: All data stored in `~/.openclaw/erpclaw/data.sqlite`
 - **Fully offline**: No external API calls, no telemetry, no cloud dependencies
-- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw-setup)
+- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw)
 - **SQL injection safe**: All queries use parameterized statements
 - **FERPA compliant**: Student financial data access is logged
 - **Title IV compliance**: ISIR, SAP, R2T4, and COD records follow federal regulations. COD origination records are generated locally for export.

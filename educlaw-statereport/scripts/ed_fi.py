@@ -849,7 +849,7 @@ def sync_discipline_to_edfi(conn, args):
         err(f"Ed-Fi config {config_id} not found")
 
     incidents = conn.execute(
-        "SELECT * FROM sr_discipline_incident WHERE company_id = ? AND school_year = ?",
+        "SELECT * FROM educlaw_k12_discipline_incident WHERE company_id = ? AND school_year = ?",
         (company_id, int(school_year))
     ).fetchall()
 

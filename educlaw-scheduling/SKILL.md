@@ -1,31 +1,21 @@
 ---
 name: educlaw-scheduling
-display_name: EduClaw Advanced Scheduling
 version: 1.0.0
 description: >
   Master scheduling, schedule patterns, conflict resolution, and room assignment
-  for K-12 and higher-education institutions. Sub-vertical of EduClaw SIS.
-author: ERPForge
+  for K-12 and higher-education institutions. 56 actions across 4 domains.
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
-parent: educlaw
+tier: 4
+category: education
+requires: [erpclaw, educlaw]
+database: ~/.openclaw/erpclaw/data.sqlite
+user-invocable: true
+tags: [educlaw, scheduling, master-schedule, conflict-resolution, room-assignment, bell-period, course-request]
 scripts:
   - scripts/db_query.py
-domains:
-  - schedule_patterns
-  - master_schedule
-  - conflict_resolution
-  - room_assignment
-total_actions: 56
-tables:
-  - educlaw_schedule_pattern
-  - educlaw_day_type
-  - educlaw_bell_period
-  - educlaw_master_schedule
-  - educlaw_section_meeting
-  - educlaw_course_request
-  - educlaw_schedule_conflict
-  - educlaw_room_booking
-  - educlaw_instructor_constraint
+metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
 # EduClaw Advanced Scheduling

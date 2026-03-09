@@ -1,19 +1,19 @@
 ---
 name: educlaw-k12
 version: 1.0.0
-description: EduClaw K-12 Extensions — discipline management, student health records, special education (IDEA/IEP/504), and grade promotion workflows.
-author: ERPForge
+description: EduClaw K-12 Extensions -- discipline management, student health records, special education (IDEA/IEP/504), and grade promotion workflows. 76 actions across 4 domains.
+author: AvanSaber
+homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
-parent: educlaw
+tier: 4
+category: education
+requires: [erpclaw, educlaw]
+database: ~/.openclaw/erpclaw/data.sqlite
+user-invocable: true
+tags: [educlaw, k12, discipline, health-records, special-education, iep, idea, 504, grade-promotion]
 scripts:
   - scripts/db_query.py
-domains:
-  - discipline
-  - health_records
-  - special_education
-  - grade_promotion
-total_actions: 76
-tables: 23
+metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
 # EduClaw K-12 Extensions
@@ -24,7 +24,7 @@ Sub-vertical of EduClaw SIS. Adds K-12 specific workflows: behavioral incident t
 
 - **Local-only**: All data stored in `~/.openclaw/erpclaw/data.sqlite`
 - **Fully offline**: No external API calls, no telemetry, no cloud dependencies
-- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw-setup)
+- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw)
 - **SQL injection safe**: All queries use parameterized statements
 - **FERPA compliant**: Health records, discipline records, and special education data access is logged
 - **IDEA compliance**: IEP goals and services are immutable; changes require new IEP version
@@ -282,7 +282,7 @@ The `special_education` data category is used for FERPA access logging of IEP an
 
 All tables use the shared SQLite database at `~/.openclaw/erpclaw/data.sqlite`.
 
-Run `python3 init_db.py` to create the 23 K-12 tables (requires erpclaw-setup and educlaw parent tables to exist first).
+Run `python3 init_db.py` to create the 23 K-12 tables (requires erpclaw and educlaw parent tables to exist first).
 
 ### New Tables (23)
 
