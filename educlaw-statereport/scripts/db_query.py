@@ -19,6 +19,7 @@ try:
     from erpclaw_lib.validation import check_input_lengths
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.dependencies import check_required_tables
+    from erpclaw_lib.args import SafeArgumentParser, check_unknown_args
 except ImportError:
     import json as _json
     print(_json.dumps({
@@ -62,7 +63,7 @@ ACTIONS["status"] = lambda conn, args: ok({
 
 
 def main():
-    parser = argparse.ArgumentParser(description="statereport-educlaw-statereport")
+    parser = SafeArgumentParser(description="statereport-educlaw-statereport")
     parser.add_argument("--action", required=True, choices=sorted(ACTIONS.keys()))
     parser.add_argument("--db-path", default=None)
 
@@ -273,7 +274,8 @@ def main():
     parser.add_argument("--certified-by")
     parser.add_argument("--certification-notes")
 
-    args, _unknown = parser.parse_known_args()
+    args, unknown = parser.parse_known_args()
+    check_unknown_args(parser, unknown)
     check_input_lengths(args)
 
     db_path = args.db_path or DEFAULT_DB_PATH

@@ -20,6 +20,7 @@ try:
     from erpclaw_lib.validation import check_input_lengths
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.dependencies import check_required_tables
+    from erpclaw_lib.args import SafeArgumentParser, check_unknown_args
 except ImportError:
     import json as _json
     print(_json.dumps({
@@ -59,7 +60,7 @@ ACTIONS["status"] = lambda conn, args: ok({
 
 
 def main():
-    parser = argparse.ArgumentParser(description="schedule-educlaw-scheduling")
+    parser = SafeArgumentParser(description="schedule-educlaw-scheduling")
     parser.add_argument("--action", required=True, choices=sorted(ACTIONS.keys()))
     parser.add_argument("--db-path", default=None)
 
@@ -173,7 +174,8 @@ def main():
     # ── Credit Hours (get-contact-hours) ──────────────────────────────────
     parser.add_argument("--credit-hours")
 
-    args, _unknown = parser.parse_known_args()
+    args, unknown = parser.parse_known_args()
+    check_unknown_args(parser, unknown)
     check_input_lengths(args)
 
     # Map --is-active from string to int if provided for section meetings
