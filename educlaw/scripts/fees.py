@@ -19,6 +19,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -46,23 +47,21 @@ def add_fee_category(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     revenue_account_id = getattr(args, "revenue_account_id", None)
     if revenue_account_id:
-        if not conn.execute("SELECT id FROM account WHERE id = ?", (revenue_account_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("account")).select(Field("id")).where(Field("id") == P()).get_sql(), (revenue_account_id,)).fetchone():
             err(f"Account {revenue_account_id} not found")
 
     cat_id = str(uuid.uuid4())
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_fee_category
-               (id, name, description, revenue_account_id, is_active, company_id,
-                created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_fee_category", {"id": P(), "name": P(), "description": P(), "revenue_account_id": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (cat_id, name, getattr(args, "description", None) or "",
              revenue_account_id, 1, company_id, now, now,
              getattr(args, "user_id", None) or "")
@@ -81,9 +80,7 @@ def update_fee_category(conn, args):
     if not category_id:
         err("--category-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_fee_category WHERE id = ?", (category_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_fee_category")).select(Table("educlaw_fee_category").star).where(Field("id") == P()).get_sql(), (category_id,)).fetchone()
     if not row:
         err(f"Fee category {category_id} not found")
 
@@ -94,8 +91,7 @@ def update_fee_category(conn, args):
     if getattr(args, "description", None) is not None:
         updates.append("description = ?"); params.append(args.description); changed.append("description")
     if getattr(args, "revenue_account_id", None) is not None:
-        if args.revenue_account_id and not conn.execute(
-                "SELECT id FROM account WHERE id = ?", (args.revenue_account_id,)).fetchone():
+        if args.revenue_account_id and not conn.execute(Q.from_(Table("account")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.revenue_account_id,)).fetchone():
             err(f"Account {args.revenue_account_id} not found")
         updates.append("revenue_account_id = ?"); params.append(args.revenue_account_id)
         changed.append("revenue_account_id")
@@ -142,7 +138,7 @@ def add_fee_structure(conn, args):
     if not items_json:
         err("--items is required (JSON array of {fee_category_id, amount, description})")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     try:
@@ -154,13 +150,12 @@ def add_fee_structure(conn, args):
 
     program_id = getattr(args, "program_id", None)
     if program_id:
-        if not conn.execute("SELECT id FROM educlaw_program WHERE id = ?", (program_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (program_id,)).fetchone():
             err(f"Program {program_id} not found")
 
     academic_term_id = getattr(args, "academic_term_id", None)
     if academic_term_id:
-        if not conn.execute("SELECT id FROM educlaw_academic_term WHERE id = ?",
-                            (academic_term_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
             err(f"Academic term {academic_term_id} not found")
 
     # Validate items and calculate total
@@ -172,7 +167,7 @@ def add_fee_structure(conn, args):
         amount = _d(item.get("amount", "0"))
         if not cat_id:
             err("Each item must have a fee_category_id")
-        if not conn.execute("SELECT id FROM educlaw_fee_category WHERE id = ?", (cat_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_fee_category")).select(Field("id")).where(Field("id") == P()).get_sql(), (cat_id,)).fetchone():
             err(f"Fee category {cat_id} not found")
         if amount < 0:
             err(f"Amount must be >= 0 (got {amount} for category {cat_id})")
@@ -181,11 +176,10 @@ def add_fee_structure(conn, args):
     struct_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_fee_structure
-           (id, name, program_id, academic_term_id, grade_level, total_amount,
-            is_active, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_fee_structure", {"id": P(), "name": P(), "program_id": P(), "academic_term_id": P(), "grade_level": P(), "total_amount": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (struct_id, name, program_id, academic_term_id,
          getattr(args, "grade_level", None) or "",
          str(total), 1, company_id, now, now, getattr(args, "user_id", None) or "")
@@ -195,11 +189,9 @@ def add_fee_structure(conn, args):
         if not isinstance(item, dict):
             continue
         item_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_fee_structure_item
-               (id, fee_structure_id, fee_category_id, amount, description,
-                sort_order, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_fee_structure_item", {"id": P(), "fee_structure_id": P(), "fee_category_id": P(), "amount": P(), "description": P(), "sort_order": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (item_id, struct_id, item.get("fee_category_id"),
              str(_d(item.get("amount", "0"))),
              item.get("description", ""),
@@ -217,9 +209,7 @@ def update_fee_structure(conn, args):
     if not structure_id:
         err("--structure-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_fee_structure WHERE id = ?", (structure_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_fee_structure")).select(Table("educlaw_fee_structure").star).where(Field("id") == P()).get_sql(), (structure_id,)).fetchone()
     if not row:
         err(f"Fee structure {structure_id} not found")
 
@@ -254,11 +244,9 @@ def update_fee_structure(conn, args):
         now = _now_iso()
         for i, item in enumerate(items):
             item_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO educlaw_fee_structure_item
-                   (id, fee_structure_id, fee_category_id, amount, description,
-                    sort_order, created_at, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql, _ = insert_row("educlaw_fee_structure_item", {"id": P(), "fee_structure_id": P(), "fee_category_id": P(), "amount": P(), "description": P(), "sort_order": P(), "created_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (item_id, structure_id, item.get("fee_category_id"),
                  str(_d(item.get("amount", "0"))), item.get("description", ""),
                  item.get("sort_order", i + 1), now, getattr(args, "user_id", None) or "")
@@ -281,9 +269,7 @@ def get_fee_structure(conn, args):
     if not structure_id:
         err("--structure-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_fee_structure WHERE id = ?", (structure_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_fee_structure")).select(Table("educlaw_fee_structure").star).where(Field("id") == P()).get_sql(), (structure_id,)).fetchone()
     if not row:
         err(f"Fee structure {structure_id} not found")
 
@@ -350,7 +336,7 @@ def add_scholarship(conn, args):
     if _d(discount_amount) < 0:
         err("--discount-amount must be >= 0")
 
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
     if dict(student_row)["status"] != "active":
@@ -358,25 +344,21 @@ def add_scholarship(conn, args):
 
     academic_term_id = getattr(args, "academic_term_id", None)
     if academic_term_id:
-        if not conn.execute("SELECT id FROM educlaw_academic_term WHERE id = ?",
-                            (academic_term_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
             err(f"Academic term {academic_term_id} not found")
 
     applies_to_category_id = getattr(args, "applies_to_category_id", None)
     if applies_to_category_id:
-        if not conn.execute("SELECT id FROM educlaw_fee_category WHERE id = ?",
-                            (applies_to_category_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_fee_category")).select(Field("id")).where(Field("id") == P()).get_sql(), (applies_to_category_id,)).fetchone():
             err(f"Fee category {applies_to_category_id} not found")
 
     schol_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_scholarship
-           (id, name, student_id, academic_term_id, discount_type, discount_amount,
-            applies_to_category_id, scholarship_status, reason, approved_by,
-            company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_scholarship", {"id": P(), "name": P(), "student_id": P(), "academic_term_id": P(), "discount_type": P(), "discount_amount": P(), "applies_to_category_id": P(), "scholarship_status": P(), "reason": P(), "approved_by": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (schol_id, name, student_id, academic_term_id, discount_type,
          str(_d(discount_amount)), applies_to_category_id, "active",
          getattr(args, "reason", None) or "",
@@ -397,9 +379,7 @@ def update_scholarship(conn, args):
     if not scholarship_id:
         err("--scholarship-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_scholarship WHERE id = ?", (scholarship_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_scholarship")).select(Table("educlaw_scholarship").star).where(Field("id") == P()).get_sql(), (scholarship_id,)).fetchone()
     if not row:
         err(f"Scholarship {scholarship_id} not found")
 
@@ -474,7 +454,7 @@ def generate_fee_invoice(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
 
@@ -548,11 +528,9 @@ def generate_fee_invoice(conn, args):
 
     # Send fee_due notification
     notif_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_notification
-           (id, recipient_type, recipient_id, notification_type, title, message,
-            reference_type, reference_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (notif_id, "student", student_id, "fee_due",
          "Fee Invoice Generated",
          f"Your fee invoice for the term has been generated. Total due: ${final_amount}",
@@ -581,9 +559,7 @@ def list_fee_invoices(conn, args):
 
     # Try to read from sales_invoice if erpclaw-selling is available
     if student_id:
-        student_row = conn.execute(
-            "SELECT customer_id FROM educlaw_student WHERE id = ?", (student_id,)
-        ).fetchone()
+        student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Field("customer_id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
         if not student_row:
             err(f"Student {student_id} not found")
         customer_id = dict(student_row).get("customer_id")
@@ -609,7 +585,7 @@ def get_student_account(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
 
@@ -708,18 +684,16 @@ def apply_late_fee(conn, args):
     if _d(amount) <= 0:
         err("--amount must be greater than 0")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_fee_category WHERE id = ?", (fee_category_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_fee_category")).select(Field("id")).where(Field("id") == P()).get_sql(), (fee_category_id,)).fetchone():
         err(f"Fee category {fee_category_id} not found")
 
     now = _now_iso()
     notif_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_notification
-           (id, recipient_type, recipient_id, notification_type, title, message,
-            reference_type, reference_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (notif_id, "student", student_id, "fee_due",
          "Late Fee Applied",
          f"A late fee of ${_d(amount)} has been applied to your account.",

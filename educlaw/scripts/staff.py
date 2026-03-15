@@ -19,6 +19,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -50,11 +51,11 @@ def add_instructor(conn, args):
         err("--company-id is required")
 
     # Validate employee exists in erpclaw-hr
-    emp_row = conn.execute("SELECT * FROM employee WHERE id = ?", (employee_id,)).fetchone()
+    emp_row = conn.execute(Q.from_(Table("employee")).select(Table("employee").star).where(Field("id") == P()).get_sql(), (employee_id,)).fetchone()
     if not emp_row:
         err(f"Employee {employee_id} not found. Create employee in erpclaw-hr first.")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # OHIO: check not already an instructor
@@ -78,12 +79,9 @@ def add_instructor(conn, args):
     _validate_json_field(office_hours, "--office-hours")
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_instructor
-               (id, naming_series, employee_id, credentials, specializations,
-                max_teaching_load_hours, office_location, office_hours, bio,
-                is_active, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_instructor", {"id": P(), "naming_series": P(), "employee_id": P(), "credentials": P(), "specializations": P(), "max_teaching_load_hours": P(), "office_location": P(), "office_hours": P(), "bio": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (instructor_id, naming, employee_id, credentials, specializations,
              int(getattr(args, "max_teaching_load_hours", None) or 0),
              getattr(args, "office_location", None) or "",
@@ -105,7 +103,7 @@ def update_instructor(conn, args):
     if not instructor_id:
         err("--instructor-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_instructor WHERE id = ?", (instructor_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_instructor")).select(Table("educlaw_instructor").star).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone()
     if not row:
         err(f"Instructor {instructor_id} not found")
 
@@ -150,7 +148,7 @@ def get_instructor(conn, args):
     if not instructor_id:
         err("--instructor-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_instructor WHERE id = ?", (instructor_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_instructor")).select(Table("educlaw_instructor").star).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone()
     if not row:
         err(f"Instructor {instructor_id} not found")
 
@@ -215,9 +213,7 @@ def get_teaching_load(conn, args):
     if not academic_term_id:
         err("--academic-term-id is required")
 
-    instr_row = conn.execute(
-        "SELECT * FROM educlaw_instructor WHERE id = ?", (instructor_id,)
-    ).fetchone()
+    instr_row = conn.execute(Q.from_(Table("educlaw_instructor")).select(Table("educlaw_instructor").star).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone()
     if not instr_row:
         err(f"Instructor {instructor_id} not found")
 

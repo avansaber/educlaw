@@ -19,6 +19,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
 except ImportError:
     pass
 
@@ -38,11 +39,9 @@ def _log_data_access_internal(conn, user_id, student_id, data_category,
                                access_type, access_reason, company_id):
     log_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (log_id, user_id, student_id, data_category, access_type,
              access_reason, 0, "", company_id, _now_iso(), user_id)
         )
@@ -66,7 +65,7 @@ def add_grading_scale(conn, args):
     if not entries_json:
         err("--entries is required (JSON array of grade entries)")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     try:
@@ -82,10 +81,9 @@ def add_grading_scale(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_grading_scale
-               (id, name, description, is_default, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_grading_scale", {"id": P(), "name": P(), "description": P(), "is_default": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (scale_id, name, getattr(args, "description", None) or "",
              is_default, company_id, now, now, getattr(args, "user_id", None) or "")
         )
@@ -104,12 +102,9 @@ def add_grading_scale(conn, args):
         if not isinstance(entry, dict):
             continue
         entry_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_grading_scale_entry
-               (id, grading_scale_id, letter_grade, grade_points, min_percentage,
-                max_percentage, description, is_passing, counts_in_gpa, sort_order,
-                created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_grading_scale_entry", {"id": P(), "grading_scale_id": P(), "letter_grade": P(), "grade_points": P(), "min_percentage": P(), "max_percentage": P(), "description": P(), "is_passing": P(), "counts_in_gpa": P(), "sort_order": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (entry_id, scale_id,
              entry.get("letter_grade", ""),
              str(_d(entry.get("grade_points", "0"))),
@@ -133,9 +128,7 @@ def update_grading_scale(conn, args):
     if not scale_id:
         err("--scale-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_grading_scale WHERE id = ?", (scale_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_grading_scale")).select(Table("educlaw_grading_scale").star).where(Field("id") == P()).get_sql(), (scale_id,)).fetchone()
     if not row:
         err(f"Grading scale {scale_id} not found")
 
@@ -167,12 +160,9 @@ def update_grading_scale(conn, args):
         now = _now_iso()
         for i, entry in enumerate(entries):
             entry_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO educlaw_grading_scale_entry
-                   (id, grading_scale_id, letter_grade, grade_points, min_percentage,
-                    max_percentage, description, is_passing, counts_in_gpa, sort_order,
-                    created_at, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql, _ = insert_row("educlaw_grading_scale_entry", {"id": P(), "grading_scale_id": P(), "letter_grade": P(), "grade_points": P(), "min_percentage": P(), "max_percentage": P(), "description": P(), "is_passing": P(), "counts_in_gpa": P(), "sort_order": P(), "created_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (entry_id, scale_id,
                  entry.get("letter_grade", ""),
                  str(_d(entry.get("grade_points", "0"))),
@@ -219,9 +209,7 @@ def get_grading_scale(conn, args):
     if not scale_id:
         err("--scale-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_grading_scale WHERE id = ?", (scale_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_grading_scale")).select(Table("educlaw_grading_scale").star).where(Field("id") == P()).get_sql(), (scale_id,)).fetchone()
     if not row:
         err(f"Grading scale {scale_id} not found")
 
@@ -253,10 +241,9 @@ def add_assessment_plan(conn, args):
     if not categories_json:
         err("--categories is required (JSON array of {name, weight_percentage, sort_order})")
 
-    if not conn.execute("SELECT id FROM educlaw_section WHERE id = ?", (section_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_section")).select(Field("id")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone():
         err(f"Section {section_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_grading_scale WHERE id = ?",
-                        (grading_scale_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_grading_scale")).select(Field("id")).where(Field("id") == P()).get_sql(), (grading_scale_id,)).fetchone():
         err(f"Grading scale {grading_scale_id} not found")
 
     existing = conn.execute(
@@ -280,10 +267,10 @@ def add_assessment_plan(conn, args):
     plan_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_assessment_plan
-           (id, section_id, grading_scale_id, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_assessment_plan", {"id": P(), "section_id": P(), "grading_scale_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (plan_id, section_id, grading_scale_id, company_id, now, now,
          getattr(args, "user_id", None) or "")
     )
@@ -292,10 +279,9 @@ def add_assessment_plan(conn, args):
         if not isinstance(cat, dict):
             continue
         cat_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_assessment_category
-               (id, assessment_plan_id, name, weight_percentage, sort_order, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_assessment_category", {"id": P(), "assessment_plan_id": P(), "name": P(), "weight_percentage": P(), "sort_order": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (cat_id, plan_id, cat.get("name", f"Category {i+1}"),
              str(_d(cat.get("weight_percentage", "0"))),
              cat.get("sort_order", i + 1), now, getattr(args, "user_id", None) or "")
@@ -312,9 +298,7 @@ def update_assessment_plan(conn, args):
     if not plan_id:
         err("--plan-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_assessment_plan WHERE id = ?", (plan_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Table("educlaw_assessment_plan").star).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone()
     if not row:
         err(f"Assessment plan {plan_id} not found")
 
@@ -322,8 +306,7 @@ def update_assessment_plan(conn, args):
     updates, params = [], []
 
     if getattr(args, "grading_scale_id", None) is not None:
-        if not conn.execute("SELECT id FROM educlaw_grading_scale WHERE id = ?",
-                            (args.grading_scale_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_grading_scale")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.grading_scale_id,)).fetchone():
             err(f"Grading scale {args.grading_scale_id} not found")
         updates.append("grading_scale_id = ?"); params.append(args.grading_scale_id)
         changed.append("grading_scale_id")
@@ -345,10 +328,9 @@ def update_assessment_plan(conn, args):
         now = _now_iso()
         for i, cat in enumerate(categories):
             cat_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO educlaw_assessment_category
-                   (id, assessment_plan_id, name, weight_percentage, sort_order, created_at, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            sql, _ = insert_row("educlaw_assessment_category", {"id": P(), "assessment_plan_id": P(), "name": P(), "weight_percentage": P(), "sort_order": P(), "created_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (cat_id, plan_id, cat.get("name", f"Category {i+1}"),
                  str(_d(cat.get("weight_percentage", "0"))),
                  cat.get("sort_order", i + 1), now, getattr(args, "user_id", None) or "")
@@ -377,7 +359,7 @@ def get_assessment_plan(conn, args):
         err("--plan-id or --section-id is required")
 
     if plan_id:
-        row = conn.execute("SELECT * FROM educlaw_assessment_plan WHERE id = ?", (plan_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Table("educlaw_assessment_plan").star).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone()
     else:
         row = conn.execute("SELECT * FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)).fetchone()
 
@@ -422,21 +404,18 @@ def add_assessment(conn, args):
     if _d(max_points) <= 0:
         err("--max-points must be greater than 0")
 
-    if not conn.execute("SELECT id FROM educlaw_assessment_plan WHERE id = ?", (plan_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Field("id")).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone():
         err(f"Assessment plan {plan_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_assessment_category WHERE id = ?",
-                        (category_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_assessment_category")).select(Field("id")).where(Field("id") == P()).get_sql(), (category_id,)).fetchone():
         err(f"Assessment category {category_id} not found")
 
     assessment_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_assessment
-           (id, assessment_plan_id, category_id, name, description, max_points,
-            due_date, is_published, allows_extra_credit, sort_order,
-            created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_assessment", {"id": P(), "assessment_plan_id": P(), "category_id": P(), "name": P(), "description": P(), "max_points": P(), "due_date": P(), "is_published": P(), "allows_extra_credit": P(), "sort_order": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (assessment_id, plan_id, category_id, name,
          getattr(args, "description", None) or "",
          str(_d(max_points)),
@@ -448,9 +427,7 @@ def add_assessment(conn, args):
     )
 
     # Auto-create result stubs for all enrolled students
-    plan_row = conn.execute(
-        "SELECT section_id, company_id FROM educlaw_assessment_plan WHERE id = ?", (plan_id,)
-    ).fetchone()
+    plan_row = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Field("section_id"), Field("company_id")).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone()
     result_count = 0
     if plan_row:
         p = dict(plan_row)
@@ -463,12 +440,9 @@ def add_assessment(conn, args):
             e = dict(enr)
             result_id = str(uuid.uuid4())
             try:
-                conn.execute(
-                    """INSERT INTO educlaw_assessment_result
-                       (id, assessment_id, student_id, course_enrollment_id,
-                        points_earned, is_exempt, is_late, comments,
-                        graded_by, graded_at, created_at, updated_at, created_by)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                sql, _ = insert_row("educlaw_assessment_result", {"id": P(), "assessment_id": P(), "student_id": P(), "course_enrollment_id": P(), "points_earned": P(), "is_exempt": P(), "is_late": P(), "comments": P(), "graded_by": P(), "graded_at": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+                conn.execute(sql,
                     (result_id, assessment_id, e["student_id"], e["id"],
                      None, 0, 0, "", "", "", now, now, getattr(args, "user_id", None) or "")
                 )
@@ -488,7 +462,7 @@ def update_assessment(conn, args):
     if not assessment_id:
         err("--assessment-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_assessment WHERE id = ?", (assessment_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_assessment")).select(Table("educlaw_assessment").star).where(Field("id") == P()).get_sql(), (assessment_id,)).fetchone()
     if not row:
         err(f"Assessment {assessment_id} not found")
 
@@ -568,7 +542,7 @@ def enter_assessment_result(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    a_row = conn.execute("SELECT * FROM educlaw_assessment WHERE id = ?", (assessment_id,)).fetchone()
+    a_row = conn.execute(Q.from_(Table("educlaw_assessment")).select(Table("educlaw_assessment").star).where(Field("id") == P()).get_sql(), (assessment_id,)).fetchone()
     if not a_row:
         err(f"Assessment {assessment_id} not found")
     a = dict(a_row)
@@ -629,12 +603,9 @@ def enter_assessment_result(conn, args):
             err("Could not find course enrollment for this student and assessment")
 
         result_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_assessment_result
-               (id, assessment_id, student_id, course_enrollment_id,
-                points_earned, is_exempt, is_late, comments,
-                graded_by, graded_at, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_assessment_result", {"id": P(), "assessment_id": P(), "student_id": P(), "course_enrollment_id": P(), "points_earned": P(), "is_exempt": P(), "is_late": P(), "comments": P(), "graded_by": P(), "graded_at": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (result_id, assessment_id, student_id, enrollment_id,
              str(_d(points_earned)) if points_earned is not None else None,
              is_exempt, is_late, comments, graded_by, now, now, now, graded_by)
@@ -661,7 +632,7 @@ def batch_enter_results(conn, args):
     except (json.JSONDecodeError, TypeError):
         err("--results must be valid JSON array")
 
-    a_row = conn.execute("SELECT * FROM educlaw_assessment WHERE id = ?", (assessment_id,)).fetchone()
+    a_row = conn.execute(Q.from_(Table("educlaw_assessment")).select(Table("educlaw_assessment").star).where(Field("id") == P()).get_sql(), (assessment_id,)).fetchone()
     if not a_row:
         err(f"Assessment {assessment_id} not found")
     a = dict(a_row)
@@ -693,17 +664,11 @@ def batch_enter_results(conn, args):
         # Find enrollment
         enrollment_id = None
         if section_id:
-            enr_row = conn.execute(
-                "SELECT id FROM educlaw_course_enrollment WHERE student_id = ? AND section_id = ?",
-                (student_id, section_id)
-            ).fetchone()
+            enr_row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Field("id")).where(Field("student_id") == P()).where(Field("section_id") == P()).get_sql(), (student_id, section_id)).fetchone()
             enrollment_id = dict(enr_row)["id"] if enr_row else None
 
         # Find existing result
-        existing = conn.execute(
-            "SELECT id FROM educlaw_assessment_result WHERE assessment_id = ? AND student_id = ?",
-            (assessment_id, student_id)
-        ).fetchone()
+        existing = conn.execute(Q.from_(Table("educlaw_assessment_result")).select(Field("id")).where(Field("assessment_id") == P()).where(Field("student_id") == P()).get_sql(), (assessment_id, student_id)).fetchone()
 
         pts_str = str(_d(points_earned)) if points_earned is not None else None
 
@@ -718,12 +683,9 @@ def batch_enter_results(conn, args):
                 )
             elif enrollment_id:
                 result_id = str(uuid.uuid4())
-                conn.execute(
-                    """INSERT INTO educlaw_assessment_result
-                       (id, assessment_id, student_id, course_enrollment_id,
-                        points_earned, is_exempt, is_late, comments,
-                        graded_by, graded_at, created_at, updated_at, created_by)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                sql, _ = insert_row("educlaw_assessment_result", {"id": P(), "assessment_id": P(), "student_id": P(), "course_enrollment_id": P(), "points_earned": P(), "is_exempt": P(), "is_late": P(), "comments": P(), "graded_by": P(), "graded_at": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+                conn.execute(sql,
                     (result_id, assessment_id, student_id, enrollment_id,
                      pts_str, is_exempt, is_late, comments, graded_by, now, now, now, graded_by)
                 )
@@ -831,10 +793,7 @@ def calculate_section_grade(conn, args):
     ).fetchall()
 
     if student_id:
-        enr_row = conn.execute(
-            "SELECT id FROM educlaw_course_enrollment WHERE student_id = ? AND section_id = ?",
-            (student_id, section_id)
-        ).fetchone()
+        enr_row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Field("id")).where(Field("student_id") == P()).where(Field("section_id") == P()).get_sql(), (student_id, section_id)).fetchone()
         if not enr_row:
             err(f"Student {student_id} is not enrolled in section {section_id}")
         enrollment_id = dict(enr_row)["id"]
@@ -917,11 +876,9 @@ def submit_grades(conn, args):
 
         # Send grade_posted notification
         notif_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_notification
-               (id, recipient_type, recipient_id, notification_type, title, message,
-                reference_type, reference_id, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (notif_id, "student", e["student_id"], "grade_posted",
              "Grade Posted",
              f"Your final grade has been posted: {letter} ({pct}%)",
@@ -953,9 +910,7 @@ def amend_grade(conn, args):
     if not amended_by:
         err("--amended-by is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_course_enrollment WHERE id = ?", (enrollment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Table("educlaw_course_enrollment").star).where(Field("id") == P()).get_sql(), (enrollment_id,)).fetchone()
     if not row:
         err(f"Enrollment {enrollment_id} not found")
 
@@ -966,12 +921,10 @@ def amend_grade(conn, args):
     now = _now_iso()
     amendment_id = str(uuid.uuid4())
 
-    conn.execute(
-        """INSERT INTO educlaw_grade_amendment
-           (id, course_enrollment_id, old_letter_grade, new_letter_grade,
-            old_grade_points, new_grade_points, reason, amended_by, approved_by,
-            created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_grade_amendment", {"id": P(), "course_enrollment_id": P(), "old_letter_grade": P(), "new_letter_grade": P(), "old_grade_points": P(), "new_grade_points": P(), "reason": P(), "amended_by": P(), "approved_by": P(), "created_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (amendment_id, enrollment_id, r["final_letter_grade"], new_letter_grade,
          r["final_grade_points"],
          str(_d(new_grade_points)) if new_grade_points else r["final_grade_points"],
@@ -1058,14 +1011,14 @@ def calculate_gpa(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         err(f"Student {student_id} not found")
 
     _calculate_gpa_internal(conn, student_id)
     conn.commit()
 
-    updated = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    updated = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     u = dict(updated)
     ok({"student_id": student_id, "cumulative_gpa": u["cumulative_gpa"],
         "total_credits_earned": u["total_credits_earned"],
@@ -1082,7 +1035,7 @@ def generate_transcript(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
 
@@ -1173,7 +1126,7 @@ def generate_report_card(conn, args):
     if not academic_term_id:
         err("--academic-term-id is required")
 
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
 

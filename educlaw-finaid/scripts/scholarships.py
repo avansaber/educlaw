@@ -23,6 +23,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -153,9 +154,7 @@ def update_scholarship_program(conn, args):
     if not program_id:
         return err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_scholarship_program WHERE id = ?", (program_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_program")).select(Table("finaid_scholarship_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
     if not row:
         return err(f"Scholarship program {program_id} not found")
 
@@ -244,9 +243,7 @@ def get_scholarship_program(conn, args):
     if not program_id:
         return err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_scholarship_program WHERE id = ?", (program_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_program")).select(Table("finaid_scholarship_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
     if not row:
         return err(f"Scholarship program {program_id} not found")
 
@@ -305,9 +302,7 @@ def deactivate_scholarship_program(conn, args):
     if not program_id:
         return err("--id is required")
 
-    row = conn.execute(
-        "SELECT id, is_active FROM finaid_scholarship_program WHERE id = ?", (program_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_program")).select(Field("id"), Field("is_active")).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
     if not row:
         return err(f"Scholarship program {program_id} not found")
 
@@ -345,9 +340,7 @@ def auto_match_scholarships(conn, args):
         return err("--aid-year-id is required")
 
     # Validate aid_year_id
-    if not conn.execute(
-        "SELECT id FROM finaid_aid_year WHERE id = ?", (aid_year_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("finaid_aid_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone():
         return err(f"Aid year {aid_year_id} not found")
 
     # Find all auto_match programs that are active
@@ -463,19 +456,13 @@ def submit_scholarship_application(conn, args):
         return err("--company-id is required")
 
     # Validate references
-    if not conn.execute(
-        "SELECT id FROM finaid_scholarship_program WHERE id = ?", (scholarship_program_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("finaid_scholarship_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (scholarship_program_id,)).fetchone():
         return err(f"Scholarship program {scholarship_program_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_student WHERE id = ?", (student_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM finaid_aid_year WHERE id = ?", (aid_year_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("finaid_aid_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone():
         return err(f"Aid year {aid_year_id} not found")
 
     # Optional fields
@@ -540,9 +527,7 @@ def update_scholarship_application(conn, args):
     if not application_id:
         return err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_scholarship_application WHERE id = ?", (application_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_application")).select(Table("finaid_scholarship_application").star).where(Field("id") == P()).get_sql(), (application_id,)).fetchone()
     if not row:
         return err(f"Scholarship application {application_id} not found")
 
@@ -587,9 +572,7 @@ def get_scholarship_application(conn, args):
     if not application_id:
         return err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_scholarship_application WHERE id = ?", (application_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_application")).select(Table("finaid_scholarship_application").star).where(Field("id") == P()).get_sql(), (application_id,)).fetchone()
     if not row:
         return err(f"Scholarship application {application_id} not found")
 
@@ -656,9 +639,7 @@ def review_scholarship_application(conn, args):
     if not reviewer_id:
         return err("--reviewer-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_scholarship_application WHERE id = ?", (application_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_application")).select(Table("finaid_scholarship_application").star).where(Field("id") == P()).get_sql(), (application_id,)).fetchone()
     if not row:
         return err(f"Scholarship application {application_id} not found")
 
@@ -708,9 +689,7 @@ def award_scholarship_application(conn, args):
     except Exception as exc:
         return err(f"Invalid award_amount: {exc}")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_scholarship_application WHERE id = ?", (application_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_application")).select(Table("finaid_scholarship_application").star).where(Field("id") == P()).get_sql(), (application_id,)).fetchone()
     if not row:
         return err(f"Scholarship application {application_id} not found")
 
@@ -768,9 +747,7 @@ def deny_scholarship_application(conn, args):
     if not application_id:
         return err("--id is required")
 
-    row = conn.execute(
-        "SELECT id FROM finaid_scholarship_application WHERE id = ?", (application_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_scholarship_application")).select(Field("id")).where(Field("id") == P()).get_sql(), (application_id,)).fetchone()
     if not row:
         return err(f"Scholarship application {application_id} not found")
 
@@ -832,10 +809,7 @@ def evaluate_scholarship_renewal(conn, args):
     evaluated_by          = getattr(args, "evaluated_by", None) or ""
 
     # Validate references
-    app_row = conn.execute(
-        "SELECT * FROM finaid_scholarship_application WHERE id = ?",
-        (scholarship_application_id,)
-    ).fetchone()
+    app_row = conn.execute(Q.from_(Table("finaid_scholarship_application")).select(Table("finaid_scholarship_application").star).where(Field("id") == P()).get_sql(), (scholarship_application_id,)).fetchone()
     if not app_row:
         return err(f"Scholarship application {scholarship_application_id} not found")
 
@@ -847,9 +821,7 @@ def evaluate_scholarship_renewal(conn, args):
     resolved_student_id = student_id or app.get("student_id", "")
 
     # Validate academic term
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         return err(f"Academic term {academic_term_id} not found")
 
     # Validate GPA and credits
@@ -864,10 +836,7 @@ def evaluate_scholarship_renewal(conn, args):
         return err("--credits-attempted must be an integer")
 
     # Fetch program renewal thresholds
-    prog_row = conn.execute(
-        "SELECT renewal_gpa_minimum, renewal_credits_minimum FROM finaid_scholarship_program WHERE id = ?",
-        (resolved_program_id,)
-    ).fetchone() if resolved_program_id else None
+    prog_row = conn.execute(Q.from_(Table("finaid_scholarship_program")).select(Field("renewal_gpa_minimum"), Field("renewal_credits_minimum")).where(Field("id") == P()).get_sql(), (resolved_program_id,)).fetchone() if resolved_program_id else None
 
     gpa_minimum     = to_decimal(prog_row["renewal_gpa_minimum"]     or "0") if prog_row else to_decimal("0")
     credits_minimum = to_decimal(prog_row["renewal_credits_minimum"] or "0") if prog_row else to_decimal("0")
@@ -889,13 +858,9 @@ def evaluate_scholarship_renewal(conn, args):
     renewal_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO finaid_scholarship_renewal
-               (id, scholarship_application_id, student_id, scholarship_program_id,
-                academic_term_id, renewal_status, gpa_at_evaluation, credits_attempted,
-                meets_criteria, reason, evaluated_by, evaluation_date,
-                company_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("finaid_scholarship_renewal", {"id": P(), "scholarship_application_id": P(), "student_id": P(), "scholarship_program_id": P(), "academic_term_id": P(), "renewal_status": P(), "gpa_at_evaluation": P(), "credits_attempted": P(), "meets_criteria": P(), "reason": P(), "evaluated_by": P(), "evaluation_date": P(), "company_id": P(), "created_at": P(), "updated_at": P()})
+
+        conn.execute(sql,
             (renewal_id, scholarship_application_id, resolved_student_id,
              resolved_program_id, academic_term_id, renewal_status,
              str(gpa_at_evaluation), credits_attempted, meets_criteria,

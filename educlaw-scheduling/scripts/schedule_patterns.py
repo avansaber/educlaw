@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -84,7 +85,7 @@ def add_schedule_pattern(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     description = getattr(args, "description", None) or ""
@@ -95,11 +96,9 @@ def add_schedule_pattern(conn, args):
     pattern_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_schedule_pattern
-               (id, name, description, pattern_type, cycle_days, total_periods_per_cycle,
-                notes, is_active, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_schedule_pattern", {"id": P(), "name": P(), "description": P(), "pattern_type": P(), "cycle_days": P(), "total_periods_per_cycle": P(), "notes": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (pattern_id, name, description, pattern_type, cycle_days, total_periods,
              notes, is_active, company_id, now, now,
              getattr(args, "user_id", None) or "")
@@ -120,9 +119,7 @@ def update_schedule_pattern(conn, args):
     if not pattern_id:
         err("--pattern-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_pattern WHERE id = ?", (pattern_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Table("educlaw_schedule_pattern").star).where(Field("id") == P()).get_sql(), (pattern_id,)).fetchone()
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
@@ -160,9 +157,7 @@ def get_schedule_pattern(conn, args):
     if not pattern_id:
         err("--pattern-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_pattern WHERE id = ?", (pattern_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Table("educlaw_schedule_pattern").star).where(Field("id") == P()).get_sql(), (pattern_id,)).fetchone()
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
@@ -238,9 +233,7 @@ def add_day_type(conn, args):
     if not name:
         err("--name is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_schedule_pattern WHERE id = ?", (schedule_pattern_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Field("id")).where(Field("id") == P()).get_sql(), (schedule_pattern_id,)).fetchone():
         err(f"Schedule pattern {schedule_pattern_id} not found")
 
     sort_order = int(getattr(args, "sort_order", None) or 0)
@@ -249,10 +242,9 @@ def add_day_type(conn, args):
     day_type_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_day_type
-               (id, schedule_pattern_id, code, name, sort_order, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_day_type", {"id": P(), "schedule_pattern_id": P(), "code": P(), "name": P(), "sort_order": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (day_type_id, schedule_pattern_id, code, name, sort_order, company_id, now,
              getattr(args, "user_id", None) or "")
         )
@@ -296,9 +288,7 @@ def add_bell_period(conn, args):
     if duration_minutes <= 0:
         err("--duration-minutes must be > 0")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_schedule_pattern WHERE id = ?", (schedule_pattern_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Field("id")).where(Field("id") == P()).get_sql(), (schedule_pattern_id,)).fetchone():
         err(f"Schedule pattern {schedule_pattern_id} not found")
 
     period_type = getattr(args, "period_type", None) or "class"
@@ -315,12 +305,9 @@ def add_bell_period(conn, args):
     period_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_bell_period
-               (id, schedule_pattern_id, period_number, period_name, start_time, end_time,
-                duration_minutes, period_type, applies_to_day_types, sort_order,
-                company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_bell_period", {"id": P(), "schedule_pattern_id": P(), "period_number": P(), "period_name": P(), "start_time": P(), "end_time": P(), "duration_minutes": P(), "period_type": P(), "applies_to_day_types": P(), "sort_order": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (period_id, schedule_pattern_id, period_number, period_name, start_time, end_time,
              duration_minutes, period_type, applies_to_str, sort_order, company_id, now,
              getattr(args, "user_id", None) or "")
@@ -347,24 +334,18 @@ def activate_schedule_pattern(conn, args):
     if not pattern_id:
         err("--pattern-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_pattern WHERE id = ?", (pattern_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Table("educlaw_schedule_pattern").star).where(Field("id") == P()).get_sql(), (pattern_id,)).fetchone()
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
     # Validate at least one day type
-    day_count = conn.execute(
-        "SELECT COUNT(*) FROM educlaw_day_type WHERE schedule_pattern_id = ?", (pattern_id,)
-    ).fetchone()[0]
+    day_count = conn.execute(Q.from_(Table("educlaw_day_type")).select(fn.Count("*")).where(Field("schedule_pattern_id") == P()).get_sql(), (pattern_id,)).fetchone()[0]
     if day_count == 0:
         err("Cannot activate: pattern must have at least one day type. "
             "Use add-day-type to add day types first.")
 
     # Validate at least one bell period
-    period_count = conn.execute(
-        "SELECT COUNT(*) FROM educlaw_bell_period WHERE schedule_pattern_id = ?", (pattern_id,)
-    ).fetchone()[0]
+    period_count = conn.execute(Q.from_(Table("educlaw_bell_period")).select(fn.Count("*")).where(Field("schedule_pattern_id") == P()).get_sql(), (pattern_id,)).fetchone()[0]
     if period_count == 0:
         err("Cannot activate: pattern must have at least one bell period. "
             "Use add-bell-period to add bell periods first.")
@@ -398,9 +379,7 @@ def map_day_type_to_dates(conn, args):
     if not date_range_end:
         err("--date-range-end is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_pattern WHERE id = ?", (pattern_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Table("educlaw_schedule_pattern").star).where(Field("id") == P()).get_sql(), (pattern_id,)).fetchone()
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
@@ -463,9 +442,7 @@ def get_pattern_calendar(conn, args):
     if not pattern_id:
         err("--pattern-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_pattern WHERE id = ?", (pattern_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Table("educlaw_schedule_pattern").star).where(Field("id") == P()).get_sql(), (pattern_id,)).fetchone()
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
@@ -524,9 +501,7 @@ def calculate_contact_hours(conn, args):
     if not pattern_id:
         err("--pattern-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_pattern WHERE id = ?", (pattern_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Table("educlaw_schedule_pattern").star).where(Field("id") == P()).get_sql(), (pattern_id,)).fetchone()
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 

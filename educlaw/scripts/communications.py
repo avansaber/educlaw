@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -149,7 +150,7 @@ def add_announcement(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     priority = getattr(args, "priority", None) or "normal"
@@ -198,9 +199,7 @@ def update_announcement(conn, args):
     if not announcement_id:
         err("--announcement-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_announcement WHERE id = ?", (announcement_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_announcement")).select(Table("educlaw_announcement").star).where(Field("id") == P()).get_sql(), (announcement_id,)).fetchone()
     if not row:
         err(f"Announcement {announcement_id} not found")
     if row["announcement_status"] != "draft":
@@ -249,9 +248,7 @@ def publish_announcement(conn, args):
     if not announcement_id:
         err("--announcement-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_announcement WHERE id = ?", (announcement_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_announcement")).select(Table("educlaw_announcement").star).where(Field("id") == P()).get_sql(), (announcement_id,)).fetchone()
     if not row:
         err(f"Announcement {announcement_id} not found")
     if row["announcement_status"] != "draft":
@@ -339,9 +336,7 @@ def get_announcement(conn, args):
     if not announcement_id:
         err("--announcement-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_announcement WHERE id = ?", (announcement_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_announcement")).select(Table("educlaw_announcement").star).where(Field("id") == P()).get_sql(), (announcement_id,)).fetchone()
     if not row:
         err(f"Announcement {announcement_id} not found")
 
@@ -395,13 +390,13 @@ def send_notification(conn, args):
 
     # Validate recipient exists
     if recipient_type == "student":
-        if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (recipient_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (recipient_id,)).fetchone():
             err(f"Student {recipient_id} not found")
     elif recipient_type == "guardian":
-        if not conn.execute("SELECT id FROM educlaw_guardian WHERE id = ?", (recipient_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_guardian")).select(Field("id")).where(Field("id") == P()).get_sql(), (recipient_id,)).fetchone():
             err(f"Guardian {recipient_id} not found")
     elif recipient_type == "employee":
-        if not conn.execute("SELECT id FROM employee WHERE id = ?", (recipient_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("employee")).select(Field("id")).where(Field("id") == P()).get_sql(), (recipient_id,)).fetchone():
             err(f"Employee {recipient_id} not found")
 
     sent_via = getattr(args, "sent_via", None) or "system"
@@ -465,16 +460,12 @@ def send_progress_report(conn, args):
         err("--company-id is required")
 
     # Validate student
-    student_row = conn.execute(
-        "SELECT * FROM educlaw_student WHERE id = ?", (student_id,)
-    ).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
 
     # Validate academic term
-    term_row = conn.execute(
-        "SELECT * FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone()
+    term_row = conn.execute(Q.from_(Table("educlaw_academic_term")).select(Table("educlaw_academic_term").star).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone()
     if not term_row:
         err(f"Academic term {academic_term_id} not found")
 
@@ -585,7 +576,7 @@ def send_emergency_alert(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     sent_by = getattr(args, "sent_by", None) or getattr(args, "user_id", None) or ""

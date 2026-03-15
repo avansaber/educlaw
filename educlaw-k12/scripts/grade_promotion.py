@@ -19,6 +19,7 @@ from erpclaw_lib.decimal_utils import to_decimal
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -62,16 +63,11 @@ def create_promotion_review(conn, args):
     if not academic_year_id:
         return err("--academic-year-id is required")
 
-    student = conn.execute(
-        "SELECT id, grade_level, cumulative_gpa, company_id FROM educlaw_student WHERE id = ?",
-        (student_id,)
-    ).fetchone()
+    student = conn.execute(Q.from_(Table("educlaw_student")).select(Field("id"), Field("grade_level"), Field("cumulative_gpa"), Field("company_id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student:
         return err(f"Student {student_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone():
         return err(f"Academic year {academic_year_id} not found")
 
     # Check uniqueness: one review per student per year
@@ -165,9 +161,7 @@ def update_promotion_review(conn, args):
     if not review_id:
         return err("--review-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_promotion_review WHERE id = ?", (review_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_promotion_review")).select(Field("id")).where(Field("id") == P()).get_sql(), (review_id,)).fetchone():
         return err(f"Promotion review {review_id} not found")
 
     updates = {}
@@ -257,10 +251,7 @@ def submit_promotion_decision(conn, args):
     if not decision:
         return err("--decision is required (promote/retain/conditional_promote)")
 
-    review = conn.execute(
-        "SELECT * FROM educlaw_k12_promotion_review WHERE id = ?",
-        (promotion_review_id,)
-    ).fetchone()
+    review = conn.execute(Q.from_(Table("educlaw_k12_promotion_review")).select(Table("educlaw_k12_promotion_review").star).where(Field("id") == P()).get_sql(), (promotion_review_id,)).fetchone()
     if not review:
         return err(f"Promotion review {promotion_review_id} not found")
 
@@ -337,10 +328,7 @@ def get_promotion_decision(conn, args):
     decision_id = getattr(args, "decision_id", None) or None
 
     if decision_id:
-        row = conn.execute(
-            "SELECT * FROM educlaw_k12_promotion_decision WHERE id = ?",
-            (decision_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_k12_promotion_decision")).select(Table("educlaw_k12_promotion_decision").star).where(Field("id") == P()).get_sql(), (decision_id,)).fetchone()
     elif student_id and academic_year_id:
         row = conn.execute(
             """SELECT pd.* FROM educlaw_k12_promotion_decision pd
@@ -385,10 +373,7 @@ def notify_promotion_decision(conn, args):
     if not decision_id:
         return err("--decision-id is required")
 
-    decision = conn.execute(
-        "SELECT * FROM educlaw_k12_promotion_decision WHERE id = ?",
-        (decision_id,)
-    ).fetchone()
+    decision = conn.execute(Q.from_(Table("educlaw_k12_promotion_decision")).select(Table("educlaw_k12_promotion_decision").star).where(Field("id") == P()).get_sql(), (decision_id,)).fetchone()
     if not decision:
         return err(f"Promotion decision {decision_id} not found")
 
@@ -399,9 +384,7 @@ def notify_promotion_decision(conn, args):
     next_grade = d["next_grade_level"]
 
     # Get student name
-    student = conn.execute(
-        "SELECT full_name FROM educlaw_student WHERE id = ?", (student_id,)
-    ).fetchone()
+    student = conn.execute(Q.from_(Table("educlaw_student")).select(Field("full_name")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     student_name = student["full_name"] if student else ""
 
     # Get guardians
@@ -611,20 +594,15 @@ def create_intervention_plan(conn, args):
     if not trigger:
         return err("--trigger is required (at_risk_mid_year/retention_decision/other)")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone():
         return err(f"Academic year {academic_year_id} not found")
 
     promotion_review_id = getattr(args, "promotion_review_id", None) or None
     if promotion_review_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_k12_promotion_review WHERE id = ?",
-            (promotion_review_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_k12_promotion_review")).select(Field("id")).where(Field("id") == P()).get_sql(), (promotion_review_id,)).fetchone():
             return err(f"Promotion review {promotion_review_id} not found")
 
     intervention_types = getattr(args, "intervention_types", None) or "[]"
@@ -667,9 +645,7 @@ def update_intervention_plan(conn, args):
     if not plan_id:
         return err("--intervention-plan-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_intervention_plan WHERE id = ?", (plan_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_intervention_plan")).select(Field("id")).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone():
         return err(f"Intervention plan {plan_id} not found")
 
     updates = {}

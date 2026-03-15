@@ -20,6 +20,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     pass
 
@@ -99,18 +100,13 @@ def push_assessment_to_lms(conn, args):
         err("--connection-id is required")
 
     # Load assessment
-    assessment = conn.execute(
-        "SELECT * FROM educlaw_assessment WHERE id = ?", (assessment_id,)
-    ).fetchone()
+    assessment = conn.execute(Q.from_(Table("educlaw_assessment")).select(Table("educlaw_assessment").star).where(Field("id") == P()).get_sql(), (assessment_id,)).fetchone()
     if not assessment:
         err(f"Assessment {assessment_id} not found")
     assessment = dict(assessment)
 
     # Load assessment plan to find section
-    plan = conn.execute(
-        "SELECT * FROM educlaw_assessment_plan WHERE id = ?",
-        (assessment["assessment_plan_id"],)
-    ).fetchone()
+    plan = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Table("educlaw_assessment_plan").star).where(Field("id") == P()).get_sql(), (assessment["assessment_plan_id"],)).fetchone()
     if not plan:
         err(f"Assessment plan for assessment {assessment_id} not found")
     plan = dict(plan)
@@ -118,9 +114,7 @@ def push_assessment_to_lms(conn, args):
     section_id = getattr(args, "section_id", None) or plan["section_id"]
 
     # Load LMS connection
-    lms_conn = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not lms_conn:
         err(f"LMS connection {conn_id} not found")
     lms_conn = dict(lms_conn)
@@ -140,10 +134,7 @@ def push_assessment_to_lms(conn, args):
     course_mapping = dict(course_mapping)
 
     # Check for existing mapping (prevent duplicates)
-    existing_mapping = conn.execute(
-        "SELECT * FROM educlaw_lms_assignment_mapping WHERE lms_connection_id = ? AND assessment_id = ?",
-        (conn_id, assessment_id)
-    ).fetchone()
+    existing_mapping = conn.execute(Q.from_(Table("educlaw_lms_assignment_mapping")).select(Table("educlaw_lms_assignment_mapping").star).where(Field("lms_connection_id") == P()).where(Field("assessment_id") == P()).get_sql(), (conn_id, assessment_id)).fetchone()
     if existing_mapping:
         d = dict(existing_mapping)
         ok({
@@ -279,9 +270,7 @@ def pull_lms_assignments(conn, args):
         err("--section-id is required")
 
     # Load connection
-    lms_conn = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not lms_conn:
         err(f"LMS connection {conn_id} not found")
     lms_conn = dict(lms_conn)
@@ -323,17 +312,13 @@ def pull_lms_assignments(conn, args):
     if create_assessments:
         # Use provided plan_id or look up default for section
         if not plan_id:
-            plan_row = conn.execute(
-                "SELECT id FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)
-            ).fetchone()
+            plan_row = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Field("id")).where(Field("section_id") == P()).get_sql(), (section_id,)).fetchone()
             if plan_row:
                 plan_id = plan_row[0]
         if not plan_id:
             err("--plan-id is required when --create-assessments is used and no plan exists for section")
         # Validate plan
-        plan_row = conn.execute(
-            "SELECT id FROM educlaw_assessment_plan WHERE id = ?", (plan_id,)
-        ).fetchone()
+        plan_row = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Field("id")).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone()
         if not plan_row:
             err(f"Assessment plan {plan_id} not found")
         # Need a category if creating assessments
@@ -459,26 +444,19 @@ def sync_assessment_update(conn, args):
         err("--connection-id is required")
 
     # Load assessment
-    assessment = conn.execute(
-        "SELECT * FROM educlaw_assessment WHERE id = ?", (assessment_id,)
-    ).fetchone()
+    assessment = conn.execute(Q.from_(Table("educlaw_assessment")).select(Table("educlaw_assessment").star).where(Field("id") == P()).get_sql(), (assessment_id,)).fetchone()
     if not assessment:
         err(f"Assessment {assessment_id} not found")
     assessment = dict(assessment)
 
     # Load connection
-    lms_conn = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not lms_conn:
         err(f"LMS connection {conn_id} not found")
     lms_conn = dict(lms_conn)
 
     # Load mapping
-    mapping = conn.execute(
-        "SELECT * FROM educlaw_lms_assignment_mapping WHERE lms_connection_id = ? AND assessment_id = ?",
-        (conn_id, assessment_id)
-    ).fetchone()
+    mapping = conn.execute(Q.from_(Table("educlaw_lms_assignment_mapping")).select(Table("educlaw_lms_assignment_mapping").star).where(Field("lms_connection_id") == P()).where(Field("assessment_id") == P()).get_sql(), (conn_id, assessment_id)).fetchone()
     if not mapping:
         ok({
             "assessment_id": assessment_id,
@@ -495,10 +473,7 @@ def sync_assessment_update(conn, args):
     key = _get_encryption_key()
 
     # Get course mapping for lms_course_id
-    plan = conn.execute(
-        "SELECT section_id FROM educlaw_assessment_plan WHERE id = ?",
-        (assessment["assessment_plan_id"],)
-    ).fetchone()
+    plan = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Field("section_id")).where(Field("id") == P()).get_sql(), (assessment["assessment_plan_id"],)).fetchone()
     section_id = plan[0] if plan else None
 
     lms_course_id = ""
@@ -629,10 +604,7 @@ def unlink_lms_assignment(conn, args):
     if not conn_id:
         err("--connection-id is required")
 
-    mapping = conn.execute(
-        "SELECT * FROM educlaw_lms_assignment_mapping WHERE lms_connection_id = ? AND assessment_id = ?",
-        (conn_id, assessment_id)
-    ).fetchone()
+    mapping = conn.execute(Q.from_(Table("educlaw_lms_assignment_mapping")).select(Table("educlaw_lms_assignment_mapping").star).where(Field("lms_connection_id") == P()).where(Field("assessment_id") == P()).get_sql(), (conn_id, assessment_id)).fetchone()
     if not mapping:
         err(f"No LMS assignment mapping found for assessment {assessment_id} on connection {conn_id}")
     mapping = dict(mapping)

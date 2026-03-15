@@ -20,6 +20,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -68,11 +69,9 @@ def _log_data_access_internal(conn, user_id, student_id, data_category,
     log_id = str(uuid.uuid4())
     now = _now_iso()
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (log_id, user_id, student_id, data_category, access_type,
              access_reason, int(is_emergency), "", company_id, now, user_id)
         )
@@ -106,7 +105,7 @@ def add_student_applicant(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     gender = getattr(args, "gender", None) or ""
@@ -115,14 +114,12 @@ def add_student_applicant(conn, args):
 
     applying_for_program_id = getattr(args, "applying_for_program_id", None)
     if applying_for_program_id:
-        if not conn.execute("SELECT id FROM educlaw_program WHERE id = ?",
-                            (applying_for_program_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (applying_for_program_id,)).fetchone():
             err(f"Program {applying_for_program_id} not found")
 
     applying_for_term_id = getattr(args, "applying_for_term_id", None)
     if applying_for_term_id:
-        if not conn.execute("SELECT id FROM educlaw_academic_term WHERE id = ?",
-                            (applying_for_term_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (applying_for_term_id,)).fetchone():
             err(f"Academic term {applying_for_term_id} not found")
 
     naming = get_next_name(conn, "educlaw_student_applicant", company_id=company_id)
@@ -130,14 +127,9 @@ def add_student_applicant(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_student_applicant
-               (id, naming_series, first_name, middle_name, last_name, date_of_birth,
-                gender, email, phone, address, applying_for_program_id, applying_for_term_id,
-                previous_school, previous_school_address, transfer_records,
-                application_date, status, review_notes, acceptance_deadline,
-                guardian_info, documents, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_student_applicant", {"id": P(), "naming_series": P(), "first_name": P(), "middle_name": P(), "last_name": P(), "date_of_birth": P(), "gender": P(), "email": P(), "phone": P(), "address": P(), "applying_for_program_id": P(), "applying_for_term_id": P(), "previous_school": P(), "previous_school_address": P(), "transfer_records": P(), "application_date": P(), "status": P(), "review_notes": P(), "acceptance_deadline": P(), "guardian_info": P(), "documents": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (applicant_id, naming, first_name,
              getattr(args, "middle_name", None) or "",
              last_name, date_of_birth, gender,
@@ -168,9 +160,7 @@ def update_student_applicant(conn, args):
     if not applicant_id:
         err("--applicant-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_student_applicant WHERE id = ?", (applicant_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student_applicant")).select(Table("educlaw_student_applicant").star).where(Field("id") == P()).get_sql(), (applicant_id,)).fetchone()
     if not row:
         err(f"Applicant {applicant_id} not found")
 
@@ -202,14 +192,12 @@ def update_student_applicant(conn, args):
     if getattr(args, "documents", None) is not None:
         updates.append("documents = ?"); params.append(args.documents); changed.append("documents")
     if getattr(args, "applying_for_program_id", None) is not None:
-        if not conn.execute("SELECT id FROM educlaw_program WHERE id = ?",
-                            (args.applying_for_program_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.applying_for_program_id,)).fetchone():
             err(f"Program {args.applying_for_program_id} not found")
         updates.append("applying_for_program_id = ?"); params.append(args.applying_for_program_id)
         changed.append("applying_for_program_id")
     if getattr(args, "applying_for_term_id", None) is not None:
-        if not conn.execute("SELECT id FROM educlaw_academic_term WHERE id = ?",
-                            (args.applying_for_term_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.applying_for_term_id,)).fetchone():
             err(f"Academic term {args.applying_for_term_id} not found")
         updates.append("applying_for_term_id = ?"); params.append(args.applying_for_term_id)
         changed.append("applying_for_term_id")
@@ -236,9 +224,7 @@ def get_applicant(conn, args):
         err("--applicant-id or --naming-series is required")
 
     if applicant_id:
-        row = conn.execute(
-            "SELECT * FROM educlaw_student_applicant WHERE id = ?", (applicant_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_student_applicant")).select(Table("educlaw_student_applicant").star).where(Field("id") == P()).get_sql(), (applicant_id,)).fetchone()
     else:
         row = conn.execute(
             "SELECT * FROM educlaw_student_applicant WHERE naming_series = ?", (naming_series,)
@@ -293,9 +279,7 @@ def review_applicant(conn, args):
     if not reviewed_by:
         err("--reviewed-by is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_student_applicant WHERE id = ?", (applicant_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student_applicant")).select(Table("educlaw_student_applicant").star).where(Field("id") == P()).get_sql(), (applicant_id,)).fetchone()
     if not row:
         err(f"Applicant {applicant_id} not found")
 
@@ -316,11 +300,9 @@ def review_applicant(conn, args):
 
     if new_status == "accepted":
         notif_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_notification
-               (id, recipient_type, recipient_id, notification_type, title, message,
-                reference_type, reference_id, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (notif_id, "student", applicant_id, "acceptance",
              "Application Accepted",
              f"Congratulations! Your application {r['naming_series']} has been accepted.",
@@ -342,9 +324,7 @@ def convert_applicant_to_student(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_student_applicant WHERE id = ?", (applicant_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student_applicant")).select(Table("educlaw_student_applicant").star).where(Field("id") == P()).get_sql(), (applicant_id,)).fetchone()
     if not row:
         err(f"Applicant {applicant_id} not found")
 
@@ -369,16 +349,9 @@ def convert_applicant_to_student(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_student
-               (id, naming_series, first_name, middle_name, last_name, full_name,
-                date_of_birth, gender, email, phone, address, emergency_contact,
-                student_applicant_id, current_program_id, grade_level, cohort_year,
-                cumulative_gpa, total_credits_earned, academic_standing, status,
-                registration_hold, directory_info_opt_out, is_coppa_applicable,
-                coppa_consent_type, coppa_consent_date, enrollment_date,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_student", {"id": P(), "naming_series": P(), "first_name": P(), "middle_name": P(), "last_name": P(), "full_name": P(), "date_of_birth": P(), "gender": P(), "email": P(), "phone": P(), "address": P(), "emergency_contact": P(), "student_applicant_id": P(), "current_program_id": P(), "grade_level": P(), "cohort_year": P(), "cumulative_gpa": P(), "total_credits_earned": P(), "academic_standing": P(), "status": P(), "registration_hold": P(), "directory_info_opt_out": P(), "is_coppa_applicable": P(), "coppa_consent_type": P(), "coppa_consent_date": P(), "enrollment_date": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (student_id, naming, r["first_name"], mid, r["last_name"],
              full_name, r["date_of_birth"], r.get("gender", ""), r.get("email", ""),
              r.get("phone", ""), r.get("address", "{}"),
@@ -426,7 +399,7 @@ def add_student(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     gender = getattr(args, "gender", None) or ""
@@ -435,8 +408,7 @@ def add_student(conn, args):
 
     current_program_id = getattr(args, "current_program_id", None)
     if current_program_id:
-        if not conn.execute("SELECT id FROM educlaw_program WHERE id = ?",
-                            (current_program_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (current_program_id,)).fetchone():
             err(f"Program {current_program_id} not found")
 
     enrollment_date = getattr(args, "enrollment_date", None) or _now_iso()[:10]
@@ -450,16 +422,9 @@ def add_student(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_student
-               (id, naming_series, first_name, middle_name, last_name, full_name,
-                date_of_birth, gender, email, phone, address, emergency_contact,
-                student_applicant_id, current_program_id, grade_level, cohort_year,
-                cumulative_gpa, total_credits_earned, academic_standing, status,
-                registration_hold, directory_info_opt_out, is_coppa_applicable,
-                coppa_consent_type, coppa_consent_date, enrollment_date,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_student", {"id": P(), "naming_series": P(), "first_name": P(), "middle_name": P(), "last_name": P(), "full_name": P(), "date_of_birth": P(), "gender": P(), "email": P(), "phone": P(), "address": P(), "emergency_contact": P(), "student_applicant_id": P(), "current_program_id": P(), "grade_level": P(), "cohort_year": P(), "cumulative_gpa": P(), "total_credits_earned": P(), "academic_standing": P(), "status": P(), "registration_hold": P(), "directory_info_opt_out": P(), "is_coppa_applicable": P(), "coppa_consent_type": P(), "coppa_consent_date": P(), "enrollment_date": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (student_id, naming, first_name, middle_name, last_name, full_name,
              date_of_birth, gender,
              getattr(args, "email", None) or "",
@@ -489,7 +454,7 @@ def update_student(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         err(f"Student {student_id} not found")
 
@@ -513,8 +478,7 @@ def update_student(conn, args):
         updates.append("academic_standing = ?"); params.append(args.academic_standing)
         changed.append("academic_standing")
     if getattr(args, "current_program_id", None) is not None:
-        if not conn.execute("SELECT id FROM educlaw_program WHERE id = ?",
-                            (args.current_program_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.current_program_id,)).fetchone():
             err(f"Program {args.current_program_id} not found")
         updates.append("current_program_id = ?"); params.append(args.current_program_id)
         changed.append("current_program_id")
@@ -554,7 +518,7 @@ def get_student(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         err(f"Student {student_id} not found")
 
@@ -629,7 +593,7 @@ def change_student_status(conn, args):
     if not reason:
         err("--reason is required for status change")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         err(f"Student {student_id} not found")
 
@@ -651,7 +615,7 @@ def graduate_student(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         err(f"Student {student_id} not found")
 
@@ -709,7 +673,7 @@ def add_guardian(conn, args):
     if not phone:
         err("--phone is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     guardian_id = str(uuid.uuid4())
@@ -717,12 +681,9 @@ def add_guardian(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_guardian
-               (id, first_name, last_name, full_name, relationship, email, phone,
-                alternate_phone, address, occupation, employer, customer_id, company_id,
-                created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_guardian", {"id": P(), "first_name": P(), "last_name": P(), "full_name": P(), "relationship": P(), "email": P(), "phone": P(), "alternate_phone": P(), "address": P(), "occupation": P(), "employer": P(), "customer_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (guardian_id, first_name, last_name, full_name, relationship,
              getattr(args, "email", None) or "",
              phone,
@@ -739,16 +700,13 @@ def add_guardian(conn, args):
     # Link to student if student_id provided
     student_id = getattr(args, "student_id", None)
     if student_id:
-        if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
             err(f"Student {student_id} not found")
         link_id = str(uuid.uuid4())
         try:
-            conn.execute(
-                """INSERT INTO educlaw_student_guardian
-                   (id, student_id, guardian_id, relationship, has_custody, can_pickup,
-                    receives_communications, is_primary_contact, is_emergency_contact,
-                    created_at, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql, _ = insert_row("educlaw_student_guardian", {"id": P(), "student_id": P(), "guardian_id": P(), "relationship": P(), "has_custody": P(), "can_pickup": P(), "receives_communications": P(), "is_primary_contact": P(), "is_emergency_contact": P(), "created_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (link_id, student_id, guardian_id, relationship,
                  int(getattr(args, "has_custody", None) or 1),
                  int(getattr(args, "can_pickup", None) or 1),
@@ -772,7 +730,7 @@ def update_guardian(conn, args):
     if not guardian_id:
         err("--guardian-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_guardian WHERE id = ?", (guardian_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_guardian")).select(Table("educlaw_guardian").star).where(Field("id") == P()).get_sql(), (guardian_id,)).fetchone()
     if not row:
         err(f"Guardian {guardian_id} not found")
 
@@ -816,7 +774,7 @@ def get_guardian(conn, args):
     if not guardian_id:
         err("--guardian-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_guardian WHERE id = ?", (guardian_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_guardian")).select(Table("educlaw_guardian").star).where(Field("id") == P()).get_sql(), (guardian_id,)).fetchone()
     if not row:
         err(f"Guardian {guardian_id} not found")
 
@@ -875,27 +833,22 @@ def link_guardian_to_student(conn, args):
     if relationship not in VALID_RELATIONSHIPS:
         err(f"--relationship must be one of: {', '.join(VALID_RELATIONSHIPS)}")
 
-    if not conn.execute("SELECT id FROM educlaw_guardian WHERE id = ?", (guardian_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_guardian")).select(Field("id")).where(Field("id") == P()).get_sql(), (guardian_id,)).fetchone():
         err(f"Guardian {guardian_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
-    existing = conn.execute(
-        "SELECT id FROM educlaw_student_guardian WHERE student_id = ? AND guardian_id = ?",
-        (student_id, guardian_id)
-    ).fetchone()
+    existing = conn.execute(Q.from_(Table("educlaw_student_guardian")).select(Field("id")).where(Field("student_id") == P()).where(Field("guardian_id") == P()).get_sql(), (student_id, guardian_id)).fetchone()
     if existing:
         err(f"Guardian {guardian_id} is already linked to student {student_id}")
 
     link_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_student_guardian
-           (id, student_id, guardian_id, relationship, has_custody, can_pickup,
-            receives_communications, is_primary_contact, is_emergency_contact,
-            created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_student_guardian", {"id": P(), "student_id": P(), "guardian_id": P(), "relationship": P(), "has_custody": P(), "can_pickup": P(), "receives_communications": P(), "is_primary_contact": P(), "is_emergency_contact": P(), "created_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (link_id, student_id, guardian_id, relationship,
          int(getattr(args, "has_custody", None) or 1),
          int(getattr(args, "can_pickup", None) or 1),
@@ -937,18 +890,17 @@ def log_data_access(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
     log_id = str(uuid.uuid4())
     now = _now_iso()
     is_emergency = int(getattr(args, "is_emergency_access", None) or 0)
 
-    conn.execute(
-        """INSERT INTO educlaw_data_access_log
-           (id, user_id, student_id, data_category, access_type, access_reason,
-            is_emergency_access, ip_address, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (log_id, user_id, student_id, data_category, access_type,
          getattr(args, "access_reason", None) or "",
          is_emergency,
@@ -980,18 +932,16 @@ def add_consent_record(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
     consent_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_consent_record
-           (id, student_id, consent_type, granted_by, granted_by_relationship,
-            consent_date, expiry_date, is_revoked, revoked_date,
-            third_party_name, purpose, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_consent_record", {"id": P(), "student_id": P(), "consent_type": P(), "granted_by": P(), "granted_by_relationship": P(), "consent_date": P(), "expiry_date": P(), "is_revoked": P(), "revoked_date": P(), "third_party_name": P(), "purpose": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (consent_id, student_id, consent_type, granted_by,
          getattr(args, "granted_by_relationship", None) or "",
          consent_date,
@@ -1012,9 +962,7 @@ def revoke_consent(conn, args):
     if not consent_id:
         err("--consent-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_consent_record WHERE id = ?", (consent_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_consent_record")).select(Table("educlaw_consent_record").star).where(Field("id") == P()).get_sql(), (consent_id,)).fetchone()
     if not row:
         err(f"Consent record {consent_id} not found")
 
@@ -1045,7 +993,7 @@ def export_student_record(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         err(f"Student {student_id} not found")
 
@@ -1078,11 +1026,9 @@ def export_student_record(conn, args):
 
     now = _now_iso()
     export_log_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_data_access_log
-           (id, user_id, student_id, data_category, access_type, access_reason,
-            is_emergency_access, ip_address, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (export_log_id, user_id, student_id, "grades", "export",
          "FERPA education record export request",
          0, "", company_id, now, user_id)

@@ -14,6 +14,7 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("educlaw_student", "HSTU-")
 except ImportError:
@@ -46,9 +47,9 @@ def get_student_record(conn, args):
     if not record_id and not student_id:
         return err("--id or --student-id is required")
     if record_id:
-        row = conn.execute("SELECT * FROM educlaw_student WHERE id=?", (record_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (record_id,)).fetchone()
     else:
-        row = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         return err("Student record not found")
     ok(dict(row))
@@ -84,7 +85,7 @@ def generate_transcript(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
 
@@ -127,7 +128,7 @@ def calculate_gpa(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
 
@@ -169,11 +170,11 @@ def degree_audit(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
 
-    program = conn.execute("SELECT * FROM highered_degree_program WHERE id=?", (record["program_id"],)).fetchone()
+    program = conn.execute(Q.from_(Table("highered_degree_program")).select(Table("highered_degree_program").star).where(Field("id") == P()).get_sql(), (record["program_id"],)).fetchone()
     if not program:
         return err("Degree program not found")
 
@@ -217,7 +218,7 @@ def update_academic_standing(conn, args):
     if academic_standing not in VALID_STANDINGS:
         return err(f"Invalid standing: {academic_standing}. Must be one of: {', '.join(VALID_STANDINGS)}")
 
-    row = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
     if not row:
         return err("Student record not found")
 
@@ -270,7 +271,7 @@ def remove_hold(conn, args):
     hold_id = getattr(args, "id", None)
     if not hold_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_hold WHERE id=?", (hold_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("highered_hold")).select(Table("highered_hold").star).where(Field("id") == P()).get_sql(), (hold_id,)).fetchone()
     if not row:
         return err("Hold not found")
     if row["hold_status"] != "active":

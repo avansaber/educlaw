@@ -21,6 +21,7 @@ try:
     from erpclaw_lib.crypto import encrypt_field as _encrypt_field_raw
     from erpclaw_lib.crypto import decrypt_field as _decrypt_field_raw
     from erpclaw_lib.crypto import derive_key
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 
     # Derive a stable field-encryption key from env passphrase
     _FIELD_PASSPHRASE = os.environ.get("ERPCLAW_FIELD_KEY")
@@ -67,13 +68,9 @@ def _create_sync_log(conn, config_id, resource_type, operation, internal_id,
     """Insert an immutable Ed-Fi sync log entry."""
     log_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.execute(
-        """INSERT INTO sr_edfi_sync_log
-           (id, config_id, collection_window_id, resource_type, operation,
-            internal_id, edfi_natural_key, http_status, request_payload_hash,
-            response_body, sync_status, retry_count, synced_at,
-            company_id, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+    sql, _ = insert_row("sr_edfi_sync_log", {"id": P(), "config_id": P(), "collection_window_id": P(), "resource_type": P(), "operation": P(), "internal_id": P(), "edfi_natural_key": P(), "http_status": P(), "request_payload_hash": P(), "response_body": P(), "sync_status": P(), "retry_count": P(), "synced_at": P(), "company_id": P(), "created_at": P()})
+
+    conn.execute(sql,
         (log_id, config_id, collection_window_id, resource_type, operation,
          internal_id, edfi_natural_key, http_status, payload_hash,
          response_body, sync_status, 0, now, company_id, now)
@@ -108,7 +105,7 @@ def add_edfi_config(conn, args):
     if not oauth_client_id:
         err("--oauth-client-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     api_version = getattr(args, "api_version", None) or "7"
@@ -122,13 +119,9 @@ def add_edfi_config(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_edfi_config
-               (id, profile_name, state_code, school_year, ods_base_url,
-                oauth_token_url, oauth_client_id, oauth_client_secret_encrypted,
-                api_version, is_active, last_tested_at, last_token_at,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_edfi_config", {"id": P(), "profile_name": P(), "state_code": P(), "school_year": P(), "ods_base_url": P(), "oauth_token_url": P(), "oauth_client_id": P(), "oauth_client_secret_encrypted": P(), "api_version": P(), "is_active": P(), "last_tested_at": P(), "last_token_at": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (config_id, profile_name, state_code, int(school_year), ods_base_url,
              oauth_token_url or "",
              oauth_client_id, encrypted_secret,
@@ -149,7 +142,7 @@ def update_edfi_config(conn, args):
     if not config_id:
         err("--config-id is required")
 
-    row = conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone()
     if not row:
         err(f"Ed-Fi config {config_id} not found")
 
@@ -184,7 +177,7 @@ def get_edfi_config(conn, args):
     if not config_id:
         err("--config-id is required")
 
-    row = conn.execute("SELECT * FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_edfi_config")).select(Table("sr_edfi_config").star).where(Field("id") == P()).get_sql(), (config_id,)).fetchone()
     if not row:
         err(f"Ed-Fi config {config_id} not found")
 
@@ -236,7 +229,7 @@ def test_edfi_connection(conn, args):
     if not config_id:
         err("--config-id is required")
 
-    row = conn.execute("SELECT * FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_edfi_config")).select(Table("sr_edfi_config").star).where(Field("id") == P()).get_sql(), (config_id,)).fetchone()
     if not row:
         err(f"Ed-Fi config {config_id} not found")
 
@@ -269,7 +262,7 @@ def add_org_mapping(conn, args):
     if not nces_lea_id:
         err("--nces-lea-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     title_i_status = getattr(args, "title_i_status", None) or ""
@@ -277,13 +270,9 @@ def add_org_mapping(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_org_mapping
-               (id, company_id, nces_lea_id, nces_school_id, state_code,
-                state_lea_id, state_school_id, edfi_lea_id, edfi_school_id,
-                crdc_school_id, is_title_i_school, title_i_status,
-                created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_org_mapping", {"id": P(), "company_id": P(), "nces_lea_id": P(), "nces_school_id": P(), "state_code": P(), "state_lea_id": P(), "state_school_id": P(), "edfi_lea_id": P(), "edfi_school_id": P(), "crdc_school_id": P(), "is_title_i_school": P(), "title_i_status": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (mapping_id, company_id, nces_lea_id,
              getattr(args, "nces_school_id", None) or "",
              state_code,
@@ -310,7 +299,7 @@ def update_org_mapping(conn, args):
     if not mapping_id:
         err("--mapping-id is required")
 
-    row = conn.execute("SELECT id FROM sr_org_mapping WHERE id = ?", (mapping_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_org_mapping")).select(Field("id")).where(Field("id") == P()).get_sql(), (mapping_id,)).fetchone()
     if not row:
         err(f"Org mapping {mapping_id} not found")
 
@@ -344,7 +333,7 @@ def get_org_mapping(conn, args):
     state_code = getattr(args, "state_code", None)
 
     if mapping_id:
-        row = conn.execute("SELECT * FROM sr_org_mapping WHERE id = ?", (mapping_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_org_mapping")).select(Table("sr_org_mapping").star).where(Field("id") == P()).get_sql(), (mapping_id,)).fetchone()
     elif company_id and state_code:
         row = conn.execute(
             "SELECT * FROM sr_org_mapping WHERE company_id = ? AND state_code = ? ORDER BY nces_school_id LIMIT 1",
@@ -404,18 +393,16 @@ def add_descriptor_mapping(conn, args):
     if descriptor_type not in VALID_DESCRIPTOR_TYPES:
         err(f"--descriptor-type must be one of: {', '.join(VALID_DESCRIPTOR_TYPES)}")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     desc_id = str(uuid.uuid4())
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_edfi_descriptor_map
-               (id, config_id, descriptor_type, internal_code, edfi_descriptor_uri,
-                description, is_active, company_id, created_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_edfi_descriptor_map", {"id": P(), "config_id": P(), "descriptor_type": P(), "internal_code": P(), "edfi_descriptor_uri": P(), "description": P(), "is_active": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (desc_id, config_id, descriptor_type, internal_code, edfi_descriptor_uri,
              getattr(args, "description", None) or "",
              1, company_id, now, getattr(args, "user_id", None) or "")
@@ -434,7 +421,7 @@ def update_descriptor_mapping(conn, args):
     if not desc_id:
         err("--desc-id is required")
 
-    row = conn.execute("SELECT id FROM sr_edfi_descriptor_map WHERE id = ?", (desc_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_edfi_descriptor_map")).select(Field("id")).where(Field("id") == P()).get_sql(), (desc_id,)).fetchone()
     if not row:
         err(f"Descriptor mapping {desc_id} not found")
 
@@ -470,7 +457,7 @@ def bulk_import_descriptor_mappings(conn, args):
     if not mappings_json:
         err("--mappings is required (JSON array)")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     try:
@@ -506,11 +493,9 @@ def bulk_import_descriptor_mappings(conn, args):
             )
             updated += 1
         else:
-            conn.execute(
-                """INSERT INTO sr_edfi_descriptor_map
-                   (id, config_id, descriptor_type, internal_code, edfi_descriptor_uri,
-                    description, is_active, company_id, created_at, created_by)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            sql, _ = insert_row("sr_edfi_descriptor_map", {"id": P(), "config_id": P(), "descriptor_type": P(), "internal_code": P(), "edfi_descriptor_uri": P(), "description": P(), "is_active": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (str(uuid.uuid4()), config_id, dtype, icode, uri,
                  m.get("description", ""), 1, company_id, now,
                  getattr(args, "user_id", None) or "")
@@ -554,7 +539,7 @@ def delete_descriptor_mapping(conn, args):
     if not desc_id:
         err("--desc-id is required")
 
-    row = conn.execute("SELECT id, internal_code FROM sr_edfi_descriptor_map WHERE id = ?", (desc_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_edfi_descriptor_map")).select(Field("id"), Field("internal_code")).where(Field("id") == P()).get_sql(), (desc_id,)).fetchone()
     if not row:
         err(f"Descriptor mapping {desc_id} not found")
 
@@ -589,10 +574,10 @@ def sync_student_to_edfi(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
-    student = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student:
         err(f"Student {student_id} not found")
 
@@ -641,7 +626,7 @@ def sync_enrollment_to_edfi(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     if student_id:
@@ -692,7 +677,7 @@ def sync_attendance_to_edfi(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     conditions = ["company_id = ?"]
@@ -748,7 +733,7 @@ def sync_sped_to_edfi(conn, args):
     if not school_year:
         err("--school-year is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     placements = conn.execute(
@@ -797,7 +782,7 @@ def sync_el_to_edfi(conn, args):
     if not school_year:
         err("--school-year is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     programs = conn.execute(
@@ -845,7 +830,7 @@ def sync_discipline_to_edfi(conn, args):
     if not school_year:
         err("--school-year is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     incidents = conn.execute(
@@ -888,7 +873,7 @@ def sync_staff_to_edfi(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (config_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (config_id,)).fetchone():
         err(f"Ed-Fi config {config_id} not found")
 
     instructors = conn.execute(

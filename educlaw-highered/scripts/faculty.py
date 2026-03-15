@@ -14,6 +14,7 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("educlaw_instructor", "HFAC-")
 except ImportError:
@@ -79,7 +80,7 @@ def update_faculty(conn, args):
     fac_id = getattr(args, "id", None)
     if not fac_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM educlaw_instructor WHERE id=?", (fac_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_instructor")).select(Table("educlaw_instructor").star).where(Field("id") == P()).get_sql(), (fac_id,)).fetchone()
     if not row:
         return err("Faculty not found")
 
@@ -148,12 +149,12 @@ def add_course_assignment(conn, args):
     faculty_id = getattr(args, "faculty_id", None)
     if not faculty_id:
         return err("--faculty-id is required")
-    if not conn.execute("SELECT id FROM educlaw_instructor WHERE id=?", (faculty_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field('id')).where(Field("id") == P()).get_sql(), (faculty_id,)).fetchone():
         return err(f"Faculty {faculty_id} not found")
     section_id = getattr(args, "section_id", None)
     if not section_id:
         return err("--section-id is required")
-    if not conn.execute("SELECT id FROM educlaw_section WHERE id=?", (section_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_section")).select(Field('id')).where(Field("id") == P()).get_sql(), (section_id,)).fetchone():
         return err(f"Section {section_id} not found")
 
     role = getattr(args, "role", None) or "primary"
@@ -209,7 +210,7 @@ def add_research_grant(conn, args):
     faculty_id = getattr(args, "faculty_id", None)
     if not faculty_id:
         return err("--faculty-id is required")
-    if not conn.execute("SELECT id FROM educlaw_instructor WHERE id=?", (faculty_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field('id')).where(Field("id") == P()).get_sql(), (faculty_id,)).fetchone():
         return err(f"Faculty {faculty_id} not found")
     title = getattr(args, "title", None)
     if not title:

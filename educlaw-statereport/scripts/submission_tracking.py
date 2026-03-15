@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
     from erpclaw_lib.naming import get_next_name
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
     import erpclaw_lib.naming as _naming_lib
     # Register educlaw-statereport submission naming series
     _naming_lib.ENTITY_PREFIXES.setdefault("SUB", "SUB-")
@@ -51,20 +52,20 @@ def add_submission(conn, args):
     if submission_method and submission_method not in VALID_SUBMISSION_METHODS:
         err(f"--submission-method must be one of: {', '.join(VALID_SUBMISSION_METHODS)}")
 
-    window = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    window = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not window:
         err(f"Collection window {window_id} not found")
 
     # Validate snapshot_id if provided
     snapshot_id = getattr(args, "snapshot_id", None)
     if snapshot_id:
-        if not conn.execute("SELECT id FROM sr_snapshot WHERE id = ?", (snapshot_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("sr_snapshot")).select(Field("id")).where(Field("id") == P()).get_sql(), (snapshot_id,)).fetchone():
             err(f"Snapshot {snapshot_id} not found")
 
     # Validate linked_submission_id for amendments
     linked_submission_id = getattr(args, "linked_submission_id", None)
     if linked_submission_id:
-        if not conn.execute("SELECT id FROM sr_submission WHERE id = ?", (linked_submission_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("sr_submission")).select(Field("id")).where(Field("id") == P()).get_sql(), (linked_submission_id,)).fetchone():
             err(f"Linked submission {linked_submission_id} not found")
 
     school_year = window["school_year"]
@@ -73,15 +74,9 @@ def add_submission(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_submission
-               (id, naming_series, collection_window_id, snapshot_id,
-                submission_type, submission_method, submitted_at, submitted_by,
-                records_submitted, records_accepted, records_rejected,
-                submission_status, state_confirmation_id, state_confirmed_at,
-                amendment_reason, linked_submission_id,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_submission", {"id": P(), "naming_series": P(), "collection_window_id": P(), "snapshot_id": P(), "submission_type": P(), "submission_method": P(), "submitted_at": P(), "submitted_by": P(), "records_submitted": P(), "records_accepted": P(), "records_rejected": P(), "submission_status": P(), "state_confirmation_id": P(), "state_confirmed_at": P(), "amendment_reason": P(), "linked_submission_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (submission_id, naming_series, window_id, snapshot_id,
              submission_type, submission_method or "",
              getattr(args, "submitted_at", None) or now,
@@ -117,7 +112,7 @@ def update_submission_status(conn, args):
     if submission_status not in VALID_SUBMISSION_STATUSES:
         err(f"--submission-status must be one of: {', '.join(VALID_SUBMISSION_STATUSES)}")
 
-    row = conn.execute("SELECT id FROM sr_submission WHERE id = ?", (submission_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_submission")).select(Field("id")).where(Field("id") == P()).get_sql(), (submission_id,)).fetchone()
     if not row:
         err(f"Submission {submission_id} not found")
 
@@ -145,7 +140,7 @@ def get_submission(conn, args):
     if not submission_id:
         err("--submission-id is required")
 
-    row = conn.execute("SELECT * FROM sr_submission WHERE id = ?", (submission_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_submission")).select(Table("sr_submission").star).where(Field("id") == P()).get_sql(), (submission_id,)).fetchone()
     if not row:
         err(f"Submission {submission_id} not found")
 
@@ -218,7 +213,7 @@ def certify_submission(conn, args):
     if not certified_by:
         err("--certified-by is required")
 
-    sub = conn.execute("SELECT * FROM sr_submission WHERE id = ?", (submission_id,)).fetchone()
+    sub = conn.execute(Q.from_(Table("sr_submission")).select(Table("sr_submission").star).where(Field("id") == P()).get_sql(), (submission_id,)).fetchone()
     if not sub:
         err(f"Submission {submission_id} not found")
 
@@ -281,14 +276,12 @@ def create_amendment(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    orig = conn.execute(
-        "SELECT * FROM sr_submission WHERE id = ?", (original_submission_id,)
-    ).fetchone()
+    orig = conn.execute(Q.from_(Table("sr_submission")).select(Table("sr_submission").star).where(Field("id") == P()).get_sql(), (original_submission_id,)).fetchone()
     if not orig:
         err(f"Original submission {original_submission_id} not found")
 
     window_id = orig["collection_window_id"]
-    window = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    window = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not window:
         err(f"Collection window {window_id} not found")
 
@@ -301,15 +294,9 @@ def create_amendment(conn, args):
         conn.execute("BEGIN")
 
         # Insert amendment submission
-        conn.execute(
-            """INSERT INTO sr_submission
-               (id, naming_series, collection_window_id, snapshot_id,
-                submission_type, submission_method, submitted_at, submitted_by,
-                records_submitted, records_accepted, records_rejected,
-                submission_status, state_confirmation_id, state_confirmed_at,
-                amendment_reason, linked_submission_id,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_submission", {"id": P(), "naming_series": P(), "collection_window_id": P(), "snapshot_id": P(), "submission_type": P(), "submission_method": P(), "submitted_at": P(), "submitted_by": P(), "records_submitted": P(), "records_accepted": P(), "records_rejected": P(), "submission_status": P(), "state_confirmation_id": P(), "state_confirmed_at": P(), "amendment_reason": P(), "linked_submission_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (amendment_id, naming_series, window_id, None,
              "amendment",
              getattr(args, "submission_method", None) or orig["submission_method"],
@@ -350,7 +337,7 @@ def get_submission_history(conn, args):
     if not window_id:
         err("--window-id is required")
 
-    window = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    window = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not window:
         err(f"Collection window {window_id} not found")
 
@@ -382,7 +369,7 @@ def export_submission_package(conn, args):
     if not submission_id:
         err("--submission-id is required")
 
-    sub = conn.execute("SELECT * FROM sr_submission WHERE id = ?", (submission_id,)).fetchone()
+    sub = conn.execute(Q.from_(Table("sr_submission")).select(Table("sr_submission").star).where(Field("id") == P()).get_sql(), (submission_id,)).fetchone()
     if not sub:
         err(f"Submission {submission_id} not found")
 
@@ -390,7 +377,7 @@ def export_submission_package(conn, args):
     if not snapshot_id:
         err("Submission has no linked snapshot. Cannot export without a snapshot.")
 
-    snapshot = conn.execute("SELECT * FROM sr_snapshot WHERE id = ?", (snapshot_id,)).fetchone()
+    snapshot = conn.execute(Q.from_(Table("sr_snapshot")).select(Table("sr_snapshot").star).where(Field("id") == P()).get_sql(), (snapshot_id,)).fetchone()
     if not snapshot:
         err(f"Snapshot {snapshot_id} not found")
 
@@ -435,7 +422,7 @@ def get_submission_audit_trail(conn, args):
     if not window_id:
         err("--window-id is required")
 
-    window = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    window = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not window:
         err(f"Collection window {window_id} not found")
 

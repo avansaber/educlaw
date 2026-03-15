@@ -14,6 +14,7 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("educlaw_scholarship", "HAID-")
 except ImportError:
@@ -73,7 +74,7 @@ def update_aid_package(conn, args):
     pkg_id = getattr(args, "id", None)
     if not pkg_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (pkg_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_scholarship")).select(Table("educlaw_scholarship").star).where(Field("id") == P()).get_sql(), (pkg_id,)).fetchone()
     if not row:
         return err("Aid package not found")
     if row["package_status"] == "cancelled":
@@ -122,7 +123,7 @@ def get_aid_package(conn, args):
     pkg_id = getattr(args, "id", None)
     if not pkg_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (pkg_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_scholarship")).select(Table("educlaw_scholarship").star).where(Field("id") == P()).get_sql(), (pkg_id,)).fetchone()
     if not row:
         return err("Aid package not found")
     ok(dict(row))
@@ -161,7 +162,7 @@ def add_disbursement(conn, args):
     aid_package_id = getattr(args, "aid_package_id", None)
     if not aid_package_id:
         return err("--aid-package-id is required")
-    pkg = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (aid_package_id,)).fetchone()
+    pkg = conn.execute(Q.from_(Table("educlaw_scholarship")).select(Table("educlaw_scholarship").star).where(Field("id") == P()).get_sql(), (aid_package_id,)).fetchone()
     if not pkg:
         return err(f"Aid package {aid_package_id} not found")
     if pkg["package_status"] not in ("offered", "accepted"):
@@ -209,10 +210,10 @@ def calculate_sap(conn, args):
     student_id = getattr(args, "student_id", None)
     if not student_id:
         return err("--student-id is required")
-    record = conn.execute("SELECT * FROM educlaw_student WHERE student_id=?", (student_id,)).fetchone()
+    record = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
     if not record:
         return err("Student record not found")
-    program = conn.execute("SELECT * FROM highered_degree_program WHERE id=?", (record["program_id"],)).fetchone()
+    program = conn.execute(Q.from_(Table("highered_degree_program")).select(Table("highered_degree_program").star).where(Field("id") == P()).get_sql(), (record["program_id"],)).fetchone()
     attempted = conn.execute("""
         SELECT SUM(c.credits) as total_credits
         FROM educlaw_course_enrollment e
@@ -275,10 +276,10 @@ def award_letter_report(conn, args):
     pkg_id = getattr(args, "id", None)
     if not pkg_id:
         return err("--id is required")
-    pkg = conn.execute("SELECT * FROM educlaw_scholarship WHERE id=?", (pkg_id,)).fetchone()
+    pkg = conn.execute(Q.from_(Table("educlaw_scholarship")).select(Table("educlaw_scholarship").star).where(Field("id") == P()).get_sql(), (pkg_id,)).fetchone()
     if not pkg:
         return err("Aid package not found")
-    disbursements = conn.execute("SELECT * FROM highered_disbursement WHERE aid_package_id=?", (pkg_id,)).fetchall()
+    disbursements = conn.execute(Q.from_(Table("highered_disbursement")).select(Table("highered_disbursement").star).where(Field("aid_package_id") == P()).get_sql(), (pkg_id,)).fetchall()
     ok({"package": dict(pkg), "disbursements": [dict(d) for d in disbursements]})
 
 

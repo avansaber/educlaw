@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
 except ImportError:
     pass
 
@@ -72,13 +73,9 @@ def add_validation_rule(conn, args):
     applicable_states = getattr(args, "applicable_states", None) or "[]"
 
     try:
-        conn.execute(
-            """INSERT INTO sr_validation_rule
-               (id, rule_code, category, severity, name, description,
-                applicable_windows, applicable_states, is_federal_rule,
-                sql_query, error_message_template, is_active,
-                created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_validation_rule", {"id": P(), "rule_code": P(), "category": P(), "severity": P(), "name": P(), "description": P(), "applicable_windows": P(), "applicable_states": P(), "is_federal_rule": P(), "sql_query": P(), "error_message_template": P(), "is_active": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (rule_id, rule_code, category, severity, name,
              getattr(args, "description", None) or "",
              applicable_windows, applicable_states,
@@ -100,7 +97,7 @@ def update_validation_rule(conn, args):
     rule_code = getattr(args, "rule_code", None)
 
     if rule_id:
-        row = conn.execute("SELECT id FROM sr_validation_rule WHERE id = ?", (rule_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_validation_rule")).select(Field("id")).where(Field("id") == P()).get_sql(), (rule_id,)).fetchone()
     elif rule_code:
         row = conn.execute("SELECT id FROM sr_validation_rule WHERE rule_code = ?", (rule_code,)).fetchone()
     else:
@@ -138,7 +135,7 @@ def get_validation_rule(conn, args):
     rule_code = getattr(args, "rule_code", None)
 
     if rule_id:
-        row = conn.execute("SELECT * FROM sr_validation_rule WHERE id = ?", (rule_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_validation_rule")).select(Table("sr_validation_rule").star).where(Field("id") == P()).get_sql(), (rule_id,)).fetchone()
     elif rule_code:
         row = conn.execute("SELECT * FROM sr_validation_rule WHERE rule_code = ?", (rule_code,)).fetchone()
     else:
@@ -207,7 +204,7 @@ def toggle_validation_rule(conn, args):
     rule_code = getattr(args, "rule_code", None)
 
     if rule_id:
-        row = conn.execute("SELECT id, is_active FROM sr_validation_rule WHERE id = ?", (rule_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_validation_rule")).select(Field("id"), Field("is_active")).where(Field("id") == P()).get_sql(), (rule_id,)).fetchone()
     elif rule_code:
         row = conn.execute("SELECT id, is_active FROM sr_validation_rule WHERE rule_code = ?", (rule_code,)).fetchone()
     else:
@@ -519,13 +516,9 @@ def seed_validation_rules(conn, args):
             continue
 
         rule_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO sr_validation_rule
-               (id, rule_code, category, severity, name, description,
-                applicable_windows, applicable_states, is_federal_rule,
-                sql_query, error_message_template, is_active,
-                created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_validation_rule", {"id": P(), "rule_code": P(), "category": P(), "severity": P(), "name": P(), "description": P(), "applicable_windows": P(), "applicable_states": P(), "is_federal_rule": P(), "sql_query": P(), "error_message_template": P(), "is_active": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (rule_id, rule_code, category, severity, name, description,
              applicable_windows, applicable_states, is_federal,
              sql_query, error_msg_template, 1, now, now,
@@ -554,7 +547,7 @@ def run_validation(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    window = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    window = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not window:
         err(f"Collection window {window_id} not found")
 
@@ -605,12 +598,9 @@ def run_validation(conn, args):
 
             # Create validation result
             result_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO sr_validation_result
-                   (id, collection_window_id, run_at, run_by, rule_id,
-                    student_id, staff_id, error_detail, is_resolved, resolved_at,
-                    company_id, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            sql, _ = insert_row("sr_validation_result", {"id": P(), "collection_window_id": P(), "run_at": P(), "run_by": P(), "rule_id": P(), "student_id": P(), "staff_id": P(), "error_detail": P(), "is_resolved": P(), "resolved_at": P(), "company_id": P(), "created_at": P()})
+
+            conn.execute(sql,
                 (result_id, window_id, now, user_id, rule["id"],
                  student_id, staff_id,
                  json.dumps(viol_dict),
@@ -619,15 +609,9 @@ def run_validation(conn, args):
 
             # Create corresponding submission error
             error_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO sr_submission_error
-                   (id, collection_window_id, submission_id, error_source,
-                    error_level, severity, error_code, error_category,
-                    error_message, student_id, staff_id, record_type,
-                    field_name, field_value, resolution_status, resolution_method,
-                    resolved_by, resolved_at, resolution_notes, assigned_to,
-                    assigned_at, state_ticket_id, company_id, created_at, updated_at, created_by)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            sql, _ = insert_row("sr_submission_error", {"id": P(), "collection_window_id": P(), "submission_id": P(), "error_source": P(), "error_level": P(), "severity": P(), "error_code": P(), "error_category": P(), "error_message": P(), "student_id": P(), "staff_id": P(), "record_type": P(), "field_name": P(), "field_value": P(), "resolution_status": P(), "resolution_method": P(), "resolved_by": P(), "resolved_at": P(), "resolution_notes": P(), "assigned_to": P(), "assigned_at": P(), "state_ticket_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (error_id, window_id, None, "internal_validation",
                  "2", rule["severity"], rule["rule_code"], rule["category"],
                  rule["error_message_template"].replace("{student_id}", student_id or ""),
@@ -664,9 +648,9 @@ def run_validation_for_student(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("sr_collection_window")).select(Field("id")).where(Field("id") == P()).get_sql(), (window_id,)).fetchone():
         err(f"Collection window {window_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
     # Clear prior results for this student/window
@@ -696,27 +680,18 @@ def run_validation_for_student(conn, args):
 
         for viol_dict in student_violations:
             result_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO sr_validation_result
-                   (id, collection_window_id, run_at, run_by, rule_id,
-                    student_id, staff_id, error_detail, is_resolved, resolved_at,
-                    company_id, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            sql, _ = insert_row("sr_validation_result", {"id": P(), "collection_window_id": P(), "run_at": P(), "run_by": P(), "rule_id": P(), "student_id": P(), "staff_id": P(), "error_detail": P(), "is_resolved": P(), "resolved_at": P(), "company_id": P(), "created_at": P()})
+
+            conn.execute(sql,
                 (result_id, window_id, now, user_id, rule["id"],
                  student_id, None, json.dumps(viol_dict),
                  0, "", company_id, now)
             )
 
             error_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO sr_submission_error
-                   (id, collection_window_id, submission_id, error_source,
-                    error_level, severity, error_code, error_category,
-                    error_message, student_id, staff_id, record_type,
-                    field_name, field_value, resolution_status, resolution_method,
-                    resolved_by, resolved_at, resolution_notes, assigned_to,
-                    assigned_at, state_ticket_id, company_id, created_at, updated_at, created_by)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            sql, _ = insert_row("sr_submission_error", {"id": P(), "collection_window_id": P(), "submission_id": P(), "error_source": P(), "error_level": P(), "severity": P(), "error_code": P(), "error_category": P(), "error_message": P(), "student_id": P(), "staff_id": P(), "record_type": P(), "field_name": P(), "field_value": P(), "resolution_status": P(), "resolution_method": P(), "resolved_by": P(), "resolved_at": P(), "resolution_notes": P(), "assigned_to": P(), "assigned_at": P(), "state_ticket_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (error_id, window_id, None, "internal_validation",
                  "2", rule["severity"], rule["rule_code"], rule["category"],
                  rule["error_message_template"].replace("{student_id}", student_id),
@@ -783,7 +758,7 @@ def assign_submission_error(conn, args):
     if not assigned_to:
         err("--assigned-to is required")
 
-    row = conn.execute("SELECT id FROM sr_submission_error WHERE id = ?", (error_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_submission_error")).select(Field("id")).where(Field("id") == P()).get_sql(), (error_id,)).fetchone()
     if not row:
         err(f"Submission error {error_id} not found")
 
@@ -811,7 +786,7 @@ def update_error_resolution(conn, args):
     if resolution_status not in VALID_RESOLUTION_STATUSES:
         err(f"--resolution-status must be one of: {', '.join(VALID_RESOLUTION_STATUSES)}")
 
-    row = conn.execute("SELECT id FROM sr_submission_error WHERE id = ?", (error_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_submission_error")).select(Field("id")).where(Field("id") == P()).get_sql(), (error_id,)).fetchone()
     if not row:
         err(f"Submission error {error_id} not found")
 
@@ -983,7 +958,7 @@ def escalate_error(conn, args):
     if not state_ticket_id:
         err("--state-ticket-id is required")
 
-    row = conn.execute("SELECT id FROM sr_submission_error WHERE id = ?", (error_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_submission_error")).select(Field("id")).where(Field("id") == P()).get_sql(), (error_id,)).fetchone()
     if not row:
         err(f"Submission error {error_id} not found")
 

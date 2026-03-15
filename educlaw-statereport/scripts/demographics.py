@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -107,9 +108,9 @@ def add_student_supplement(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Check uniqueness
@@ -164,19 +165,9 @@ def add_student_supplement(conn, args):
         err(f"--military-connection-type must be one of: {', '.join(VALID_MILITARY_TYPES)}")
 
     try:
-        conn.execute(
-            """INSERT INTO sr_student_supplement
-               (id, student_id, ssid, ssid_state_code, ssid_status,
-                is_hispanic_latino, race_codes, race_federal_rollup,
-                is_el, el_entry_date, home_language_code, native_language_code,
-                english_proficiency_level, english_proficiency_instrument,
-                el_exit_date, is_rfep, rfep_date,
-                is_sped, is_504, sped_entry_date, sped_exit_date,
-                is_economically_disadvantaged, lunch_program_status,
-                is_migrant, is_homeless, homeless_primary_nighttime_residence,
-                is_foster_care, is_military_connected, military_connection_type,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_student_supplement", {"id": P(), "student_id": P(), "ssid": P(), "ssid_state_code": P(), "ssid_status": P(), "is_hispanic_latino": P(), "race_codes": P(), "race_federal_rollup": P(), "is_el": P(), "el_entry_date": P(), "home_language_code": P(), "native_language_code": P(), "english_proficiency_level": P(), "english_proficiency_instrument": P(), "el_exit_date": P(), "is_rfep": P(), "rfep_date": P(), "is_sped": P(), "is_504": P(), "sped_entry_date": P(), "sped_exit_date": P(), "is_economically_disadvantaged": P(), "lunch_program_status": P(), "is_migrant": P(), "is_homeless": P(), "homeless_primary_nighttime_residence": P(), "is_foster_care": P(), "is_military_connected": P(), "military_connection_type": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (supp_id, student_id, ssid, ssid_state_code, ssid_status,
              is_hispanic, json.dumps(race_codes_list), race_federal_rollup,
              is_el, el_entry_date, home_language_code, native_language_code,
@@ -205,7 +196,7 @@ def update_student_supplement(conn, args):
         err("--supplement-id or --student-id is required")
 
     if supplement_id:
-        row = conn.execute("SELECT * FROM sr_student_supplement WHERE id = ?", (supplement_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_student_supplement")).select(Table("sr_student_supplement").star).where(Field("id") == P()).get_sql(), (supplement_id,)).fetchone()
     else:
         row = conn.execute("SELECT * FROM sr_student_supplement WHERE student_id = ?", (student_id,)).fetchone()
 
@@ -284,7 +275,7 @@ def get_student_supplement(conn, args):
     if student_id:
         row = conn.execute("SELECT * FROM sr_student_supplement WHERE student_id = ?", (student_id,)).fetchone()
     elif supplement_id:
-        row = conn.execute("SELECT * FROM sr_student_supplement WHERE id = ?", (supplement_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_student_supplement")).select(Table("sr_student_supplement").star).where(Field("id") == P()).get_sql(), (supplement_id,)).fetchone()
     else:
         err("--student-id or --supplement-id is required")
 
@@ -526,9 +517,9 @@ def add_sped_placement(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     if disability_category and disability_category not in VALID_DISABILITY_CATEGORIES:
@@ -554,15 +545,9 @@ def add_sped_placement(conn, args):
         err(f"--early-childhood-environment must be one of: {', '.join(VALID_EC_ENVIRONMENTS)}")
 
     try:
-        conn.execute(
-            """INSERT INTO sr_sped_placement
-               (id, student_id, school_year, disability_category, secondary_disability,
-                educational_environment, sped_program_entry_date, sped_program_exit_date,
-                sped_exit_reason, iep_start_date, iep_review_date,
-                is_transition_plan_required, lre_percentage,
-                is_early_childhood, early_childhood_environment,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_sped_placement", {"id": P(), "student_id": P(), "school_year": P(), "disability_category": P(), "secondary_disability": P(), "educational_environment": P(), "sped_program_entry_date": P(), "sped_program_exit_date": P(), "sped_exit_reason": P(), "iep_start_date": P(), "iep_review_date": P(), "is_transition_plan_required": P(), "lre_percentage": P(), "is_early_childhood": P(), "early_childhood_environment": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (placement_id, student_id, int(school_year),
              disability_category or "", getattr(args, "secondary_disability", None) or "",
              educational_environment or "",
@@ -592,7 +577,7 @@ def update_sped_placement(conn, args):
     if not placement_id:
         err("--placement-id is required")
 
-    row = conn.execute("SELECT id FROM sr_sped_placement WHERE id = ?", (placement_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_sped_placement")).select(Field("id")).where(Field("id") == P()).get_sql(), (placement_id,)).fetchone()
     if not row:
         err(f"SPED placement {placement_id} not found")
 
@@ -627,7 +612,7 @@ def get_sped_placement(conn, args):
     placement_id = getattr(args, "placement_id", None)
 
     if placement_id:
-        row = conn.execute("SELECT * FROM sr_sped_placement WHERE id = ?", (placement_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_sped_placement")).select(Table("sr_sped_placement").star).where(Field("id") == P()).get_sql(), (placement_id,)).fetchone()
     elif student_id and school_year:
         row = conn.execute(
             "SELECT * FROM sr_sped_placement WHERE student_id = ? AND school_year = ?",
@@ -702,9 +687,7 @@ def add_sped_service(conn, args):
     if service_type not in VALID_SERVICE_TYPES:
         err(f"--service-type must be one of: {', '.join(VALID_SERVICE_TYPES)}")
 
-    placement_row = conn.execute(
-        "SELECT id, student_id FROM sr_sped_placement WHERE id = ?", (sped_placement_id,)
-    ).fetchone()
+    placement_row = conn.execute(Q.from_(Table("sr_sped_placement")).select(Field("id"), Field("student_id")).where(Field("id") == P()).get_sql(), (sped_placement_id,)).fetchone()
     if not placement_row:
         err(f"SPED placement {sped_placement_id} not found")
 
@@ -720,12 +703,9 @@ def add_sped_service(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_sped_service
-               (id, sped_placement_id, student_id, service_type, provider_type,
-                minutes_per_week, start_date, end_date,
-                company_id, created_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_sped_service", {"id": P(), "sped_placement_id": P(), "student_id": P(), "service_type": P(), "provider_type": P(), "minutes_per_week": P(), "start_date": P(), "end_date": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (service_id, sped_placement_id, student_id, service_type, provider_type,
              int(getattr(args, "minutes_per_week", None) or 0),
              getattr(args, "start_date", None) or "",
@@ -746,7 +726,7 @@ def update_sped_service(conn, args):
     if not service_id:
         err("--service-id is required")
 
-    row = conn.execute("SELECT id FROM sr_sped_service WHERE id = ?", (service_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_sped_service")).select(Field("id")).where(Field("id") == P()).get_sql(), (service_id,)).fetchone()
     if not row:
         err(f"SPED service {service_id} not found")
 
@@ -807,7 +787,7 @@ def delete_sped_service(conn, args):
     if not service_id:
         err("--service-id is required")
 
-    row = conn.execute("SELECT id FROM sr_sped_service WHERE id = ?", (service_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_sped_service")).select(Field("id")).where(Field("id") == P()).get_sql(), (service_id,)).fetchone()
     if not row:
         err(f"SPED service {service_id} not found")
 
@@ -841,9 +821,9 @@ def add_el_program(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     proficiency_instrument = getattr(args, "proficiency_instrument", None) or ""
@@ -858,13 +838,9 @@ def add_el_program(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_el_program
-               (id, student_id, school_year, program_type, entry_date, exit_date,
-                exit_reason, english_proficiency_assessed_date, proficiency_level,
-                proficiency_instrument, is_parent_waived, waiver_date,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_el_program", {"id": P(), "student_id": P(), "school_year": P(), "program_type": P(), "entry_date": P(), "exit_date": P(), "exit_reason": P(), "english_proficiency_assessed_date": P(), "proficiency_level": P(), "proficiency_instrument": P(), "is_parent_waived": P(), "waiver_date": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (prog_id, student_id, int(school_year), program_type,
              entry_date or "",
              getattr(args, "exit_date", None) or "",
@@ -890,7 +866,7 @@ def update_el_program(conn, args):
     if not el_program_id:
         err("--el-program-id is required")
 
-    row = conn.execute("SELECT id FROM sr_el_program WHERE id = ?", (el_program_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_el_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (el_program_id,)).fetchone()
     if not row:
         err(f"EL program {el_program_id} not found")
 
@@ -924,7 +900,7 @@ def get_el_program(conn, args):
     school_year = getattr(args, "school_year", None)
 
     if el_program_id:
-        row = conn.execute("SELECT * FROM sr_el_program WHERE id = ?", (el_program_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_el_program")).select(Table("sr_el_program").star).where(Field("id") == P()).get_sql(), (el_program_id,)).fetchone()
     elif student_id and school_year:
         row = conn.execute(
             "SELECT * FROM sr_el_program WHERE student_id = ? AND school_year = ?",

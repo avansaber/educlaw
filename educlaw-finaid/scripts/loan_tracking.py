@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -63,9 +64,7 @@ AGGREGATE_LIMITS = {
 # Helper: load / save disbursement_holds JSON on finaid_award
 # ---------------------------------------------------------------------------
 def _load_holds(conn, award_id):
-    row = conn.execute(
-        "SELECT disbursement_holds FROM finaid_award WHERE id=?", (award_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("disbursement_holds")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return []
     try:
@@ -122,22 +121,10 @@ def add_loan(conn, args):
         # All federal loans require MPN
         mpn_required = 1
 
-        conn.execute(
-            """INSERT INTO finaid_loan (
-                id, student_id, award_id, aid_year_id, loan_type,
-                loan_period_start, loan_period_end,
-                loan_amount, first_disbursement_amount, second_disbursement_amount,
-                origination_fee, interest_rate,
-                cod_loan_id, cod_origination_status, cod_origination_date,
-                mpn_required, mpn_signed, mpn_signed_date,
-                entrance_counseling_required, entrance_counseling_complete, entrance_counseling_date,
-                exit_counseling_required, exit_counseling_complete, exit_counseling_date,
-                borrower_id, borrower_type, status,
-                company_id, created_at, updated_at, created_by
-            ) VALUES (
-                ?,?,?,?,?,  ?,?,  ?,?,?,  ?,?,  ?,?,?,
-                ?,?,?,  ?,?,?,  ?,?,?,  ?,?,?,  ?,?,?,?
-            )""",
+        sql, _ = insert_row("finaid_loan", {"id": P(), "student_id": P(), "award_id": P(), "aid_year_id": P(), "loan_type": P(), "loan_period_start": P(), "loan_period_end": P(), "loan_amount": P(), "first_disbursement_amount": P(), "second_disbursement_amount": P(), "origination_fee": P(), "interest_rate": P(), "cod_loan_id": P(), "cod_origination_status": P(), "cod_origination_date": P(), "mpn_required": P(), "mpn_signed": P(), "mpn_signed_date": P(), "entrance_counseling_required": P(), "entrance_counseling_complete": P(), "entrance_counseling_date": P(), "exit_counseling_required": P(), "exit_counseling_complete": P(), "exit_counseling_date": P(), "borrower_id": P(), "borrower_type": P(), "status": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+        conn.execute(sql,
             (
                 loan_id,
                 args.student_id,
@@ -201,7 +188,7 @@ def update_loan(conn, args):
         if not loan_id:
             return err("Missing required field: id")
 
-        row = conn.execute("SELECT id FROM finaid_loan WHERE id=?", (loan_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("finaid_loan")).select(Field("id")).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not row:
             return err(f"Loan not found: {loan_id}")
 
@@ -251,9 +238,7 @@ def get_loan(conn, args):
         if not loan_id:
             return err("Missing required field: id")
 
-        row = conn.execute(
-            "SELECT * FROM finaid_loan WHERE id=?", (loan_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("finaid_loan")).select(Table("finaid_loan").star).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not row:
             return err(f"Loan not found: {loan_id}")
 
@@ -327,9 +312,7 @@ def update_mpn_status(conn, args):
         if not mpn_signed_date:
             return err("Missing required field: mpn_signed_date")
 
-        row = conn.execute(
-            "SELECT id, award_id FROM finaid_loan WHERE id=?", (loan_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("finaid_loan")).select(Field("id"), Field("award_id")).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not row:
             return err(f"Loan not found: {loan_id}")
 
@@ -366,9 +349,7 @@ def update_entrance_counseling(conn, args):
         if not ec_date:
             return err("Missing required field: entrance_counseling_date")
 
-        row = conn.execute(
-            "SELECT id, award_id FROM finaid_loan WHERE id=?", (loan_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("finaid_loan")).select(Field("id"), Field("award_id")).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not row:
             return err(f"Loan not found: {loan_id}")
 
@@ -411,9 +392,7 @@ def update_exit_counseling(conn, args):
         if not exit_date:
             return err("Missing required field: exit_counseling_date")
 
-        row = conn.execute(
-            "SELECT id FROM finaid_loan WHERE id=?", (loan_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("finaid_loan")).select(Field("id")).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not row:
             return err(f"Loan not found: {loan_id}")
 
@@ -444,9 +423,7 @@ def generate_cod_origination(conn, args):
         if not loan_id:
             return err("Missing required field: id")
 
-        loan_row = conn.execute(
-            "SELECT * FROM finaid_loan WHERE id=?", (loan_id,)
-        ).fetchone()
+        loan_row = conn.execute(Q.from_(Table("finaid_loan")).select(Table("finaid_loan").star).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not loan_row:
             return err(f"Loan not found: {loan_id}")
 
@@ -527,9 +504,7 @@ def update_cod_origination_status(conn, args):
                 f"Must be one of: {', '.join(repr(s) for s in valid_statuses)}"
             )
 
-        row = conn.execute(
-            "SELECT id FROM finaid_loan WHERE id=?", (loan_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("finaid_loan")).select(Field("id")).where(Field("id") == P()).get_sql(), (loan_id,)).fetchone()
         if not row:
             return err(f"Loan not found: {loan_id}")
 

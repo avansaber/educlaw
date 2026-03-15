@@ -24,6 +24,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
 except ImportError:
     pass
 
@@ -93,9 +94,7 @@ def _refresh_master_stats(conn, master_id):
         (master_id,)
     ).fetchone()[0]
 
-    total = conn.execute(
-        "SELECT total_sections FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()[0] or 0
+    total = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("total_sections")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()[0] or 0
 
     rate = f"{round((placed / total * 100), 1)}%" if total > 0 else "0.0%"
 
@@ -110,9 +109,7 @@ def _refresh_master_stats(conn, master_id):
 
 def _get_master_or_err(conn, master_id):
     """Fetch master schedule row or return error."""
-    row = conn.execute(
-        "SELECT * FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Table("educlaw_master_schedule").star).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     if not row:
         err(f"Master schedule {master_id} not found")
     return dict(row)
@@ -145,17 +142,13 @@ def create_master_schedule(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_schedule_pattern WHERE id = ?", (schedule_pattern_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_schedule_pattern")).select(Field("id")).where(Field("id") == P()).get_sql(), (schedule_pattern_id,)).fetchone():
         err(f"Schedule pattern {schedule_pattern_id} not found")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # One master schedule per term
@@ -168,9 +161,7 @@ def create_master_schedule(conn, args):
 
     cloned_from = getattr(args, "cloned_from_id", None)
     if cloned_from:
-        if not conn.execute(
-            "SELECT id FROM educlaw_master_schedule WHERE id = ?", (cloned_from,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("id")).where(Field("id") == P()).get_sql(), (cloned_from,)).fetchone():
             err(f"Source master schedule {cloned_from} not found")
 
     build_notes = getattr(args, "build_notes", None) or ""
@@ -253,9 +244,7 @@ def get_master_schedule(conn, args):
         err("--master-schedule-id or --naming-series is required")
 
     if master_id:
-        row = conn.execute(
-            "SELECT * FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Table("educlaw_master_schedule").star).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     else:
         row = conn.execute(
             "SELECT * FROM educlaw_master_schedule WHERE naming_series = ?", (naming,)
@@ -321,15 +310,11 @@ def add_section_to_schedule(conn, args):
     master = _get_master_or_err(conn, master_id)
     _require_editable(master)
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_section WHERE id = ?", (section_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_section")).select(Field("id")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone():
         err(f"Section {section_id} not found")
 
     # Verify section belongs to the same term
-    sec_term = conn.execute(
-        "SELECT academic_term_id FROM educlaw_section WHERE id = ?", (section_id,)
-    ).fetchone()
+    sec_term = conn.execute(Q.from_(Table("educlaw_section")).select(Field("academic_term_id")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if sec_term and sec_term["academic_term_id"] != master["academic_term_id"]:
         err("Section belongs to a different academic term than this master schedule")
 
@@ -354,9 +339,7 @@ def add_section_to_schedule(conn, args):
           new_values={"section_id": section_id, "action": "increment_total"})
     conn.commit()
 
-    new_total = conn.execute(
-        "SELECT total_sections FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()[0]
+    new_total = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("total_sections")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()[0]
     ok({"master_schedule_id": master_id, "section_id": section_id,
         "total_sections": new_total,
         "message": "Section registered in master schedule"})
@@ -381,34 +364,24 @@ def place_section_meeting(conn, args):
     master = _get_master_or_err(conn, master_id)
     _require_editable(master)
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_section WHERE id = ?", (section_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_section")).select(Field("id")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone():
         err(f"Section {section_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_day_type WHERE id = ?", (day_type_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_day_type")).select(Field("id")).where(Field("id") == P()).get_sql(), (day_type_id,)).fetchone():
         err(f"Day type {day_type_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_bell_period WHERE id = ?", (bell_period_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_bell_period")).select(Field("id")).where(Field("id") == P()).get_sql(), (bell_period_id,)).fetchone():
         err(f"Bell period {bell_period_id} not found")
 
     room_id = getattr(args, "room_id", None)
     instructor_id = getattr(args, "instructor_id", None)
 
     if room_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_room WHERE id = ?", (room_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_room")).select(Field("id")).where(Field("id") == P()).get_sql(), (room_id,)).fetchone():
             err(f"Room {room_id} not found")
 
     if instructor_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_instructor WHERE id = ?", (instructor_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("id")).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone():
             err(f"Instructor {instructor_id} not found")
 
     meeting_type = getattr(args, "meeting_type", None) or "regular"
@@ -466,9 +439,7 @@ def place_section_meeting(conn, args):
     # Auto-create room booking if room provided
     if room_id:
         booking_id = str(uuid.uuid4())
-        section_row = conn.execute(
-            "SELECT section_number FROM educlaw_section WHERE id = ?", (section_id,)
-        ).fetchone()
+        section_row = conn.execute(Q.from_(Table("educlaw_section")).select(Field("section_number")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
         booking_title = f"Class: {section_row['section_number'] if section_row else section_id}"
         try:
             conn.execute(
@@ -508,9 +479,7 @@ def remove_section_meeting(conn, args):
     if not meeting_id:
         err("--section-meeting-id is required")
 
-    meeting = conn.execute(
-        "SELECT * FROM educlaw_section_meeting WHERE id = ?", (meeting_id,)
-    ).fetchone()
+    meeting = conn.execute(Q.from_(Table("educlaw_section_meeting")).select(Table("educlaw_section_meeting").star).where(Field("id") == P()).get_sql(), (meeting_id,)).fetchone()
     if not meeting:
         err(f"Section meeting {meeting_id} not found")
 
@@ -652,9 +621,7 @@ def analyze_course_demand(conn, args):
     if not academic_term_id:
         err("--academic-term-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
 
     # Count requests per course
@@ -715,9 +682,7 @@ def get_fulfillment_report(conn, args):
 
     # Resolve term_id from master if only master provided
     if master_id and not academic_term_id:
-        row = conn.execute(
-            "SELECT academic_term_id FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("academic_term_id")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
         if not row:
             err(f"Master schedule {master_id} not found")
         academic_term_id = row["academic_term_id"]
@@ -919,9 +884,7 @@ def clone_master_schedule(conn, args):
     company_id = company_id or master["company_id"]
     name = name or f"Clone of {master['name']}"
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (target_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (target_term_id,)).fetchone():
         err(f"Target academic term {target_term_id} not found")
 
     # Check target term doesn't already have a master schedule
@@ -973,17 +936,12 @@ def open_course_requests(conn, args):
     if not academic_term_id:
         err("--academic-term-id is required")
 
-    term = conn.execute(
-        "SELECT * FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone()
+    term = conn.execute(Q.from_(Table("educlaw_academic_term")).select(Table("educlaw_academic_term").star).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone()
     if not term:
         err(f"Academic term {academic_term_id} not found")
 
     term = dict(term)
-    existing_count = conn.execute(
-        "SELECT COUNT(*) FROM educlaw_course_request WHERE academic_term_id = ?",
-        (academic_term_id,)
-    ).fetchone()[0]
+    existing_count = conn.execute(Q.from_(Table("educlaw_course_request")).select(fn.Count("*")).where(Field("academic_term_id") == P()).get_sql(), (academic_term_id,)).fetchone()[0]
 
     ok({
         "academic_term_id": academic_term_id,
@@ -1009,25 +967,17 @@ def submit_course_request(conn, args):
     if not course_id:
         err("--company-id is required" if not company_id else "--course-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_student WHERE id = ?", (student_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
 
-    course_row = conn.execute(
-        "SELECT * FROM educlaw_course WHERE id = ?", (course_id,)
-    ).fetchone()
+    course_row = conn.execute(Q.from_(Table("educlaw_course")).select(Table("educlaw_course").star).where(Field("id") == P()).get_sql(), (course_id,)).fetchone()
     if not course_row:
         err(f"Course {course_id} not found")
 
-    company_id = company_id or conn.execute(
-        "SELECT company_id FROM educlaw_course WHERE id = ?", (course_id,)
-    ).fetchone()["company_id"]
+    company_id = company_id or conn.execute(Q.from_(Table("educlaw_course")).select(Field("company_id")).where(Field("id") == P()).get_sql(), (course_id,)).fetchone()["company_id"]
 
     # Check uniqueness
     existing = conn.execute(
@@ -1041,9 +991,7 @@ def submit_course_request(conn, args):
     is_alternate = int(getattr(args, "is_alternate", None) or 0)
     alternate_for_course_id = getattr(args, "alternate_for_course_id", None)
     if alternate_for_course_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_course WHERE id = ?", (alternate_for_course_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_course")).select(Field("id")).where(Field("id") == P()).get_sql(), (alternate_for_course_id,)).fetchone():
             err(f"Alternate-for course {alternate_for_course_id} not found")
 
     request_priority = int(getattr(args, "request_priority", None) or 1)
@@ -1128,9 +1076,7 @@ def update_course_request(conn, args):
     if not request_id:
         err("--course-request-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_course_request WHERE id = ?", (request_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_request")).select(Table("educlaw_course_request").star).where(Field("id") == P()).get_sql(), (request_id,)).fetchone()
     if not row:
         err(f"Course request {request_id} not found")
 
@@ -1173,9 +1119,7 @@ def get_course_request(conn, args):
     if not request_id:
         err("--course-request-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_course_request WHERE id = ?", (request_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_request")).select(Table("educlaw_course_request").star).where(Field("id") == P()).get_sql(), (request_id,)).fetchone()
     if not row:
         err(f"Course request {request_id} not found")
 
@@ -1267,9 +1211,7 @@ def get_demand_report(conn, args):
     if not academic_term_id:
         err("--academic-term-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
 
     demand = conn.execute(
@@ -1375,9 +1317,7 @@ def close_course_requests(conn, args):
     if not academic_term_id:
         err("--academic-term-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
 
     # Count by status

@@ -13,6 +13,7 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("highered_application", "HAPP-")
 except ImportError:
@@ -34,7 +35,7 @@ def _to_money(val):
 def _validate_company(conn, company_id):
     if not company_id:
         return err("--company-id is required")
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field('id')).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         return err(f"Company {company_id} not found")
 
 
@@ -53,7 +54,7 @@ def add_application(conn, args):
     phone = getattr(args, "phone", None) or ""
     program_id = getattr(args, "program_id", None)
     if program_id:
-        if not conn.execute("SELECT id FROM highered_degree_program WHERE id=?", (program_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("highered_degree_program")).select(Field('id')).where(Field("id") == P()).get_sql(), (program_id,)).fetchone():
             return err(f"Program {program_id} not found")
     application_date = getattr(args, "application_date", None) or _now_iso()[:10]
     intended_term = getattr(args, "term", None) or ""
@@ -109,14 +110,11 @@ def get_application(conn, args):
     app_id = getattr(args, "id", None)
     if not app_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_application WHERE id=?", (app_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("highered_application")).select(Table("highered_application").star).where(Field("id") == P()).get_sql(), (app_id,)).fetchone()
     if not row:
         return err("Application not found")
     # Get any decisions
-    decisions = conn.execute(
-        "SELECT * FROM highered_admission_decision WHERE application_id=? ORDER BY decision_date",
-        (app_id,)
-    ).fetchall()
+    decisions = conn.execute(Q.from_(Table("highered_admission_decision")).select(Table("highered_admission_decision").star).where(Field("application_id") == P()).orderby(Field("decision_date")).get_sql(), (app_id,)).fetchall()
     ok({"application": dict(row), "decisions": [dict(d) for d in decisions]})
 
 
@@ -130,7 +128,7 @@ def add_admission_decision(conn, args):
     application_id = getattr(args, "application_id", None)
     if not application_id:
         return err("--application-id is required")
-    app = conn.execute("SELECT * FROM highered_application WHERE id=?", (application_id,)).fetchone()
+    app = conn.execute(Q.from_(Table("highered_application")).select(Table("highered_application").star).where(Field("id") == P()).get_sql(), (application_id,)).fetchone()
     if not app:
         return err(f"Application {application_id} not found")
 
@@ -176,7 +174,7 @@ def update_admission_decision(conn, args):
     dec_id = getattr(args, "id", None)
     if not dec_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_admission_decision WHERE id=?", (dec_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("highered_admission_decision")).select(Table("highered_admission_decision").star).where(Field("id") == P()).get_sql(), (dec_id,)).fetchone()
     if not row:
         return err("Decision not found")
 

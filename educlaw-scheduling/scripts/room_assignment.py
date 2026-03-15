@@ -22,6 +22,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
 except ImportError:
     pass
 
@@ -114,14 +115,12 @@ def assign_room(conn, args):
     if not room_id:
         err("--room-id is required")
 
-    meeting = conn.execute(
-        "SELECT * FROM educlaw_section_meeting WHERE id = ?", (meeting_id,)
-    ).fetchone()
+    meeting = conn.execute(Q.from_(Table("educlaw_section_meeting")).select(Table("educlaw_section_meeting").star).where(Field("id") == P()).get_sql(), (meeting_id,)).fetchone()
     if not meeting:
         err(f"Section meeting {meeting_id} not found")
     meeting = dict(meeting)
 
-    if not conn.execute("SELECT id FROM educlaw_room WHERE id = ?", (room_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_room")).select(Field("id")).where(Field("id") == P()).get_sql(), (room_id,)).fetchone():
         err(f"Room {room_id} not found")
 
     # Check room availability
@@ -187,9 +186,7 @@ def suggest_room(conn, args):
     if not meeting_id:
         err("--section-meeting-id is required")
 
-    meeting = conn.execute(
-        "SELECT * FROM educlaw_section_meeting WHERE id = ?", (meeting_id,)
-    ).fetchone()
+    meeting = conn.execute(Q.from_(Table("educlaw_section_meeting")).select(Table("educlaw_section_meeting").star).where(Field("id") == P()).get_sql(), (meeting_id,)).fetchone()
     if not meeting:
         err(f"Section meeting {meeting_id} not found")
     meeting = dict(meeting)
@@ -285,9 +282,7 @@ def bulk_assign_rooms(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    master = conn.execute(
-        "SELECT * FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()
+    master = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Table("educlaw_master_schedule").star).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     if not master:
         err(f"Master schedule {master_id} not found")
     master = dict(master)
@@ -389,9 +384,7 @@ def unassign_room(conn, args):
         err("--section-meeting-id or --booking-id is required")
 
     if meeting_id:
-        meeting = conn.execute(
-            "SELECT * FROM educlaw_section_meeting WHERE id = ?", (meeting_id,)
-        ).fetchone()
+        meeting = conn.execute(Q.from_(Table("educlaw_section_meeting")).select(Table("educlaw_section_meeting").star).where(Field("id") == P()).get_sql(), (meeting_id,)).fetchone()
         if not meeting:
             err(f"Section meeting {meeting_id} not found")
         meeting = dict(meeting)
@@ -421,9 +414,7 @@ def unassign_room(conn, args):
             "message": "Room unassigned from meeting"})
 
     else:
-        booking = conn.execute(
-            "SELECT * FROM educlaw_room_booking WHERE id = ?", (booking_id,)
-        ).fetchone()
+        booking = conn.execute(Q.from_(Table("educlaw_room_booking")).select(Table("educlaw_room_booking").star).where(Field("id") == P()).get_sql(), (booking_id,)).fetchone()
         if not booking:
             err(f"Booking {booking_id} not found")
         booking = dict(booking)
@@ -468,11 +459,11 @@ def block_room(conn, args):
     if not booking_title:
         err("--booking-title is required")
 
-    if not conn.execute("SELECT id FROM educlaw_room WHERE id = ?", (room_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_room")).select(Field("id")).where(Field("id") == P()).get_sql(), (room_id,)).fetchone():
         err(f"Room {room_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_day_type WHERE id = ?", (day_type_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_day_type")).select(Field("id")).where(Field("id") == P()).get_sql(), (day_type_id,)).fetchone():
         err(f"Day type {day_type_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_bell_period WHERE id = ?", (bell_period_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_bell_period")).select(Field("id")).where(Field("id") == P()).get_sql(), (bell_period_id,)).fetchone():
         err(f"Bell period {bell_period_id} not found")
 
     # Check availability
@@ -519,16 +510,12 @@ def swap_rooms(conn, args):
     if not meeting_id_b:
         err("--section-meeting-id-b is required (meeting B)")
 
-    meeting_a = conn.execute(
-        "SELECT * FROM educlaw_section_meeting WHERE id = ?", (meeting_id_a,)
-    ).fetchone()
+    meeting_a = conn.execute(Q.from_(Table("educlaw_section_meeting")).select(Table("educlaw_section_meeting").star).where(Field("id") == P()).get_sql(), (meeting_id_a,)).fetchone()
     if not meeting_a:
         err(f"Section meeting {meeting_id_a} not found")
     meeting_a = dict(meeting_a)
 
-    meeting_b = conn.execute(
-        "SELECT * FROM educlaw_section_meeting WHERE id = ?", (meeting_id_b,)
-    ).fetchone()
+    meeting_b = conn.execute(Q.from_(Table("educlaw_section_meeting")).select(Table("educlaw_section_meeting").star).where(Field("id") == P()).get_sql(), (meeting_id_b,)).fetchone()
     if not meeting_b:
         err(f"Section meeting {meeting_id_b} not found")
     meeting_b = dict(meeting_b)
@@ -627,14 +614,12 @@ def get_room_availability(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    room = conn.execute("SELECT * FROM educlaw_room WHERE id = ?", (room_id,)).fetchone()
+    room = conn.execute(Q.from_(Table("educlaw_room")).select(Table("educlaw_room").star).where(Field("id") == P()).get_sql(), (room_id,)).fetchone()
     if not room:
         err(f"Room {room_id} not found")
     room = dict(room)
 
-    master = conn.execute(
-        "SELECT * FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()
+    master = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Table("educlaw_master_schedule").star).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     if not master:
         err(f"Master schedule {master_id} not found")
     master = dict(master)
@@ -715,9 +700,7 @@ def get_room_utilization_report(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    master = conn.execute(
-        "SELECT * FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()
+    master = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Table("educlaw_master_schedule").star).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     if not master:
         err(f"Master schedule {master_id} not found")
     master = dict(master)
@@ -824,13 +807,11 @@ def emergency_reassign_room(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_room WHERE id = ?", (source_room_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_room")).select(Field("id")).where(Field("id") == P()).get_sql(), (source_room_id,)).fetchone():
         err(f"Source room {source_room_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_room WHERE id = ?", (target_room_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_room")).select(Field("id")).where(Field("id") == P()).get_sql(), (target_room_id,)).fetchone():
         err(f"Target room {target_room_id} not found")
-    if not conn.execute(
-        "SELECT id FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("id")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone():
         err(f"Master schedule {master_id} not found")
 
     # Get all active bookings in source room for this master schedule
@@ -925,29 +906,21 @@ def add_instructor_constraint(conn, args):
     if constraint_type not in VALID_CONSTRAINT_TYPES:
         err(f"--constraint-type must be one of: {', '.join(VALID_CONSTRAINT_TYPES)}")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_instructor WHERE id = ?", (instructor_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("id")).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone():
         err(f"Instructor {instructor_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
 
     day_type_id = getattr(args, "day_type_id", None)
     bell_period_id = getattr(args, "bell_period_id", None)
 
     if day_type_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_day_type WHERE id = ?", (day_type_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_day_type")).select(Field("id")).where(Field("id") == P()).get_sql(), (day_type_id,)).fetchone():
             err(f"Day type {day_type_id} not found")
 
     if bell_period_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_bell_period WHERE id = ?", (bell_period_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_bell_period")).select(Field("id")).where(Field("id") == P()).get_sql(), (bell_period_id,)).fetchone():
             err(f"Bell period {bell_period_id} not found")
 
     constraint_value = int(getattr(args, "constraint_value", None) or 0)
@@ -956,21 +929,16 @@ def add_instructor_constraint(conn, args):
     if priority not in VALID_PRIORITIES:
         err(f"--priority must be one of: {', '.join(VALID_PRIORITIES)}")
 
-    company_id = company_id or conn.execute(
-        "SELECT company_id FROM educlaw_instructor WHERE id = ?", (instructor_id,)
-    ).fetchone()["company_id"]
+    company_id = company_id or conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("company_id")).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone()["company_id"]
 
     is_active = int(getattr(args, "is_active", None) or 1)
     now = _now_iso()
     constraint_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_instructor_constraint
-               (id, instructor_id, academic_term_id, constraint_type,
-                day_type_id, bell_period_id, constraint_value, constraint_notes,
-                priority, is_active, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_instructor_constraint", {"id": P(), "instructor_id": P(), "academic_term_id": P(), "constraint_type": P(), "day_type_id": P(), "bell_period_id": P(), "constraint_value": P(), "constraint_notes": P(), "priority": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (constraint_id, instructor_id, academic_term_id, constraint_type,
              day_type_id, bell_period_id, constraint_value, constraint_notes,
              priority, is_active, company_id, now, now,
@@ -994,9 +962,7 @@ def update_instructor_constraint(conn, args):
     if not constraint_id:
         err("--constraint-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_instructor_constraint WHERE id = ?", (constraint_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_instructor_constraint")).select(Table("educlaw_instructor_constraint").star).where(Field("id") == P()).get_sql(), (constraint_id,)).fetchone()
     if not row:
         err(f"Instructor constraint {constraint_id} not found")
 
@@ -1061,9 +1027,7 @@ def delete_instructor_constraint(conn, args):
     if not constraint_id:
         err("--constraint-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_instructor_constraint WHERE id = ?", (constraint_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_instructor_constraint")).select(Table("educlaw_instructor_constraint").star).where(Field("id") == P()).get_sql(), (constraint_id,)).fetchone()
     if not row:
         err(f"Instructor constraint {constraint_id} not found")
 

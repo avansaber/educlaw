@@ -22,6 +22,7 @@ from erpclaw_lib.decimal_utils import to_decimal
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -36,11 +37,9 @@ def _log_ferpa(conn, user_id, student_id, data_category, company_id,
                access_type="view", access_reason="", is_emergency=False):
     """Insert a FERPA data access log entry. Silently ignores failures."""
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (str(uuid.uuid4()), user_id or "", student_id, data_category,
              access_type, access_reason, int(is_emergency), "",
              company_id, _now_iso(), user_id or "")
@@ -76,7 +75,7 @@ def add_health_profile(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     # Check for existing profile
@@ -156,10 +155,7 @@ def update_health_profile(conn, args):
             (student_id,)
         ).fetchone()
     else:
-        row = conn.execute(
-            "SELECT * FROM educlaw_k12_health_profile WHERE id = ?",
-            (profile_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_k12_health_profile")).select(Table("educlaw_k12_health_profile").star).where(Field("id") == P()).get_sql(), (profile_id,)).fetchone()
 
     if not row:
         return err("Health profile not found")
@@ -369,14 +365,12 @@ def add_office_visit(conn, args):
     if not disposition:
         return err("--disposition is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     academic_term_id = getattr(args, "academic_term_id", None) or None
     if academic_term_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
             return err(f"Academic term {academic_term_id} not found")
 
     visit_time = getattr(args, "visit_time", None) or ""
@@ -392,13 +386,9 @@ def add_office_visit(conn, args):
 
     now = _now_iso()
     visit_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_health_visit
-           (id, student_id, visit_date, visit_time, chief_complaint, complaint_detail,
-            temperature, pulse, assessment, treatment_provided, disposition,
-            parent_contacted, parent_contact_time, parent_response, is_emergency,
-            academic_term_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_health_visit", {"id": P(), "student_id": P(), "visit_date": P(), "visit_time": P(), "chief_complaint": P(), "complaint_detail": P(), "temperature": P(), "pulse": P(), "assessment": P(), "treatment_provided": P(), "disposition": P(), "parent_contacted": P(), "parent_contact_time": P(), "parent_response": P(), "is_emergency": P(), "academic_term_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (visit_id, student_id, visit_date, visit_time, chief_complaint, complaint_detail,
          temperature, pulse, assessment, treatment_provided, disposition,
          parent_contacted, parent_contact_time, parent_response, is_emergency,
@@ -431,7 +421,7 @@ def list_office_visits(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     query = "SELECT * FROM educlaw_k12_health_visit WHERE student_id = ? AND company_id = ?"
@@ -470,10 +460,7 @@ def get_office_visit(conn, args):
     if not visit_id:
         return err("--visit-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_k12_health_visit WHERE id = ?",
-        (visit_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_health_visit")).select(Table("educlaw_k12_health_visit").star).where(Field("id") == P()).get_sql(), (visit_id,)).fetchone()
     if not row:
         return err(f"Office visit {visit_id} not found")
 
@@ -507,7 +494,7 @@ def add_student_medication(conn, args):
     if not frequency:
         return err("--frequency is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     administration_times = getattr(args, "administration_times", None) or "[]"
@@ -554,10 +541,7 @@ def update_student_medication(conn, args):
     if not medication_id:
         return err("--medication-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_student_medication WHERE id = ?",
-        (medication_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_student_medication")).select(Field("id")).where(Field("id") == P()).get_sql(), (medication_id,)).fetchone():
         return err(f"Medication {medication_id} not found")
 
     updates = {}
@@ -603,7 +587,7 @@ def list_student_medications(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     query = "SELECT * FROM educlaw_k12_student_medication WHERE student_id = ? AND company_id = ?"
@@ -648,14 +632,11 @@ def log_medication_admin(conn, args):
     if not log_time:
         return err("--log-time is required")
 
-    med = conn.execute(
-        "SELECT * FROM educlaw_k12_student_medication WHERE id = ?",
-        (student_medication_id,)
-    ).fetchone()
+    med = conn.execute(Q.from_(Table("educlaw_k12_student_medication")).select(Table("educlaw_k12_student_medication").star).where(Field("id") == P()).get_sql(), (student_medication_id,)).fetchone()
     if not med:
         return err(f"Student medication {student_medication_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     dose_given = getattr(args, "dose_given", None) or med["dosage"] or ""
@@ -666,12 +647,9 @@ def log_medication_admin(conn, args):
 
     now = _now_iso()
     log_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_medication_log
-           (id, student_medication_id, student_id, log_date, log_time,
-            dose_given, administered_by, student_response, is_refused,
-            refusal_reason, notes, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_medication_log", {"id": P(), "student_medication_id": P(), "student_id": P(), "log_date": P(), "log_time": P(), "dose_given": P(), "administered_by": P(), "student_response": P(), "is_refused": P(), "refusal_reason": P(), "notes": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (log_id, student_medication_id, student_id, log_date, log_time,
          dose_given, administered_by, student_response, is_refused,
          refusal_reason, notes, now, created_by)
@@ -690,10 +668,7 @@ def log_medication_admin(conn, args):
     audit(conn, SKILL, "k12-record-medication-admin", "educlaw_k12_medication_log", log_id)
 
     # Check supply threshold
-    updated_med = conn.execute(
-        "SELECT supply_count, supply_low_threshold FROM educlaw_k12_student_medication WHERE id = ?",
-        (student_medication_id,)
-    ).fetchone()
+    updated_med = conn.execute(Q.from_(Table("educlaw_k12_student_medication")).select(Field("supply_count"), Field("supply_low_threshold")).where(Field("id") == P()).get_sql(), (student_medication_id,)).fetchone()
     response = {"id": log_id, "is_refused": bool(is_refused), "message": "Medication administration logged"}
     if updated_med and updated_med["supply_count"] <= updated_med["supply_low_threshold"]:
         response["supply_alert"] = (
@@ -758,7 +733,7 @@ def add_immunization(conn, args):
     if not vaccine_name:
         return err("--vaccine-name is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     cvx_code = getattr(args, "cvx_code", None) or ""
@@ -774,12 +749,9 @@ def add_immunization(conn, args):
 
     now = _now_iso()
     imm_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_immunization
-           (id, student_id, vaccine_name, cvx_code, dose_number, administration_date,
-            lot_number, manufacturer, provider_name, provider_type, source,
-            iis_record_id, corrects_record_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_immunization", {"id": P(), "student_id": P(), "vaccine_name": P(), "cvx_code": P(), "dose_number": P(), "administration_date": P(), "lot_number": P(), "manufacturer": P(), "provider_name": P(), "provider_type": P(), "source": P(), "iis_record_id": P(), "corrects_record_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (imm_id, student_id, vaccine_name, cvx_code, dose_number, administration_date,
          lot_number, manufacturer, provider_name, provider_type, source,
          iis_record_id, corrects_record_id, company_id, now, created_by)
@@ -810,7 +782,7 @@ def add_immunization_waiver(conn, args):
     if not waiver_type:
         return err("--waiver-type is required (medical/religious/philosophical)")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     issuing_physician = getattr(args, "issuing_physician", None) or ""
@@ -851,9 +823,7 @@ def update_immunization_waiver(conn, args):
     if not waiver_id:
         return err("--waiver-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_immunization_waiver WHERE id = ?", (waiver_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_immunization_waiver")).select(Field("id")).where(Field("id") == P()).get_sql(), (waiver_id,)).fetchone():
         return err(f"Immunization waiver {waiver_id} not found")
 
     updates = {}
@@ -890,7 +860,7 @@ def get_immunization_record(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     immunizations = conn.execute(
@@ -965,10 +935,7 @@ def check_immunization_compliance(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    student = conn.execute(
-        "SELECT id, grade_level, full_name FROM educlaw_student WHERE id = ?",
-        (student_id,)
-    ).fetchone()
+    student = conn.execute(Q.from_(Table("educlaw_student")).select(Field("id"), Field("grade_level"), Field("full_name")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student:
         return err(f"Student {student_id} not found")
 

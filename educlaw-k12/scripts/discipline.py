@@ -21,6 +21,7 @@ from erpclaw_lib.naming import get_next_name
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -37,11 +38,9 @@ def _log_ferpa(conn, user_id, student_id, data_category, company_id,
                access_type="view", access_reason="", is_emergency=False):
     """Insert a FERPA data access log entry. Silently ignores failures."""
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (str(uuid.uuid4()), user_id or "", student_id, data_category,
              access_type, access_reason, int(is_emergency), "",
              company_id, _now_iso(), user_id or "")
@@ -57,10 +56,7 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
     Returns the new total as a Decimal string.
     """
     # Get student_id and incident_id from discipline_student
-    ds = conn.execute(
-        "SELECT student_id, incident_id FROM educlaw_k12_discipline_student WHERE id = ?",
-        (discipline_student_id,)
-    ).fetchone()
+    ds = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("student_id"), Field("incident_id")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone()
     if not ds:
         return "0"
 
@@ -68,10 +64,7 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
     incident_id = ds["incident_id"]
 
     # Get academic_year_id from the incident
-    inc = conn.execute(
-        "SELECT academic_year_id FROM educlaw_k12_discipline_incident WHERE id = ?",
-        (incident_id,)
-    ).fetchone()
+    inc = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Field("academic_year_id")).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not inc:
         return "0"
 
@@ -105,10 +98,7 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
     )
 
     # Check MDR threshold for IDEA-eligible students
-    ds_full = conn.execute(
-        "SELECT is_idea_eligible FROM educlaw_k12_discipline_student WHERE id = ?",
-        (discipline_student_id,)
-    ).fetchone()
+    ds_full = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("is_idea_eligible")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone()
     if ds_full and ds_full["is_idea_eligible"]:
         if total >= to_decimal("10"):
             conn.execute(
@@ -154,16 +144,12 @@ def add_discipline_incident(conn, args):
         return err("--academic-year-id is required")
 
     # Validate academic_year_id
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone():
         return err(f"Academic year {academic_year_id} not found")
 
     # Validate optional academic_term_id
     if academic_term_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
             return err(f"Academic term {academic_term_id} not found")
 
     now = _now_iso()
@@ -203,10 +189,7 @@ def update_discipline_incident(conn, args):
     if not incident_id:
         return err("--incident-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_k12_discipline_incident WHERE id = ?",
-        (incident_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Table("educlaw_k12_discipline_incident").star).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not row:
         return err(f"Discipline incident {incident_id} not found")
     if row["incident_status"] == "closed":
@@ -268,21 +251,14 @@ def add_discipline_student(conn, args):
     if not role:
         return err("--role is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Field("id")).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone():
         return err(f"Discipline incident {incident_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_student WHERE id = ?", (student_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     # Check if student already added to this incident
-    existing = conn.execute(
-        "SELECT id FROM educlaw_k12_discipline_student WHERE incident_id = ? AND student_id = ?",
-        (incident_id, student_id)
-    ).fetchone()
+    existing = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("id")).where(Field("incident_id") == P()).where(Field("student_id") == P()).get_sql(), (incident_id, student_id)).fetchone()
     if existing:
         return err(f"Student {student_id} already added to incident {incident_id}")
 
@@ -321,10 +297,7 @@ def add_discipline_action(conn, args):
     if not action_type:
         return err("--action-type is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_discipline_student WHERE id = ?",
-        (discipline_student_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone():
         return err(f"Discipline student record {discipline_student_id} not found")
 
     # Validate duration_days is a valid decimal
@@ -335,11 +308,9 @@ def add_discipline_action(conn, args):
 
     now = _now_iso()
     action_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_discipline_action
-           (id, discipline_student_id, action_type, start_date, end_date,
-            duration_days, administered_by, notes, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_discipline_action", {"id": P(), "discipline_student_id": P(), "action_type": P(), "start_date": P(), "end_date": P(), "duration_days": P(), "administered_by": P(), "notes": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (action_id, discipline_student_id, action_type, start_date, end_date,
          str(dur), administered_by, notes, now, now, created_by)
     )
@@ -350,10 +321,7 @@ def add_discipline_action(conn, args):
     if action_type in SUSPENSION_TYPES:
         new_cumulative = _recalc_cumulative_suspension(conn, discipline_student_id)
         cumulative_dec = to_decimal(new_cumulative)
-        ds_row = conn.execute(
-            "SELECT is_idea_eligible, mdr_required FROM educlaw_k12_discipline_student WHERE id = ?",
-            (discipline_student_id,)
-        ).fetchone()
+        ds_row = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("is_idea_eligible"), Field("mdr_required")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone()
         if ds_row and ds_row["is_idea_eligible"]:
             mdr_required = cumulative_dec >= to_decimal("10")
 
@@ -387,10 +355,7 @@ def close_discipline_incident(conn, args):
     if not incident_id:
         return err("--incident-id is required")
 
-    row = conn.execute(
-        "SELECT incident_status FROM educlaw_k12_discipline_incident WHERE id = ?",
-        (incident_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Field("incident_status")).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not row:
         return err(f"Discipline incident {incident_id} not found")
     if row["incident_status"] == "closed":
@@ -423,10 +388,7 @@ def get_discipline_incident(conn, args):
     if not incident_id:
         return err("--incident-id is required")
 
-    incident = conn.execute(
-        "SELECT * FROM educlaw_k12_discipline_incident WHERE id = ?",
-        (incident_id,)
-    ).fetchone()
+    incident = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Table("educlaw_k12_discipline_incident").star).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not incident:
         return err(f"Discipline incident {incident_id} not found")
 
@@ -529,7 +491,7 @@ def get_discipline_history(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     incidents_raw = conn.execute(
@@ -574,7 +536,7 @@ def get_cumulative_suspension_days(conn, args):
     if not academic_year_id:
         return err("--academic-year-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     rows = conn.execute(
@@ -652,16 +614,13 @@ def add_manifestation_review(conn, args):
     if not iep_id:
         return err("--iep-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_discipline_student WHERE id = ?",
-        (discipline_student_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone():
         return err(f"Discipline student record {discipline_student_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Field("id")).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone():
         return err(f"IEP {iep_id} not found")
 
     now = _now_iso()
@@ -694,9 +653,7 @@ def update_manifestation_review(conn, args):
     if not mdr_id:
         return err("--mdr-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_manifestation_review WHERE id = ?", (mdr_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_manifestation_review")).select(Field("id")).where(Field("id") == P()).get_sql(), (mdr_id,)).fetchone():
         return err(f"Manifestation review {mdr_id} not found")
 
     updates = {}
@@ -754,12 +711,10 @@ def add_pbis_recognition(conn, args):
     if not incident_date:
         return err("--incident-date is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone():
         return err(f"Academic year {academic_year_id} not found")
 
     pbis_description = f"[PBIS] {description}" if description else "[PBIS Recognition]"
@@ -812,10 +767,7 @@ def notify_guardians_discipline(conn, args):
     if not incident_id:
         return err("--incident-id is required")
 
-    incident = conn.execute(
-        "SELECT * FROM educlaw_k12_discipline_incident WHERE id = ?",
-        (incident_id,)
-    ).fetchone()
+    incident = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Table("educlaw_k12_discipline_incident").star).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not incident:
         return err(f"Discipline incident {incident_id} not found")
 

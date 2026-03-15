@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -49,12 +50,12 @@ def mark_attendance(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
     section_id = getattr(args, "section_id", None)
     if section_id:
-        if not conn.execute("SELECT id FROM educlaw_section WHERE id = ?", (section_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_section")).select(Field("id")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone():
             err(f"Section {section_id} not found")
 
     source = getattr(args, "source", None) or "manual"
@@ -65,12 +66,9 @@ def mark_attendance(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_student_attendance
-               (id, student_id, attendance_date, section_id, attendance_status,
-                late_minutes, comments, marked_by, source, company_id,
-                created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_student_attendance", {"id": P(), "student_id": P(), "attendance_date": P(), "section_id": P(), "attendance_status": P(), "late_minutes": P(), "comments": P(), "marked_by": P(), "source": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (att_id, student_id, attendance_date, section_id, attendance_status,
              int(getattr(args, "late_minutes", None) or 0),
              getattr(args, "comments", None) or "",
@@ -129,12 +127,9 @@ def batch_mark_attendance(conn, args):
 
         att_id = str(uuid.uuid4())
         try:
-            conn.execute(
-                """INSERT INTO educlaw_student_attendance
-                   (id, student_id, attendance_date, section_id, attendance_status,
-                    late_minutes, comments, marked_by, source, company_id,
-                    created_at, updated_at, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql, _ = insert_row("educlaw_student_attendance", {"id": P(), "student_id": P(), "attendance_date": P(), "section_id": P(), "attendance_status": P(), "late_minutes": P(), "comments": P(), "marked_by": P(), "source": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (att_id, student_id, attendance_date, section_id, status,
                  int(rec.get("late_minutes", 0)),
                  rec.get("comments", ""),
@@ -154,9 +149,7 @@ def update_attendance(conn, args):
     if not attendance_id:
         err("--attendance-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_student_attendance WHERE id = ?", (attendance_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student_attendance")).select(Table("educlaw_student_attendance").star).where(Field("id") == P()).get_sql(), (attendance_id,)).fetchone()
     if not row:
         err(f"Attendance record {attendance_id} not found")
 
@@ -190,9 +183,7 @@ def get_attendance(conn, args):
     if not attendance_id:
         err("--attendance-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_student_attendance WHERE id = ?", (attendance_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_student_attendance")).select(Table("educlaw_student_attendance").star).where(Field("id") == P()).get_sql(), (attendance_id,)).fetchone()
     if not row:
         err(f"Attendance record {attendance_id} not found")
     ok(dict(row))

@@ -12,6 +12,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("highered_degree_program", "HDEG-")
 except ImportError:
@@ -70,7 +71,7 @@ def update_degree_program(conn, args):
     prog_id = getattr(args, "id", None)
     if not prog_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_degree_program WHERE id=?", (prog_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("highered_degree_program")).select(Table("highered_degree_program").star).where(Field("id") == P()).get_sql(), (prog_id,)).fetchone()
     if not row:
         return err("Degree program not found")
 
@@ -172,7 +173,7 @@ def update_course(conn, args):
     course_id = getattr(args, "id", None)
     if not course_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM educlaw_course WHERE id=?", (course_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course")).select(Table("educlaw_course").star).where(Field("id") == P()).get_sql(), (course_id,)).fetchone()
     if not row:
         return err("Course not found")
 
@@ -231,7 +232,7 @@ def add_section(conn, args):
     course_id = getattr(args, "course_id", None)
     if not course_id:
         return err("--course-id is required")
-    if not conn.execute("SELECT id FROM educlaw_course WHERE id=?", (course_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_course")).select(Field('id')).where(Field("id") == P()).get_sql(), (course_id,)).fetchone():
         return err(f"Course {course_id} not found")
     term = getattr(args, "term", None)
     if not term:
@@ -309,7 +310,7 @@ def add_enrollment(conn, args):
     if not section_id:
         return err("--section-id is required")
 
-    section = conn.execute("SELECT * FROM educlaw_section WHERE id=?", (section_id,)).fetchone()
+    section = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not section:
         return err(f"Section {section_id} not found")
     if section["section_status"] != "open":
@@ -350,7 +351,7 @@ def drop_enrollment(conn, args):
     enrollment_id = getattr(args, "id", None)
     if not enrollment_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM educlaw_course_enrollment WHERE id=?", (enrollment_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Table("educlaw_course_enrollment").star).where(Field("id") == P()).get_sql(), (enrollment_id,)).fetchone()
     if not row:
         return err("Enrollment not found")
     if row["enrollment_status"] != "enrolled":

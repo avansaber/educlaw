@@ -13,6 +13,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -38,8 +39,9 @@ def add_aid_year(conn, args):
     is_active = int(getattr(args, 'is_active', 0) or 0)
     aid_year_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            "INSERT INTO finaid_aid_year (id,aid_year_code,description,start_date,end_date,pell_max_award,is_active,company_id,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_aid_year", {"id": P(), "aid_year_code": P(), "description": P(), "start_date": P(), "end_date": P(), "pell_max_award": P(), "is_active": P(), "company_id": P(), "created_by": P()})
+
+        conn.execute(sql,
             (aid_year_id, aid_year_code, description, start_date, end_date, pell_max_award, is_active, company_id, '')
         )
         conn.commit()
@@ -52,7 +54,7 @@ def update_aid_year(conn, args):
     aid_year_id = getattr(args, 'id', None)
     if not aid_year_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_aid_year WHERE id=?", (aid_year_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_aid_year")).select(Table("finaid_aid_year").star).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone()
     if not row:
         return err("Aid year not found")
     fields, vals = [], []
@@ -79,7 +81,7 @@ def get_aid_year(conn, args):
     aid_year_id = getattr(args, 'id', None)
     if not aid_year_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_aid_year WHERE id=?", (aid_year_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_aid_year")).select(Table("finaid_aid_year").star).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone()
     if not row:
         return err("Aid year not found")
     return ok(dict(row))
@@ -107,7 +109,7 @@ def set_active_aid_year(conn, args):
     aid_year_id = getattr(args, 'id', None)
     if not aid_year_id:
         return err("id is required")
-    row = conn.execute("SELECT company_id FROM finaid_aid_year WHERE id=?", (aid_year_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_aid_year")).select(Field("company_id")).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone()
     if not row:
         return err("Aid year not found")
     company_id = row['company_id']
@@ -185,8 +187,9 @@ def add_fund_allocation(conn, args):
     alloc_id = str(uuid.uuid4())
     available_amount = total_allocation
     try:
-        conn.execute(
-            "INSERT INTO finaid_fund_allocation (id,aid_year_id,fund_type,fund_name,total_allocation,committed_amount,disbursed_amount,available_amount,company_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_fund_allocation", {"id": P(), "aid_year_id": P(), "fund_type": P(), "fund_name": P(), "total_allocation": P(), "committed_amount": P(), "disbursed_amount": P(), "available_amount": P(), "company_id": P()})
+
+        conn.execute(sql,
             (alloc_id, aid_year_id, fund_type, fund_name, total_allocation, '0', '0', available_amount, company_id)
         )
         conn.commit()
@@ -199,7 +202,7 @@ def update_fund_allocation(conn, args):
     alloc_id = getattr(args, 'id', None)
     if not alloc_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_fund_allocation WHERE id=?", (alloc_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_fund_allocation")).select(Table("finaid_fund_allocation").star).where(Field("id") == P()).get_sql(), (alloc_id,)).fetchone()
     if not row:
         return err("Fund allocation not found")
     fields, vals = [], []
@@ -229,7 +232,7 @@ def get_fund_allocation(conn, args):
     alloc_id = getattr(args, 'id', None)
     if not alloc_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_fund_allocation WHERE id=?", (alloc_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_fund_allocation")).select(Table("finaid_fund_allocation").star).where(Field("id") == P()).get_sql(), (alloc_id,)).fetchone()
     if not row:
         return err("Fund allocation not found")
     return ok(dict(row))
@@ -287,8 +290,9 @@ def add_cost_of_attendance(conn, args):
     program_id = getattr(args, 'program_id', None)
     coa_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            "INSERT INTO finaid_cost_of_attendance (id,aid_year_id,program_id,enrollment_status,living_arrangement,tuition_fees,books_supplies,room_board,transportation,personal_expenses,loan_fees,total_coa,is_active,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_cost_of_attendance", {"id": P(), "aid_year_id": P(), "program_id": P(), "enrollment_status": P(), "living_arrangement": P(), "tuition_fees": P(), "books_supplies": P(), "room_board": P(), "transportation": P(), "personal_expenses": P(), "loan_fees": P(), "total_coa": P(), "is_active": P(), "company_id": P()})
+
+        conn.execute(sql,
             (coa_id, aid_year_id, program_id, enrollment_status, living_arrangement,
              tuition_fees, books_supplies, room_board, transportation, personal_expenses, loan_fees, total_coa, 1, company_id)
         )
@@ -302,7 +306,7 @@ def update_cost_of_attendance(conn, args):
     coa_id = getattr(args, 'id', None)
     if not coa_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_cost_of_attendance WHERE id=?", (coa_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_cost_of_attendance")).select(Table("finaid_cost_of_attendance").star).where(Field("id") == P()).get_sql(), (coa_id,)).fetchone()
     if not row:
         return err("COA not found")
     money_fields = ['tuition_fees', 'books_supplies', 'room_board', 'transportation', 'personal_expenses', 'loan_fees']
@@ -335,7 +339,7 @@ def get_cost_of_attendance(conn, args):
     coa_id = getattr(args, 'id', None)
     if not coa_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_cost_of_attendance WHERE id=?", (coa_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_cost_of_attendance")).select(Table("finaid_cost_of_attendance").star).where(Field("id") == P()).get_sql(), (coa_id,)).fetchone()
     if not row:
         return err("COA not found")
     return ok(dict(row))
@@ -421,8 +425,9 @@ def import_isir(conn, args):
         cflags.append(('C01', 'Citizenship/SSN match issue', 1))
     has_unresolved_cflags = 1 if cflags else 0
     try:
-        conn.execute(
-            "INSERT INTO finaid_isir (id,student_id,aid_year_id,transaction_number,is_active_transaction,fafsa_submission_id,receipt_date,sai,sai_is_negative,dependency_status,pell_index,verification_flag,verification_group,has_unresolved_cflags,nslds_default_flag,nslds_overpayment_flag,selective_service_flag,citizenship_flag,agi,household_size,status,raw_isir_data,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_isir", {"id": P(), "student_id": P(), "aid_year_id": P(), "transaction_number": P(), "is_active_transaction": P(), "fafsa_submission_id": P(), "receipt_date": P(), "sai": P(), "sai_is_negative": P(), "dependency_status": P(), "pell_index": P(), "verification_flag": P(), "verification_group": P(), "has_unresolved_cflags": P(), "nslds_default_flag": P(), "nslds_overpayment_flag": P(), "selective_service_flag": P(), "citizenship_flag": P(), "agi": P(), "household_size": P(), "status": P(), "raw_isir_data": P(), "company_id": P()})
+
+        conn.execute(sql,
             (isir_id, student_id, aid_year_id, transaction_number, 0, fafsa_submission_id, receipt_date,
              str(round_currency(sai_decimal)), sai_is_negative, dependency_status, pell_index, verification_flag,
              verification_group, has_unresolved_cflags, nslds_default_flag, nslds_overpayment_flag,
@@ -445,7 +450,7 @@ def update_isir(conn, args):
     isir_id = getattr(args, 'isir_id', None) or getattr(args, 'id', None)
     if not isir_id:
         return err("isir_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_isir WHERE id=?", (isir_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_isir")).select(Table("finaid_isir").star).where(Field("id") == P()).get_sql(), (isir_id,)).fetchone()
     if not row:
         return err("ISIR not found")
     fields, vals = [], []
@@ -476,7 +481,7 @@ def get_isir(conn, args):
     isir_id = getattr(args, 'isir_id', None) or getattr(args, 'id', None)
     if not isir_id:
         return err("isir_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_isir WHERE id=?", (isir_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_isir")).select(Table("finaid_isir").star).where(Field("id") == P()).get_sql(), (isir_id,)).fetchone()
     if not row:
         return err("ISIR not found")
     cflags = conn.execute("SELECT * FROM finaid_isir_cflag WHERE isir_id=?", (isir_id,)).fetchall()
@@ -525,7 +530,7 @@ def add_isir_cflag(conn, args):
         return err("company_id is required")
     if not cflag_code:
         return err("cflag_code is required")
-    isir_row = conn.execute("SELECT student_id FROM finaid_isir WHERE id=?", (isir_id,)).fetchone()
+    isir_row = conn.execute(Q.from_(Table("finaid_isir")).select(Field("student_id")).where(Field("id") == P()).get_sql(), (isir_id,)).fetchone()
     if not isir_row:
         return err("ISIR not found")
     student_id = isir_row['student_id']
@@ -533,8 +538,9 @@ def add_isir_cflag(conn, args):
     blocks_disbursement = int(getattr(args, 'blocks_disbursement', 1) or 1)
     cflag_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            "INSERT INTO finaid_isir_cflag (id,isir_id,student_id,cflag_code,cflag_description,blocks_disbursement,resolution_status,company_id) VALUES (?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_isir_cflag", {"id": P(), "isir_id": P(), "student_id": P(), "cflag_code": P(), "cflag_description": P(), "blocks_disbursement": P(), "resolution_status": P(), "company_id": P()})
+
+        conn.execute(sql,
             (cflag_id, isir_id, student_id, cflag_code, cflag_description, blocks_disbursement, 'pending', company_id)
         )
         conn.execute("UPDATE finaid_isir SET has_unresolved_cflags=1, updated_at=? WHERE id=?", (_now_iso(), isir_id))
@@ -551,7 +557,7 @@ def resolve_isir_cflag(conn, args):
         return err("id is required")
     if not resolution_status:
         return err("resolution_status is required")
-    row = conn.execute("SELECT isir_id FROM finaid_isir_cflag WHERE id=?", (cflag_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_isir_cflag")).select(Field("isir_id")).where(Field("id") == P()).get_sql(), (cflag_id,)).fetchone()
     if not row:
         return err("C-flag not found")
     isir_id = row['isir_id']
@@ -633,15 +639,17 @@ def create_verification_request(conn, args):
     deadline_date = getattr(args, 'deadline_date', '') or ''
     assigned_to = getattr(args, 'assigned_to', '') or ''
     try:
-        conn.execute(
-            "INSERT INTO finaid_verification_request (id,isir_id,student_id,verification_group,status,requested_date,deadline_date,assigned_to,company_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_verification_request", {"id": P(), "isir_id": P(), "student_id": P(), "verification_group": P(), "status": P(), "requested_date": P(), "deadline_date": P(), "assigned_to": P(), "company_id": P()})
+
+        conn.execute(sql,
             (req_id, isir_id, student_id, verification_group, 'initiated', requested_date, deadline_date, assigned_to, company_id)
         )
         docs_created = 0
         for doc_type, doc_desc, is_required in _VERIFICATION_DOCS.get(verification_group, []):
             doc_id = str(uuid.uuid4())
-            conn.execute(
-                "INSERT INTO finaid_verification_document (id,verification_request_id,student_id,document_type,document_description,is_required,submission_status,company_id) VALUES (?,?,?,?,?,?,?,?)",
+            sql, _ = insert_row("finaid_verification_document", {"id": P(), "verification_request_id": P(), "student_id": P(), "document_type": P(), "document_description": P(), "is_required": P(), "submission_status": P(), "company_id": P()})
+
+            conn.execute(sql,
                 (doc_id, req_id, student_id, doc_type, doc_desc, is_required, 'not_submitted', company_id)
             )
             docs_created += 1
@@ -679,7 +687,7 @@ def get_verification_request(conn, args):
     req_id = getattr(args, 'verification_request_id', None) or getattr(args, 'id', None)
     if not req_id:
         return err("verification_request_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_verification_request WHERE id=?", (req_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_verification_request")).select(Table("finaid_verification_request").star).where(Field("id") == P()).get_sql(), (req_id,)).fetchone()
     if not row:
         return err("Verification request not found")
     docs = conn.execute("SELECT * FROM finaid_verification_document WHERE verification_request_id=?", (req_id,)).fetchall()
@@ -716,8 +724,9 @@ def add_verification_document(conn, args):
     document_description = getattr(args, 'document_description', '') or ''
     is_required = int(getattr(args, 'is_required', 1) or 1)
     try:
-        conn.execute(
-            "INSERT INTO finaid_verification_document (id,verification_request_id,student_id,document_type,document_description,is_required,submission_status,company_id) VALUES (?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_verification_document", {"id": P(), "verification_request_id": P(), "student_id": P(), "document_type": P(), "document_description": P(), "is_required": P(), "submission_status": P(), "company_id": P()})
+
+        conn.execute(sql,
             (doc_id, req_id, student_id, document_type, document_description, is_required, 'not_submitted', company_id)
         )
         conn.commit()
@@ -820,22 +829,23 @@ def create_award_package(conn, args):
     # Get COA total for financial_need computation
     financial_need = '0'
     if cost_of_attendance_id and isir_id:
-        coa_row = conn.execute("SELECT total_coa FROM finaid_cost_of_attendance WHERE id=?", (cost_of_attendance_id,)).fetchone()
-        isir_row = conn.execute("SELECT sai FROM finaid_isir WHERE id=?", (isir_id,)).fetchone()
+        coa_row = conn.execute(Q.from_(Table("finaid_cost_of_attendance")).select(Field("total_coa")).where(Field("id") == P()).get_sql(), (cost_of_attendance_id,)).fetchone()
+        isir_row = conn.execute(Q.from_(Table("finaid_isir")).select(Field("sai")).where(Field("id") == P()).get_sql(), (isir_id,)).fetchone()
         if coa_row and isir_row:
             need = to_decimal(coa_row['total_coa']) - to_decimal(isir_row['sai'])
             financial_need = str(round_currency(max(need, Decimal('0'))))
     # Generate naming_series
-    ay_row = conn.execute("SELECT aid_year_code FROM finaid_aid_year WHERE id=?", (aid_year_id,)).fetchone()
+    ay_row = conn.execute(Q.from_(Table("finaid_aid_year")).select(Field("aid_year_code")).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone()
     ay_code = ay_row['aid_year_code'] if ay_row else 'XXXX'
-    count = conn.execute("SELECT COUNT(*) FROM finaid_award_package WHERE aid_year_id=?", (aid_year_id,)).fetchone()[0]
+    count = conn.execute(Q.from_(Table("finaid_award_package")).select(fn.Count("*")).where(Field("aid_year_id") == P()).get_sql(), (aid_year_id,)).fetchone()[0]
     naming_series = f"AWD-{ay_code}-{count+1:05d}"
     pkg_id = str(uuid.uuid4())
     packaged_by = getattr(args, 'packaged_by', '') or ''
     notes = getattr(args, 'notes', '') or ''
     try:
-        conn.execute(
-            "INSERT INTO finaid_award_package (id,naming_series,student_id,aid_year_id,academic_term_id,program_enrollment_id,isir_id,cost_of_attendance_id,enrollment_status,financial_need,total_grants,total_loans,total_work_study,total_aid,status,packaged_by,packaged_at,notes,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_award_package", {"id": P(), "naming_series": P(), "student_id": P(), "aid_year_id": P(), "academic_term_id": P(), "program_enrollment_id": P(), "isir_id": P(), "cost_of_attendance_id": P(), "enrollment_status": P(), "financial_need": P(), "total_grants": P(), "total_loans": P(), "total_work_study": P(), "total_aid": P(), "status": P(), "packaged_by": P(), "packaged_at": P(), "notes": P(), "company_id": P()})
+
+        conn.execute(sql,
             (pkg_id, naming_series, student_id, aid_year_id, academic_term_id or '',
              program_enrollment_id or '', isir_id or '', cost_of_attendance_id or '',
              enrollment_status or '', financial_need, '0', '0', '0', '0', 'draft',
@@ -871,7 +881,7 @@ def get_award_package(conn, args):
     pkg_id = getattr(args, 'award_package_id', None) or getattr(args, 'id', None)
     if not pkg_id:
         return err("award_package_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_award_package WHERE id=?", (pkg_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award_package")).select(Table("finaid_award_package").star).where(Field("id") == P()).get_sql(), (pkg_id,)).fetchone()
     if not row:
         return err("Award package not found")
     awards = conn.execute("SELECT * FROM finaid_award WHERE award_package_id=?", (pkg_id,)).fetchall()
@@ -911,7 +921,7 @@ def add_award(conn, args):
         if not val:
             return err(f"{name} is required")
     # Validate package is draft
-    pkg = conn.execute("SELECT status FROM finaid_award_package WHERE id=?", (award_package_id,)).fetchone()
+    pkg = conn.execute(Q.from_(Table("finaid_award_package")).select(Field("status")).where(Field("id") == P()).get_sql(), (award_package_id,)).fetchone()
     if not pkg:
         return err("Award package not found")
     if pkg['status'] not in ('draft', 'offered'):
@@ -921,8 +931,9 @@ def add_award(conn, args):
     notes = getattr(args, 'notes', '') or ''
     award_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            "INSERT INTO finaid_award (id,award_package_id,student_id,aid_year_id,academic_term_id,aid_type,aid_source,fund_source_id,offered_amount,accepted_amount,disbursed_amount,acceptance_status,disbursement_holds,is_locked,gl_account_id,notes,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_award", {"id": P(), "award_package_id": P(), "student_id": P(), "aid_year_id": P(), "academic_term_id": P(), "aid_type": P(), "aid_source": P(), "fund_source_id": P(), "offered_amount": P(), "accepted_amount": P(), "disbursed_amount": P(), "acceptance_status": P(), "disbursement_holds": P(), "is_locked": P(), "gl_account_id": P(), "notes": P(), "company_id": P()})
+
+        conn.execute(sql,
             (award_id, award_package_id, student_id, aid_year_id or '',
              academic_term_id or '', aid_type, aid_source, fund_source_id,
              offered_amount, '0', '0', 'pending', '[]', 0, gl_account_id, notes, company_id)
@@ -938,7 +949,7 @@ def update_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
-    row = conn.execute("SELECT award_package_id FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
     pkg = conn.execute("SELECT status FROM finaid_award_package WHERE id=?", (row['award_package_id'],)).fetchone()
@@ -969,7 +980,7 @@ def get_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Table("finaid_award").star).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
     return ok(dict(row))
@@ -1005,7 +1016,7 @@ def delete_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
-    row = conn.execute("SELECT award_package_id FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
     pkg = conn.execute("SELECT status FROM finaid_award_package WHERE id=?", (row['award_package_id'],)).fetchone()
@@ -1021,7 +1032,7 @@ def offer_award_package(conn, args):
     pkg_id = getattr(args, 'award_package_id', None) or getattr(args, 'id', None)
     if not pkg_id:
         return err("award_package_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_award_package WHERE id=?", (pkg_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award_package")).select(Table("finaid_award_package").star).where(Field("id") == P()).get_sql(), (pkg_id,)).fetchone()
     if not row:
         return err("Award package not found")
     if row['status'] != 'draft':
@@ -1040,7 +1051,7 @@ def accept_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
-    row = conn.execute("SELECT * FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Table("finaid_award").star).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
     accepted_amount = getattr(args, 'accepted_amount', None)
@@ -1096,7 +1107,7 @@ def disburse_award(conn, args):
     for name, val in [('award_id', award_id), ('student_id', student_id), ('amount', amount), ('company_id', company_id)]:
         if not val:
             return err(f"{name} is required")
-    award_row = conn.execute("SELECT * FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    award_row = conn.execute(Q.from_(Table("finaid_award")).select(Table("finaid_award").star).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not award_row:
         return err("Award not found")
     if award_row['acceptance_status'] != 'accepted':
@@ -1110,8 +1121,9 @@ def disburse_award(conn, args):
     disbursed_by = getattr(args, 'disbursed_by', '') or ''
     disbursement_number = int(getattr(args, 'disbursement_number', 1) or 1)
     amount_decimal = round_currency(to_decimal(amount))
-    conn.execute(
-        "INSERT INTO finaid_disbursement (id,award_id,award_package_id,student_id,disbursement_type,disbursement_number,amount,disbursement_date,disbursed_by,company_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    sql, _ = insert_row("finaid_disbursement", {"id": P(), "award_id": P(), "award_package_id": P(), "student_id": P(), "disbursement_type": P(), "disbursement_number": P(), "amount": P(), "disbursement_date": P(), "disbursed_by": P(), "company_id": P(), "created_by": P()})
+
+    conn.execute(sql,
         (disb_id, award_id, pkg_id, student_id, 'disbursement', disbursement_number,
          str(amount_decimal), disbursement_date, disbursed_by, company_id, '')
     )
@@ -1131,13 +1143,14 @@ def reverse_disbursement(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not award_id or not amount or not company_id:
         return err("award_id, amount, and company_id are required")
-    award_row = conn.execute("SELECT award_package_id, student_id, disbursed_amount FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    award_row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("student_id"), Field("disbursed_amount")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not award_row:
         return err("Award not found")
     disb_id = str(uuid.uuid4())
     amount_decimal = round_currency(to_decimal(amount))
-    conn.execute(
-        "INSERT INTO finaid_disbursement (id,award_id,award_package_id,student_id,disbursement_type,disbursement_number,amount,disbursement_date,company_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    sql, _ = insert_row("finaid_disbursement", {"id": P(), "award_id": P(), "award_package_id": P(), "student_id": P(), "disbursement_type": P(), "disbursement_number": P(), "amount": P(), "disbursement_date": P(), "company_id": P(), "created_by": P()})
+
+    conn.execute(sql,
         (disb_id, award_id, award_row['award_package_id'], award_row['student_id'],
          'reversal', 1, str(amount_decimal), disbursement_date, company_id, '')
     )
@@ -1155,12 +1168,13 @@ def record_r2t4_return_disbursement(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not award_id or not amount or not company_id:
         return err("award_id, amount, and company_id are required")
-    award_row = conn.execute("SELECT award_package_id, student_id FROM finaid_award WHERE id=?", (award_id,)).fetchone()
+    award_row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("student_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not award_row:
         return err("Award not found")
     disb_id = str(uuid.uuid4())
-    conn.execute(
-        "INSERT INTO finaid_disbursement (id,award_id,award_package_id,student_id,disbursement_type,disbursement_number,amount,disbursement_date,company_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    sql, _ = insert_row("finaid_disbursement", {"id": P(), "award_id": P(), "award_package_id": P(), "student_id": P(), "disbursement_type": P(), "disbursement_number": P(), "amount": P(), "disbursement_date": P(), "company_id": P(), "created_by": P()})
+
+    conn.execute(sql,
         (disb_id, award_id, award_row['award_package_id'], award_row['student_id'],
          'return', 1, str(round_currency(to_decimal(amount))), disbursement_date, company_id, '')
     )
@@ -1177,7 +1191,7 @@ def get_disbursement(conn, args):
     disb_id = getattr(args, 'id', None)
     if not disb_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_disbursement WHERE id=?", (disb_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_disbursement")).select(Table("finaid_disbursement").star).where(Field("id") == P()).get_sql(), (disb_id,)).fetchone()
     if not row:
         return err("Disbursement not found")
     return ok(dict(row))
@@ -1237,7 +1251,7 @@ def mark_credit_balance_returned(conn, args):
     return_date = getattr(args, 'return_date', _today()) or _today()
     if not disb_id:
         return err("id is required")
-    row = conn.execute("SELECT credit_balance_date, is_credit_balance FROM finaid_disbursement WHERE id=?", (disb_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_disbursement")).select(Field("credit_balance_date"), Field("is_credit_balance")).where(Field("id") == P()).get_sql(), (disb_id,)).fetchone()
     if not row:
         return err("Disbursement not found")
     if not row['is_credit_balance']:
@@ -1353,7 +1367,7 @@ def get_sap_evaluation(conn, args):
     eval_id = getattr(args, 'id', None)
     if not eval_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_sap_evaluation WHERE id=?", (eval_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_sap_evaluation")).select(Table("finaid_sap_evaluation").star).where(Field("id") == P()).get_sql(), (eval_id,)).fetchone()
     if not row:
         return err("SAP evaluation not found")
     return ok(dict(row))
@@ -1400,7 +1414,7 @@ def submit_sap_appeal(conn, args):
     academic_plan = getattr(args, 'academic_plan', '') or ''
     if not sap_evaluation_id or not student_id or not company_id or not appeal_reason:
         return err("sap_evaluation_id, student_id, company_id, and appeal_reason are required")
-    eval_row = conn.execute("SELECT sap_status FROM finaid_sap_evaluation WHERE id=?", (sap_evaluation_id,)).fetchone()
+    eval_row = conn.execute(Q.from_(Table("finaid_sap_evaluation")).select(Field("sap_status")).where(Field("id") == P()).get_sql(), (sap_evaluation_id,)).fetchone()
     if not eval_row:
         return err("SAP evaluation not found")
     if eval_row['sap_status'] != 'FSP':
@@ -1409,8 +1423,9 @@ def submit_sap_appeal(conn, args):
     submitted_date = getattr(args, 'submitted_date', _today()) or _today()
     supporting_documents = getattr(args, 'supporting_documents', '[]') or '[]'
     try:
-        conn.execute(
-            "INSERT INTO finaid_sap_appeal (id,sap_evaluation_id,student_id,submitted_date,appeal_reason,reason_narrative,academic_plan,supporting_documents,status,company_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_sap_appeal", {"id": P(), "sap_evaluation_id": P(), "student_id": P(), "submitted_date": P(), "appeal_reason": P(), "reason_narrative": P(), "academic_plan": P(), "supporting_documents": P(), "status": P(), "company_id": P()})
+
+        conn.execute(sql,
             (appeal_id, sap_evaluation_id, student_id, submitted_date, appeal_reason,
              reason_narrative, academic_plan, supporting_documents, 'submitted', company_id)
         )
@@ -1448,7 +1463,7 @@ def get_sap_appeal(conn, args):
     appeal_id = getattr(args, 'id', None)
     if not appeal_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_sap_appeal WHERE id=?", (appeal_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_sap_appeal")).select(Table("finaid_sap_appeal").star).where(Field("id") == P()).get_sql(), (appeal_id,)).fetchone()
     if not row:
         return err("SAP appeal not found")
     return ok(dict(row))
@@ -1478,7 +1493,7 @@ def decide_sap_appeal(conn, args):
         return err("id and status (granted or denied) are required")
     if decision not in ('granted', 'denied'):
         return err("status must be 'granted' or 'denied'")
-    appeal_row = conn.execute("SELECT sap_evaluation_id FROM finaid_sap_appeal WHERE id=?", (appeal_id,)).fetchone()
+    appeal_row = conn.execute(Q.from_(Table("finaid_sap_appeal")).select(Field("sap_evaluation_id")).where(Field("id") == P()).get_sql(), (appeal_id,)).fetchone()
     if not appeal_row:
         return err("SAP appeal not found")
     reviewed_by = getattr(args, 'reviewed_by', '') or ''
@@ -1531,8 +1546,9 @@ def create_r2t4(conn, args):
         due_date = ''
     r2t4_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            "INSERT INTO finaid_r2t4_calculation (id,student_id,academic_term_id,award_package_id,withdrawal_type,withdrawal_date,last_date_of_attendance,determination_date,payment_period_start,payment_period_end,payment_period_days,institution_return_due_date,status,calculated_by,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        sql, _ = insert_row("finaid_r2t4_calculation", {"id": P(), "student_id": P(), "academic_term_id": P(), "award_package_id": P(), "withdrawal_type": P(), "withdrawal_date": P(), "last_date_of_attendance": P(), "determination_date": P(), "payment_period_start": P(), "payment_period_end": P(), "payment_period_days": P(), "institution_return_due_date": P(), "status": P(), "calculated_by": P(), "company_id": P()})
+
+        conn.execute(sql,
             (r2t4_id, student_id, academic_term_id, award_package_id or '',
              withdrawal_type or '', withdrawal_date, last_date_of_attendance, determination_date,
              payment_period_start, payment_period_end, payment_period_days, due_date,
@@ -1548,7 +1564,7 @@ def calculate_r2t4(conn, args):
     r2t4_id = getattr(args, 'id', None) or getattr(args, 'r2t4_id', None)
     if not r2t4_id:
         return err("id or r2t4_id is required")
-    row = conn.execute("SELECT * FROM finaid_r2t4_calculation WHERE id=?", (r2t4_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_r2t4_calculation")).select(Table("finaid_r2t4_calculation").star).where(Field("id") == P()).get_sql(), (r2t4_id,)).fetchone()
     if not row:
         return err("R2T4 calculation not found")
     r = dict(row)
@@ -1627,7 +1643,7 @@ def get_r2t4(conn, args):
     r2t4_id = getattr(args, 'id', None) or getattr(args, 'r2t4_id', None)
     if not r2t4_id:
         return err("id or r2t4_id is required")
-    row = conn.execute("SELECT * FROM finaid_r2t4_calculation WHERE id=?", (r2t4_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_r2t4_calculation")).select(Table("finaid_r2t4_calculation").star).where(Field("id") == P()).get_sql(), (r2t4_id,)).fetchone()
     if not row:
         return err("R2T4 calculation not found")
     return ok(dict(row))
@@ -1675,8 +1691,9 @@ def add_professional_judgment(conn, args):
     supervisor_review_required = int(getattr(args, 'supervisor_review_required', 0) or 0)
     award_package_id = getattr(args, 'award_package_id', None)
     supporting_documentation = getattr(args, 'supporting_documents', '[]') or '[]'
-    conn.execute(
-        "INSERT INTO finaid_professional_judgment (id,student_id,aid_year_id,award_package_id,pj_type,pj_reason,reason_narrative,data_element_changed,original_value,adjusted_value,effective_date,supporting_documentation,authorized_by,authorization_date,supervisor_review_required,company_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    sql, _ = insert_row("finaid_professional_judgment", {"id": P(), "student_id": P(), "aid_year_id": P(), "award_package_id": P(), "pj_type": P(), "pj_reason": P(), "reason_narrative": P(), "data_element_changed": P(), "original_value": P(), "adjusted_value": P(), "effective_date": P(), "supporting_documentation": P(), "authorized_by": P(), "authorization_date": P(), "supervisor_review_required": P(), "company_id": P(), "created_by": P()})
+
+    conn.execute(sql,
         (pj_id, student_id, aid_year_id, award_package_id, pj_type, pj_reason,
          reason_narrative, data_element_changed, original_value, adjusted_value, effective_date,
          supporting_documentation, authorized_by, authorization_date, supervisor_review_required,
@@ -1690,7 +1707,7 @@ def get_professional_judgment(conn, args):
     pj_id = getattr(args, 'id', None)
     if not pj_id:
         return err("id is required")
-    row = conn.execute("SELECT * FROM finaid_professional_judgment WHERE id=?", (pj_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_professional_judgment")).select(Table("finaid_professional_judgment").star).where(Field("id") == P()).get_sql(), (pj_id,)).fetchone()
     if not row:
         return err("Professional judgment not found")
     return ok(dict(row))

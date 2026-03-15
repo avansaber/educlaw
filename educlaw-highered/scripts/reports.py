@@ -10,6 +10,7 @@ try:
     sys.path.insert(0, os.path.expanduser("~/.openclaw/erpclaw/lib"))
     from erpclaw_lib.db import DEFAULT_DB_PATH
     from erpclaw_lib.response import ok, err
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 

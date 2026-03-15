@@ -22,6 +22,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     pass
 
@@ -112,9 +113,7 @@ def pull_grades(conn, args):
         err("--connection-id is required")
 
     # Load connection
-    lms_conn = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not lms_conn:
         err(f"LMS connection {conn_id} not found")
     lms_conn = dict(lms_conn)
@@ -427,16 +426,12 @@ def get_online_gradebook(conn, args):
         err("--connection-id is required")
 
     # Validate section
-    section = conn.execute(
-        "SELECT * FROM educlaw_section WHERE id = ?", (section_id,)
-    ).fetchone()
+    section = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not section:
         err(f"Section {section_id} not found")
 
     # Get assessment plan
-    plan = conn.execute(
-        "SELECT id FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)
-    ).fetchone()
+    plan = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Field("id")).where(Field("section_id") == P()).get_sql(), (section_id,)).fetchone()
     if not plan:
         ok({"section_id": section_id, "assessments": [], "rows": [],
             "message": "No assessment plan found for section"})
@@ -647,9 +642,7 @@ def resolve_grade_conflict(conn, args):
         err(f"--resolution must be one of: {', '.join(VALID_RESOLUTIONS)}")
 
     # Load grade sync record
-    gs = conn.execute(
-        "SELECT * FROM educlaw_lms_grade_sync WHERE id = ?", (grade_sync_id,)
-    ).fetchone()
+    gs = conn.execute(Q.from_(Table("educlaw_lms_grade_sync")).select(Table("educlaw_lms_grade_sync").star).where(Field("id") == P()).get_sql(), (grade_sync_id,)).fetchone()
     if not gs:
         err(f"Grade sync record {grade_sync_id} not found")
     gs = dict(gs)
@@ -662,9 +655,7 @@ def resolve_grade_conflict(conn, args):
         })
 
     # Load LMS connection for company_id
-    lms_conn_row = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (gs["lms_connection_id"],)
-    ).fetchone()
+    lms_conn_row = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (gs["lms_connection_id"],)).fetchone()
     company_id = dict(lms_conn_row)["company_id"] if lms_conn_row else ""
 
     now = _now_iso()
@@ -859,23 +850,18 @@ def export_oneroster_csv(conn, args):
         err("--company-id is required")
 
     # Validate company
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Validate term
-    term = conn.execute(
-        "SELECT * FROM educlaw_academic_term WHERE id = ? AND company_id = ?",
-        (academic_term_id, company_id)
-    ).fetchone()
+    term = conn.execute(Q.from_(Table("educlaw_academic_term")).select(Table("educlaw_academic_term").star).where(Field("id") == P()).where(Field("company_id") == P()).get_sql(), (academic_term_id, company_id)).fetchone()
     if not term:
         err(f"Academic term {academic_term_id} not found for company {company_id}")
     term = dict(term)
 
     # If connection provided, check DPA
     if conn_id:
-        lms_conn = conn.execute(
-            "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-        ).fetchone()
+        lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
         if lms_conn and not int(dict(lms_conn).get("has_dpa_signed", 0) or 0):
             err("E_DPA_REQUIRED: Data Processing Agreement must be signed before export")
 
@@ -978,9 +964,7 @@ def close_lms_course(conn, args):
     mapping = dict(mapping)
 
     # Load connection for company_id
-    lms_conn = conn.execute(
-        "SELECT company_id FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Field("company_id")).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     company_id = lms_conn[0] if lms_conn else ""
 
     # Close the mapping

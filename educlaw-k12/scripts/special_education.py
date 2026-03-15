@@ -24,6 +24,7 @@ from erpclaw_lib.naming import get_next_name
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -73,9 +74,7 @@ def _add_calendar_days(date_str, days):
 def _student_age_at(student_id, ref_date_str, conn):
     """Calculate student age at a given date. Returns 0 on error."""
     try:
-        row = conn.execute(
-            "SELECT date_of_birth FROM educlaw_student WHERE id = ?", (student_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_student")).select(Field("date_of_birth")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
         if not row or not row["date_of_birth"]:
             return 0
         dob = date.fromisoformat(row["date_of_birth"])
@@ -104,7 +103,7 @@ def create_sped_referral(conn, args):
     if not referral_source:
         return err("--referral-source is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     referral_reason = getattr(args, "referral_reason", None) or ""
@@ -146,9 +145,7 @@ def update_sped_referral(conn, args):
     if not referral_id:
         return err("--referral-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_k12_sped_referral WHERE id = ?", (referral_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_sped_referral")).select(Table("educlaw_k12_sped_referral").star).where(Field("id") == P()).get_sql(), (referral_id,)).fetchone()
     if not row:
         return err(f"SPED referral {referral_id} not found")
 
@@ -199,9 +196,7 @@ def get_sped_referral(conn, args):
     if not referral_id:
         return err("--referral-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_k12_sped_referral WHERE id = ?", (referral_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_sped_referral")).select(Table("educlaw_k12_sped_referral").star).where(Field("id") == P()).get_sql(), (referral_id,)).fetchone()
     if not row:
         return err(f"SPED referral {referral_id} not found")
 
@@ -275,12 +270,10 @@ def add_sped_evaluation(conn, args):
     if not evaluation_type:
         return err("--evaluation-type is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_sped_referral WHERE id = ?", (referral_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_sped_referral")).select(Field("id")).where(Field("id") == P()).get_sql(), (referral_id,)).fetchone():
         return err(f"SPED referral {referral_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     evaluator_name = getattr(args, "evaluator_name", None) or ""
@@ -292,12 +285,9 @@ def add_sped_evaluation(conn, args):
 
     now = _now_iso()
     eval_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_sped_evaluation
-           (id, referral_id, student_id, evaluation_type, evaluator_name,
-            evaluator_role, evaluation_date, instrument_used,
-            findings_summary, scores, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_sped_evaluation", {"id": P(), "referral_id": P(), "student_id": P(), "evaluation_type": P(), "evaluator_name": P(), "evaluator_role": P(), "evaluation_date": P(), "instrument_used": P(), "findings_summary": P(), "scores": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (eval_id, referral_id, student_id, evaluation_type, evaluator_name,
          evaluator_role, evaluation_date, instrument_used,
          findings_summary, scores, now, created_by)
@@ -350,12 +340,10 @@ def record_sped_eligibility(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_sped_referral WHERE id = ?", (referral_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_sped_referral")).select(Field("id")).where(Field("id") == P()).get_sql(), (referral_id,)).fetchone():
         return err(f"SPED referral {referral_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     # Check uniqueness: one eligibility per referral
@@ -385,14 +373,9 @@ def record_sped_eligibility(conn, args):
 
     now = _now_iso()
     elig_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_sped_eligibility
-           (id, referral_id, student_id, eligibility_meeting_date, iep_deadline,
-            is_eligible, disability_categories, primary_disability,
-            adverse_educational_effect, eligibility_status, ineligibility_reason,
-            team_members_present, parent_consent_date,
-            company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_sped_eligibility", {"id": P(), "referral_id": P(), "student_id": P(), "eligibility_meeting_date": P(), "iep_deadline": P(), "is_eligible": P(), "disability_categories": P(), "primary_disability": P(), "adverse_educational_effect": P(), "eligibility_status": P(), "ineligibility_reason": P(), "team_members_present": P(), "parent_consent_date": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (elig_id, referral_id, student_id, eligibility_meeting_date, iep_deadline,
          is_eligible, disability_categories, primary_disability,
          adverse_educational_effect, eligibility_status, ineligibility_reason,
@@ -435,9 +418,7 @@ def get_sped_eligibility(conn, args):
         return err("--student-id or --eligibility-id is required")
 
     if eligibility_id:
-        row = conn.execute(
-            "SELECT * FROM educlaw_k12_sped_eligibility WHERE id = ?", (eligibility_id,)
-        ).fetchone()
+        row = conn.execute(Q.from_(Table("educlaw_k12_sped_eligibility")).select(Table("educlaw_k12_sped_eligibility").star).where(Field("id") == P()).get_sql(), (eligibility_id,)).fetchone()
     else:
         row = conn.execute(
             """SELECT e.* FROM educlaw_k12_sped_eligibility e
@@ -475,12 +456,10 @@ def add_iep(conn, args):
     if not eligibility_id:
         return err("--eligibility-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_sped_eligibility WHERE id = ?", (eligibility_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_sped_eligibility")).select(Field("id")).where(Field("id") == P()).get_sql(), (eligibility_id,)).fetchone():
         return err(f"SPED eligibility {eligibility_id} not found")
 
     iep_start_date = getattr(args, "iep_start_date", None) or ""
@@ -495,7 +474,7 @@ def add_iep(conn, args):
 
     # Validate parent_iep_id if provided
     if parent_iep_id:
-        if not conn.execute("SELECT id FROM educlaw_k12_iep WHERE id = ?", (parent_iep_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Field("id")).where(Field("id") == P()).get_sql(), (parent_iep_id,)).fetchone():
             return err(f"Parent IEP {parent_iep_id} not found")
 
     plaafp_academic = getattr(args, "plaafp_academic", None) or ""
@@ -576,7 +555,7 @@ def update_iep(conn, args):
     if not iep_id:
         return err("--iep-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Table("educlaw_k12_iep").star).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone()
     if not row:
         return err(f"IEP {iep_id} not found")
     if row["iep_status"] not in ("draft",):
@@ -631,7 +610,7 @@ def activate_iep(conn, args):
     if not iep_id:
         return err("--iep-id is required")
 
-    iep = conn.execute("SELECT * FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone()
+    iep = conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Table("educlaw_k12_iep").star).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone()
     if not iep:
         return err(f"IEP {iep_id} not found")
     if iep["iep_status"] != "draft":
@@ -678,9 +657,7 @@ def amend_iep(conn, args):
     if not iep_id:
         return err("--iep-id (prior active IEP ID) is required")
 
-    prior_iep = conn.execute(
-        "SELECT * FROM educlaw_k12_iep WHERE id = ?", (iep_id,)
-    ).fetchone()
+    prior_iep = conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Table("educlaw_k12_iep").star).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone()
     if not prior_iep:
         return err(f"IEP {iep_id} not found")
     if prior_iep["iep_status"] != "active":
@@ -777,9 +754,7 @@ def get_iep(conn, args):
     if not iep_id:
         return err("--iep-id is required")
 
-    iep = conn.execute(
-        "SELECT * FROM educlaw_k12_iep WHERE id = ?", (iep_id,)
-    ).fetchone()
+    iep = conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Table("educlaw_k12_iep").star).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone()
     if not iep:
         return err(f"IEP {iep_id} not found")
 
@@ -916,9 +891,9 @@ def add_iep_goal(conn, args):
     if not monitoring_frequency:
         return err("--monitoring-frequency is required")
 
-    if not conn.execute("SELECT id FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Field("id")).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone():
         return err(f"IEP {iep_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     goal_description = getattr(args, "goal_description", None) or ""
@@ -984,9 +959,9 @@ def add_iep_service(conn, args):
     if not service_setting:
         return err("--service-setting is required")
 
-    if not conn.execute("SELECT id FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Field("id")).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone():
         return err(f"IEP {iep_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     frequency_minutes_per_week = int(getattr(args, "frequency_minutes_per_week", None) or 0)
@@ -1052,12 +1027,10 @@ def log_iep_service_session(conn, args):
     if not session_date:
         return err("--session-date is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_iep_service WHERE id = ?", (iep_service_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_iep_service")).select(Field("id")).where(Field("id") == P()).get_sql(), (iep_service_id,)).fetchone():
         return err(f"IEP service {iep_service_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     session_notes = getattr(args, "session_notes", None) or ""
@@ -1068,12 +1041,9 @@ def log_iep_service_session(conn, args):
 
     now = _now_iso()
     log_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_iep_service_log
-           (id, iep_service_id, student_id, session_date, minutes_delivered,
-            session_notes, provider_name, is_makeup_session, was_session_missed,
-            missed_reason, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_iep_service_log", {"id": P(), "iep_service_id": P(), "student_id": P(), "session_date": P(), "minutes_delivered": P(), "session_notes": P(), "provider_name": P(), "is_makeup_session": P(), "was_session_missed": P(), "missed_reason": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (log_id, iep_service_id, student_id, session_date, minutes_delivered,
          session_notes, provider_name, is_makeup_session, was_session_missed,
          missed_reason, now, created_by)
@@ -1133,7 +1103,7 @@ def get_service_compliance_report(conn, args):
         return err("--student-id or --iep-id is required")
 
     if iep_id:
-        iep = conn.execute("SELECT * FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone()
+        iep = conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Table("educlaw_k12_iep").star).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone()
     else:
         iep = conn.execute(
             "SELECT * FROM educlaw_k12_iep WHERE student_id = ? AND iep_status = 'active'",
@@ -1211,20 +1181,18 @@ def add_iep_team_member(conn, args):
     if not member_type:
         return err("--member-type is required")
 
-    if not conn.execute("SELECT id FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Field("id")).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone():
         return err(f"IEP {iep_id} not found")
 
     guardian_id = getattr(args, "guardian_id", None) or None
     instructor_id = getattr(args, "instructor_id", None) or None
 
     if guardian_id:
-        if not conn.execute("SELECT id FROM educlaw_guardian WHERE id = ?", (guardian_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_guardian")).select(Field("id")).where(Field("id") == P()).get_sql(), (guardian_id,)).fetchone():
             return err(f"Guardian {guardian_id} not found")
 
     if instructor_id:
-        if not conn.execute(
-            "SELECT id FROM educlaw_instructor WHERE id = ?", (instructor_id,)
-        ).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("id")).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone():
             return err(f"Instructor {instructor_id} not found")
 
     member_role = getattr(args, "member_role", None) or ""
@@ -1235,12 +1203,9 @@ def add_iep_team_member(conn, args):
 
     now = _now_iso()
     member_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_iep_team_member
-           (id, iep_id, member_type, member_name, member_role,
-            guardian_id, instructor_id, attended_meeting, excused_absence,
-            excusal_notes, signature_date, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_iep_team_member", {"id": P(), "iep_id": P(), "member_type": P(), "member_name": P(), "member_role": P(), "guardian_id": P(), "instructor_id": P(), "attended_meeting": P(), "excused_absence": P(), "excusal_notes": P(), "signature_date": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (member_id, iep_id, member_type, member_name, member_role,
          guardian_id, instructor_id, attended_meeting, excused_absence,
          excusal_notes, signature_date, now, created_by)
@@ -1272,12 +1237,10 @@ def record_iep_progress(conn, args):
     if not progress_rating:
         return err("--progress-rating is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_iep_goal WHERE id = ?", (iep_goal_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_iep_goal")).select(Field("id")).where(Field("id") == P()).get_sql(), (iep_goal_id,)).fetchone():
         return err(f"IEP goal {iep_goal_id} not found")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     current_performance = getattr(args, "current_performance", None) or ""
@@ -1287,12 +1250,9 @@ def record_iep_progress(conn, args):
 
     now = _now_iso()
     progress_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_iep_progress
-           (id, iep_goal_id, student_id, reporting_period, progress_date,
-            progress_rating, current_performance, evidence, notes_for_parents,
-            documented_by, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_iep_progress", {"id": P(), "iep_goal_id": P(), "student_id": P(), "reporting_period": P(), "progress_date": P(), "progress_rating": P(), "current_performance": P(), "evidence": P(), "notes_for_parents": P(), "documented_by": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (progress_id, iep_goal_id, student_id, reporting_period, progress_date,
          progress_rating, current_performance, evidence, notes_for_parents,
          documented_by, now, created_by)
@@ -1319,7 +1279,7 @@ def generate_iep_progress_report(conn, args):
         return err("--student-id or --iep-id is required")
 
     if iep_id:
-        iep = conn.execute("SELECT * FROM educlaw_k12_iep WHERE id = ?", (iep_id,)).fetchone()
+        iep = conn.execute(Q.from_(Table("educlaw_k12_iep")).select(Table("educlaw_k12_iep").star).where(Field("id") == P()).get_sql(), (iep_id,)).fetchone()
     else:
         iep = conn.execute(
             "SELECT * FROM educlaw_k12_iep WHERE student_id = ? AND iep_status = 'active'",
@@ -1335,9 +1295,7 @@ def generate_iep_progress_report(conn, args):
     company_id = iep_dict["company_id"]
 
     # Get student info
-    student = conn.execute(
-        "SELECT full_name, grade_level FROM educlaw_student WHERE id = ?", (student_id,)
-    ).fetchone()
+    student = conn.execute(Q.from_(Table("educlaw_student")).select(Field("full_name"), Field("grade_level")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
 
     goals = conn.execute(
         "SELECT * FROM educlaw_k12_iep_goal WHERE iep_id = ? ORDER BY sort_order",
@@ -1397,7 +1355,7 @@ def add_504_plan(conn, args):
     if not student_id:
         return err("--student-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
     meeting_date = getattr(args, "meeting_date", None) or ""
@@ -1445,9 +1403,7 @@ def update_504_plan(conn, args):
     if not plan_id:
         return err("--plan-504-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_k12_504_plan WHERE id = ?", (plan_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_504_plan")).select(Field("id")).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone():
         return err(f"504 plan {plan_id} not found")
 
     updates = {}

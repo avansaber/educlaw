@@ -23,6 +23,7 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.crypto import encrypt_field, decrypt_field
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     def encrypt_field(v, k):
         raise RuntimeError("erpclaw_lib.crypto is required for credential storage. Install erpclaw-setup first.")
@@ -182,7 +183,7 @@ def add_lms_connection(conn, args):
         err("--company-id is required")
 
     # Validate company
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Validate endpoint_url required for non-oneroster
@@ -275,9 +276,7 @@ def update_lms_connection(conn, args):
     if not conn_id:
         err("--connection-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not row:
         err(f"LMS connection {conn_id} not found")
     row = dict(row)
@@ -380,9 +379,7 @@ def get_lms_connection(conn, args):
     if not conn_id:
         err("--connection-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not row:
         err(f"LMS connection {conn_id} not found")
 
@@ -460,9 +457,7 @@ def test_lms_connection(conn, args):
     if not conn_id:
         err("--connection-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not row:
         err(f"LMS connection {conn_id} not found")
     row = dict(row)
@@ -554,9 +549,7 @@ def sync_courses(conn, args):
         err("--company-id is required")
 
     # Load connection
-    lms_conn = conn.execute(
-        "SELECT * FROM educlaw_lms_connection WHERE id = ?", (conn_id,)
-    ).fetchone()
+    lms_conn = conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Table("educlaw_lms_connection").star).where(Field("id") == P()).get_sql(), (conn_id,)).fetchone()
     if not lms_conn:
         err(f"LMS connection {conn_id} not found")
     lms_conn = dict(lms_conn)
@@ -571,10 +564,7 @@ def sync_courses(conn, args):
         err(f"LMS connection must be 'active' before syncing (current: {lms_conn.get('status')}). Run activate-lms-connection first.")
 
     # Validate academic term
-    term = conn.execute(
-        "SELECT * FROM educlaw_academic_term WHERE id = ? AND company_id = ?",
-        (academic_term_id, company_id)
-    ).fetchone()
+    term = conn.execute(Q.from_(Table("educlaw_academic_term")).select(Table("educlaw_academic_term").star).where(Field("id") == P()).where(Field("company_id") == P()).get_sql(), (academic_term_id, company_id)).fetchone()
     if not term:
         err(f"Academic term {academic_term_id} not found for company {company_id}")
     term = dict(term)
@@ -1061,9 +1051,7 @@ def get_sync_log(conn, args):
     if not log_id:
         err("--sync-log-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_lms_sync_log WHERE id = ?", (log_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_lms_sync_log")).select(Table("educlaw_lms_sync_log").star).where(Field("id") == P()).get_sql(), (log_id,)).fetchone()
     if not row:
         err(f"Sync log {log_id} not found")
 

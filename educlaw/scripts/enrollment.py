@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -45,7 +46,7 @@ def enroll_in_program(conn, args):
         err("--company-id is required")
 
     # Validate student exists and is active
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
     student = dict(student_row)
@@ -55,11 +56,11 @@ def enroll_in_program(conn, args):
         err("Student has a registration hold — resolve outstanding fees before enrolling")
 
     # Validate program and academic year
-    if not conn.execute("SELECT id FROM educlaw_program WHERE id = ?", (program_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (program_id,)).fetchone():
         err(f"Program {program_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone():
         err(f"Academic year {academic_year_id} not found")
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Check for existing active enrollment in same program/year
@@ -76,12 +77,10 @@ def enroll_in_program(conn, args):
     enrollment_date = getattr(args, "enrollment_date", None) or _now_iso()[:10]
     now = _now_iso()
 
-    conn.execute(
-        """INSERT INTO educlaw_program_enrollment
-           (id, naming_series, student_id, program_id, academic_year_id,
-            enrollment_date, enrollment_status, fee_invoice_id, company_id,
-            created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_program_enrollment", {"id": P(), "naming_series": P(), "student_id": P(), "program_id": P(), "academic_year_id": P(), "enrollment_date": P(), "enrollment_status": P(), "fee_invoice_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (enr_id, naming, student_id, program_id, academic_year_id,
          enrollment_date, "active", "",
          company_id, now, now, getattr(args, "user_id", None) or "")
@@ -89,11 +88,9 @@ def enroll_in_program(conn, args):
 
     # Send enrollment confirmed notification
     notif_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_notification
-           (id, recipient_type, recipient_id, notification_type, title, message,
-            reference_type, reference_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (notif_id, "student", student_id, "enrollment_confirmed",
          "Program Enrollment Confirmed",
          f"You have been enrolled in the program. Enrollment ID: {naming}",
@@ -114,9 +111,7 @@ def withdraw_from_program(conn, args):
     if not enrollment_id:
         err("--enrollment-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_program_enrollment WHERE id = ?", (enrollment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_program_enrollment")).select(Table("educlaw_program_enrollment").star).where(Field("id") == P()).get_sql(), (enrollment_id,)).fetchone()
     if not row:
         err(f"Program enrollment {enrollment_id} not found")
 
@@ -133,11 +128,9 @@ def withdraw_from_program(conn, args):
     )
 
     notif_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_notification
-           (id, recipient_type, recipient_id, notification_type, title, message,
-            reference_type, reference_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (notif_id, "student", r["student_id"], "announcement",
          "Program Withdrawal Processed",
          f"Your withdrawal from program enrollment {r['naming_series']} has been processed.",
@@ -237,7 +230,7 @@ def enroll_in_section(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    student_row = conn.execute("SELECT * FROM educlaw_student WHERE id = ?", (student_id,)).fetchone()
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
     if not student_row:
         err(f"Student {student_id} not found")
     student = dict(student_row)
@@ -246,7 +239,7 @@ def enroll_in_section(conn, args):
     if student["registration_hold"]:
         err("Student has a registration hold")
 
-    section_row = conn.execute("SELECT * FROM educlaw_section WHERE id = ?", (section_id,)).fetchone()
+    section_row = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not section_row:
         err(f"Section {section_id} not found")
     section = dict(section_row)
@@ -269,10 +262,7 @@ def enroll_in_section(conn, args):
             err("Student must have an active program enrollment for this academic year")
 
     # Check for duplicate enrollment
-    dup = conn.execute(
-        "SELECT id FROM educlaw_course_enrollment WHERE student_id = ? AND section_id = ?",
-        (student_id, section_id)
-    ).fetchone()
+    dup = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Field("id")).where(Field("student_id") == P()).where(Field("section_id") == P()).get_sql(), (student_id, section_id)).fetchone()
     if dup:
         err("Student is already enrolled in this section")
 
@@ -307,11 +297,9 @@ def enroll_in_section(conn, args):
                 err("Section is full and waitlist is also full")
             position = wait_count + 1
             wait_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO educlaw_waitlist
-                   (id, student_id, section_id, position, requested_date, waitlist_status,
-                    offer_expires_at, company_id, created_at, updated_at, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql, _ = insert_row("educlaw_waitlist", {"id": P(), "student_id": P(), "section_id": P(), "position": P(), "requested_date": P(), "waitlist_status": P(), "offer_expires_at": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+            conn.execute(sql,
                 (wait_id, student_id, section_id, position, now, "waiting", "",
                  company_id, now, now, getattr(args, "user_id", None) or "")
             )
@@ -324,13 +312,9 @@ def enroll_in_section(conn, args):
 
     # Enroll student
     enr_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_course_enrollment
-           (id, student_id, section_id, enrollment_date, enrollment_status,
-            drop_date, drop_reason, final_letter_grade, final_grade_points, final_percentage,
-            grade_submitted_by, grade_submitted_at, is_grade_submitted, is_repeat,
-            grade_type, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_course_enrollment", {"id": P(), "student_id": P(), "section_id": P(), "enrollment_date": P(), "enrollment_status": P(), "drop_date": P(), "drop_reason": P(), "final_letter_grade": P(), "final_grade_points": P(), "final_percentage": P(), "grade_submitted_by": P(), "grade_submitted_at": P(), "is_grade_submitted": P(), "is_repeat": P(), "grade_type": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (enr_id, student_id, section_id, now[:10], "enrolled",
          "", "", "", "0", "0",
          "", "", 0, int(getattr(args, "is_repeat", None) or 0),
@@ -355,9 +339,7 @@ def drop_enrollment(conn, args):
     if not enrollment_id:
         err("--enrollment-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_course_enrollment WHERE id = ?", (enrollment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Table("educlaw_course_enrollment").star).where(Field("id") == P()).get_sql(), (enrollment_id,)).fetchone()
     if not row:
         err(f"Enrollment {enrollment_id} not found")
 
@@ -402,9 +384,7 @@ def withdraw_enrollment(conn, args):
     if not enrollment_id:
         err("--enrollment-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_course_enrollment WHERE id = ?", (enrollment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Table("educlaw_course_enrollment").star).where(Field("id") == P()).get_sql(), (enrollment_id,)).fetchone()
     if not row:
         err(f"Enrollment {enrollment_id} not found")
 
@@ -441,9 +421,7 @@ def get_enrollment(conn, args):
     if not enrollment_id:
         err("--enrollment-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_course_enrollment WHERE id = ?", (enrollment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course_enrollment")).select(Table("educlaw_course_enrollment").star).where(Field("id") == P()).get_sql(), (enrollment_id,)).fetchone()
     if not row:
         err(f"Enrollment {enrollment_id} not found")
 
@@ -515,11 +493,9 @@ def _advance_waitlist(conn, section_id, company_id, now):
         (offer_expires, w["id"])
     )
     notif_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_notification
-           (id, recipient_type, recipient_id, notification_type, title, message,
-            reference_type, reference_id, company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
         (notif_id, "student", w["student_id"], "enrollment_confirmed",
          "Waitlist Seat Offered",
          f"A seat is now available in section {section_id}. Offer expires: {offer_expires}",
@@ -532,7 +508,7 @@ def process_waitlist(conn, args):
     if not section_id:
         err("--section-id is required")
 
-    section_row = conn.execute("SELECT * FROM educlaw_section WHERE id = ?", (section_id,)).fetchone()
+    section_row = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not section_row:
         err(f"Section {section_id} not found")
 

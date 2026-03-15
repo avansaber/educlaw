@@ -19,6 +19,7 @@ try:
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     def to_decimal(v, places=4):
         try:
@@ -69,19 +70,19 @@ def add_collection_window(conn, args):
     if not school_year:
         err("--school-year is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Optional FK: academic_year_id
     academic_year_id = getattr(args, "academic_year_id", None)
     if academic_year_id:
-        if not conn.execute("SELECT id FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_academic_year")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone():
             err(f"Academic year {academic_year_id} not found")
 
     # Optional FK: edfi_config_id
     edfi_config_id = getattr(args, "edfi_config_id", None)
     if edfi_config_id:
-        if not conn.execute("SELECT id FROM sr_edfi_config WHERE id = ?", (edfi_config_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("sr_edfi_config")).select(Field("id")).where(Field("id") == P()).get_sql(), (edfi_config_id,)).fetchone():
             err(f"Ed-Fi config {edfi_config_id} not found")
 
     required_data_categories = getattr(args, "required_data_categories", None) or "[]"
@@ -90,13 +91,9 @@ def add_collection_window(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO sr_collection_window
-               (id, name, state_code, window_type, school_year, academic_year_id,
-                open_date, close_date, snapshot_date, status,
-                required_data_categories, description, is_federal_required,
-                edfi_config_id, company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_collection_window", {"id": P(), "name": P(), "state_code": P(), "window_type": P(), "school_year": P(), "academic_year_id": P(), "open_date": P(), "close_date": P(), "snapshot_date": P(), "status": P(), "required_data_categories": P(), "description": P(), "is_federal_required": P(), "edfi_config_id": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (window_id, name, state_code, window_type, int(school_year),
              academic_year_id,
              getattr(args, "open_date", None) or "",
@@ -124,7 +121,7 @@ def update_collection_window(conn, args):
     if not window_id:
         err("--window-id is required")
 
-    row = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not row:
         err(f"Collection window {window_id} not found")
 
@@ -162,7 +159,7 @@ def get_collection_window(conn, args):
     if not window_id:
         err("--window-id is required")
 
-    row = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not row:
         err(f"Collection window {window_id} not found")
 
@@ -244,7 +241,7 @@ def advance_window_status(conn, args):
     if not window_id:
         err("--window-id is required")
 
-    row = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not row:
         err(f"Collection window {window_id} not found")
 
@@ -289,7 +286,7 @@ def take_snapshot(conn, args):
     if not window_id:
         err("--window-id is required")
 
-    window = conn.execute("SELECT * FROM sr_collection_window WHERE id = ?", (window_id,)).fetchone()
+    window = conn.execute(Q.from_(Table("sr_collection_window")).select(Table("sr_collection_window").star).where(Field("id") == P()).get_sql(), (window_id,)).fetchone()
     if not window:
         err(f"Collection window {window_id} not found")
 
@@ -345,15 +342,10 @@ def take_snapshot(conn, args):
 
     snapshot_id = str(uuid.uuid4())
 
-    conn.execute(
-        """INSERT INTO sr_snapshot
-           (id, collection_window_id, snapshot_taken_at, snapshot_taken_by,
-            total_students, total_enrollment, total_sped, total_el,
-            total_economically_disadvantaged, total_homeless,
-            ada_total, adm_total, chronic_absenteeism_count, error_count_at_snapshot,
-            snapshot_status, certified_by, certified_at, certification_notes,
-            company_id, created_at, updated_at, created_by)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+    sql, _ = insert_row("sr_snapshot", {"id": P(), "collection_window_id": P(), "snapshot_taken_at": P(), "snapshot_taken_by": P(), "total_students": P(), "total_enrollment": P(), "total_sped": P(), "total_el": P(), "total_economically_disadvantaged": P(), "total_homeless": P(), "ada_total": P(), "adm_total": P(), "chronic_absenteeism_count": P(), "error_count_at_snapshot": P(), "snapshot_status": P(), "certified_by": P(), "certified_at": P(), "certification_notes": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+
+    conn.execute(sql,
         (snapshot_id, window_id, now, user_id,
          total_students, total_enrollment, total_sped, total_el,
          total_econ, total_homeless,
@@ -398,11 +390,9 @@ def take_snapshot(conn, args):
                 data_json["race_codes"] = []
 
         rec_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO sr_snapshot_record
-               (id, snapshot_id, student_id, record_type, data_json, school_year,
-                company_id, created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("sr_snapshot_record", {"id": P(), "snapshot_id": P(), "student_id": P(), "record_type": P(), "data_json": P(), "school_year": P(), "company_id": P(), "created_at": P()})
+
+        conn.execute(sql,
             (rec_id, snapshot_id, student_id, "student_enrollment",
              json.dumps(data_json), school_year, company_id, now)
         )
@@ -427,7 +417,7 @@ def get_snapshot(conn, args):
     window_id = getattr(args, "window_id", None)
 
     if snapshot_id:
-        row = conn.execute("SELECT * FROM sr_snapshot WHERE id = ?", (snapshot_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("sr_snapshot")).select(Table("sr_snapshot").star).where(Field("id") == P()).get_sql(), (snapshot_id,)).fetchone()
     elif window_id:
         row = conn.execute(
             "SELECT * FROM sr_snapshot WHERE collection_window_id = ?", (window_id,)

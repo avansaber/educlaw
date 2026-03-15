@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
     from erpclaw_lib.naming import get_next_name
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
     import erpclaw_lib.naming as _naming_lib
     # Register educlaw-statereport discipline naming series
     _naming_lib.ENTITY_PREFIXES.setdefault("INC", "INC-")
@@ -68,7 +69,7 @@ def add_discipline_incident(conn, args):
     if incident_type not in VALID_INCIDENT_TYPES:
         err(f"--incident-type must be one of: {', '.join(VALID_INCIDENT_TYPES)}")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     campus_location = getattr(args, "campus_location", None) or ""
@@ -80,12 +81,9 @@ def add_discipline_incident(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_k12_discipline_incident
-               (id, naming_series, company_id, school_year, incident_date, incident_time,
-                incident_type, incident_description, campus_location, reported_by,
-                student_count_involved, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("educlaw_k12_discipline_incident", {"id": P(), "naming_series": P(), "company_id": P(), "school_year": P(), "incident_date": P(), "incident_time": P(), "incident_type": P(), "incident_description": P(), "campus_location": P(), "reported_by": P(), "student_count_involved": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (incident_id, naming_series, company_id, int(school_year),
              incident_date,
              getattr(args, "incident_time", None) or "",
@@ -108,7 +106,7 @@ def update_discipline_incident(conn, args):
     if not incident_id:
         err("--incident-id is required")
 
-    row = conn.execute("SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Field("id")).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not row:
         err(f"Discipline incident {incident_id} not found")
 
@@ -143,7 +141,7 @@ def get_discipline_incident(conn, args):
     if not incident_id:
         err("--incident-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Table("educlaw_k12_discipline_incident").star).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not row:
         err(f"Discipline incident {incident_id} not found")
 
@@ -214,14 +212,12 @@ def delete_discipline_incident(conn, args):
     if not incident_id:
         err("--incident-id is required")
 
-    row = conn.execute("SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Field("id")).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone()
     if not row:
         err(f"Discipline incident {incident_id} not found")
 
     # Block delete if students are attached
-    student_count = conn.execute(
-        "SELECT COUNT(*) FROM educlaw_k12_discipline_student WHERE incident_id = ?", (incident_id,)
-    ).fetchone()[0]
+    student_count = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(fn.Count("*")).where(Field("incident_id") == P()).get_sql(), (incident_id,)).fetchone()[0]
     if student_count > 0:
         err(f"Cannot delete incident with {student_count} student(s) attached. Remove students first.")
 
@@ -252,9 +248,9 @@ def add_discipline_student(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_k12_discipline_incident")).select(Field("id")).where(Field("id") == P()).get_sql(), (incident_id,)).fetchone():
         err(f"Discipline incident {incident_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_student WHERE id = ?", (student_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         err(f"Student {student_id} not found")
 
     # Auto-populate IDEA and 504 flags from sr_student_supplement
@@ -275,11 +271,9 @@ def add_discipline_student(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_k12_discipline_student
-               (id, incident_id, student_id, role, is_idea_student, is_504_student,
-                company_id, created_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("educlaw_k12_discipline_student", {"id": P(), "incident_id": P(), "student_id": P(), "role": P(), "is_idea_student": P(), "is_504_student": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (ds_id, incident_id, student_id, role, is_idea, is_504,
              company_id, now, getattr(args, "user_id", None) or "")
         )
@@ -307,9 +301,7 @@ def update_discipline_student(conn, args):
     if not discipline_student_id:
         err("--discipline-student-id is required")
 
-    row = conn.execute(
-        "SELECT id FROM educlaw_k12_discipline_student WHERE id = ?", (discipline_student_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone()
     if not row:
         err(f"Discipline student record {discipline_student_id} not found")
 
@@ -343,10 +335,7 @@ def remove_discipline_student(conn, args):
     if not discipline_student_id:
         err("--discipline-student-id is required")
 
-    row = conn.execute(
-        "SELECT id, incident_id FROM educlaw_k12_discipline_student WHERE id = ?",
-        (discipline_student_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("id"), Field("incident_id")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone()
     if not row:
         err(f"Discipline student record {discipline_student_id} not found")
 
@@ -409,10 +398,7 @@ def add_discipline_action(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    ds_row = conn.execute(
-        "SELECT id, incident_id, student_id, is_idea_student FROM educlaw_k12_discipline_student WHERE id = ?",
-        (discipline_student_id,)
-    ).fetchone()
+    ds_row = conn.execute(Q.from_(Table("educlaw_k12_discipline_student")).select(Field("id"), Field("incident_id"), Field("student_id"), Field("is_idea_student")).where(Field("id") == P()).get_sql(), (discipline_student_id,)).fetchone()
     if not ds_row:
         err(f"Discipline student record {discipline_student_id} not found")
 
@@ -441,13 +427,9 @@ def add_discipline_action(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_k12_discipline_action
-               (id, discipline_student_id, incident_id, student_id, action_type,
-                start_date, end_date, days_removed, alternative_services_provided,
-                alternative_services_description, mdr_required, mdr_outcome, mdr_date,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        sql, _ = insert_row("educlaw_k12_discipline_action", {"id": P(), "discipline_student_id": P(), "incident_id": P(), "student_id": P(), "action_type": P(), "start_date": P(), "end_date": P(), "days_removed": P(), "alternative_services_provided": P(), "alternative_services_description": P(), "mdr_required": P(), "mdr_outcome": P(), "mdr_date": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (action_id, discipline_student_id, incident_id, student_id, action_type,
              getattr(args, "start_date", None) or "",
              getattr(args, "end_date", None) or "",
@@ -472,7 +454,7 @@ def update_discipline_action(conn, args):
     if not action_id:
         err("--action-id is required")
 
-    row = conn.execute("SELECT id FROM educlaw_k12_discipline_action WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_action")).select(Field("id")).where(Field("id") == P()).get_sql(), (action_id,)).fetchone()
     if not row:
         err(f"Discipline action {action_id} not found")
 
@@ -517,7 +499,7 @@ def record_mdr_outcome(conn, args):
     if mdr_outcome not in VALID_MDR_OUTCOMES:
         err(f"--mdr-outcome must be one of: {', '.join(VALID_MDR_OUTCOMES)}")
 
-    row = conn.execute("SELECT id FROM educlaw_k12_discipline_action WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_action")).select(Field("id")).where(Field("id") == P()).get_sql(), (action_id,)).fetchone()
     if not row:
         err(f"Discipline action {action_id} not found")
 
@@ -538,7 +520,7 @@ def get_discipline_action(conn, args):
     if not action_id:
         err("--action-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_k12_discipline_action WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_k12_discipline_action")).select(Table("educlaw_k12_discipline_action").star).where(Field("id") == P()).get_sql(), (action_id,)).fetchone()
     if not row:
         err(f"Discipline action {action_id} not found")
 

@@ -19,6 +19,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     pass
 
@@ -58,16 +59,14 @@ def add_course_material(conn, args):
         err("--company-id is required")
 
     # Validate section exists and is active
-    section = conn.execute(
-        "SELECT id, status FROM educlaw_section WHERE id = ?", (section_id,)
-    ).fetchone()
+    section = conn.execute(Q.from_(Table("educlaw_section")).select(Field("id"), Field("status")).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not section:
         err(f"Section {section_id} not found")
     if dict(section).get("status") in ("cancelled",):
         err(f"Section {section_id} is cancelled — cannot add materials")
 
     # Validate company
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Optional fields
@@ -91,12 +90,12 @@ def add_course_material(conn, args):
 
     # Validate optional FK: assessment_id
     if assessment_id:
-        if not conn.execute("SELECT id FROM educlaw_assessment WHERE id = ?", (assessment_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_assessment")).select(Field("id")).where(Field("id") == P()).get_sql(), (assessment_id,)).fetchone():
             err(f"Assessment {assessment_id} not found")
 
     # Validate optional FK: lms_connection_id
     if lms_connection_id:
-        if not conn.execute("SELECT id FROM educlaw_lms_connection WHERE id = ?", (lms_connection_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_lms_connection")).select(Field("id")).where(Field("id") == P()).get_sql(), (lms_connection_id,)).fetchone():
             err(f"LMS connection {lms_connection_id} not found")
 
     # Validate date range
@@ -158,9 +157,7 @@ def update_course_material(conn, args):
     if not material_id:
         err("--material-id is required")
 
-    material = conn.execute(
-        "SELECT * FROM educlaw_lms_course_material WHERE id = ?", (material_id,)
-    ).fetchone()
+    material = conn.execute(Q.from_(Table("educlaw_lms_course_material")).select(Table("educlaw_lms_course_material").star).where(Field("id") == P()).get_sql(), (material_id,)).fetchone()
     if not material:
         err(f"Course material {material_id} not found")
     material = dict(material)
@@ -292,9 +289,7 @@ def get_course_material(conn, args):
     if not material_id:
         err("--material-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_lms_course_material WHERE id = ?", (material_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_lms_course_material")).select(Table("educlaw_lms_course_material").star).where(Field("id") == P()).get_sql(), (material_id,)).fetchone()
     if not row:
         err(f"Course material {material_id} not found")
 
@@ -313,9 +308,7 @@ def delete_course_material(conn, args):
     if not material_id:
         err("--material-id is required")
 
-    row = conn.execute(
-        "SELECT id, name, status FROM educlaw_lms_course_material WHERE id = ?", (material_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_lms_course_material")).select(Field("id"), Field("name"), Field("status")).where(Field("id") == P()).get_sql(), (material_id,)).fetchone()
     if not row:
         err(f"Course material {material_id} not found")
     row = dict(row)

@@ -20,6 +20,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -89,7 +90,7 @@ def add_academic_year(conn, args):
     if start_date >= end_date:
         err("start_date must be before end_date")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     # Check date overlap with existing years
@@ -105,10 +106,9 @@ def add_academic_year(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_academic_year
-               (id, name, start_date, end_date, is_active, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_academic_year", {"id": P(), "name": P(), "start_date": P(), "end_date": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (year_id, name, start_date, end_date, is_active, company_id, now, now,
              getattr(args, "user_id", None) or "")
         )
@@ -126,7 +126,7 @@ def update_academic_year(conn, args):
     if not year_id:
         err("--year-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_academic_year WHERE id = ?", (year_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_academic_year")).select(Table("educlaw_academic_year").star).where(Field("id") == P()).get_sql(), (year_id,)).fetchone()
     if not row:
         err(f"Academic year {year_id} not found")
 
@@ -164,7 +164,7 @@ def get_academic_year(conn, args):
     if not year_id:
         err("--year-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_academic_year WHERE id = ?", (year_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_academic_year")).select(Table("educlaw_academic_year").star).where(Field("id") == P()).get_sql(), (year_id,)).fetchone()
     if not row:
         err(f"Academic year {year_id} not found")
 
@@ -227,9 +227,7 @@ def add_academic_term(conn, args):
     if start_date >= end_date:
         err("start_date must be before end_date")
 
-    year_row = conn.execute(
-        "SELECT * FROM educlaw_academic_year WHERE id = ?", (academic_year_id,)
-    ).fetchone()
+    year_row = conn.execute(Q.from_(Table("educlaw_academic_year")).select(Table("educlaw_academic_year").star).where(Field("id") == P()).get_sql(), (academic_year_id,)).fetchone()
     if not year_row:
         err(f"Academic year {academic_year_id} not found")
 
@@ -237,7 +235,7 @@ def add_academic_term(conn, args):
     if start_date < year["start_date"] or end_date > year["end_date"]:
         err(f"Term dates must fall within academic year ({year['start_date']} to {year['end_date']})")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     term_id = str(uuid.uuid4())
@@ -247,12 +245,9 @@ def add_academic_term(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_academic_term
-               (id, name, term_type, academic_year_id, start_date, end_date,
-                enrollment_start_date, enrollment_end_date, grade_submission_deadline,
-                status, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_academic_term", {"id": P(), "name": P(), "term_type": P(), "academic_year_id": P(), "start_date": P(), "end_date": P(), "enrollment_start_date": P(), "enrollment_end_date": P(), "grade_submission_deadline": P(), "status": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (term_id, name, term_type, academic_year_id, start_date, end_date,
              enrollment_start, enrollment_end, grade_deadline,
              "setup", company_id, now, now, getattr(args, "user_id", None) or "")
@@ -272,7 +267,7 @@ def update_academic_term(conn, args):
     if not term_id:
         err("--term-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_academic_term WHERE id = ?", (term_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_academic_term")).select(Table("educlaw_academic_term").star).where(Field("id") == P()).get_sql(), (term_id,)).fetchone()
     if not row:
         err(f"Academic term {term_id} not found")
 
@@ -326,7 +321,7 @@ def get_academic_term(conn, args):
     if not term_id:
         err("--term-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_academic_term WHERE id = ?", (term_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_academic_term")).select(Table("educlaw_academic_term").star).where(Field("id") == P()).get_sql(), (term_id,)).fetchone()
     if not row:
         err(f"Academic term {term_id} not found")
 
@@ -377,7 +372,7 @@ def add_room(conn, args):
     if int(capacity) <= 0:
         err("--capacity must be greater than 0")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     building = getattr(args, "building", None) or ""
@@ -395,10 +390,9 @@ def add_room(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_room
-               (id, room_number, building, capacity, room_type, facilities, is_active, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_room", {"id": P(), "room_number": P(), "building": P(), "capacity": P(), "room_type": P(), "facilities": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (room_id, room_number, building, int(capacity), room_type, facilities, 1,
              company_id, now, now, getattr(args, "user_id", None) or "")
         )
@@ -416,7 +410,7 @@ def update_room(conn, args):
     if not room_id:
         err("--room-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_room WHERE id = ?", (room_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_room")).select(Table("educlaw_room").star).where(Field("id") == P()).get_sql(), (room_id,)).fetchone()
     if not row:
         err(f"Room {room_id} not found")
 
@@ -499,12 +493,12 @@ def add_program(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     dept_id = getattr(args, "department_id", None)
     if dept_id:
-        if not conn.execute("SELECT id FROM department WHERE id = ?", (dept_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("department")).select(Field("id")).where(Field("id") == P()).get_sql(), (dept_id,)).fetchone():
             err(f"Department {dept_id} not found")
 
     credits_required = str(to_decimal(getattr(args, "total_credits_required", None) or "0"))
@@ -514,12 +508,9 @@ def add_program(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_program
-               (id, code, name, description, program_type, department_id,
-                total_credits_required, duration_years, is_active, company_id,
-                created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_program", {"id": P(), "code": P(), "name": P(), "description": P(), "program_type": P(), "department_id": P(), "total_credits_required": P(), "duration_years": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (prog_id, code, name, getattr(args, "description", None) or "", program_type,
              dept_id, credits_required, duration, 1, company_id, now, now,
              getattr(args, "user_id", None) or "")
@@ -538,7 +529,7 @@ def update_program(conn, args):
     if not program_id:
         err("--program-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_program WHERE id = ?", (program_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_program")).select(Table("educlaw_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
     if not row:
         err(f"Program {program_id} not found")
 
@@ -553,7 +544,7 @@ def update_program(conn, args):
             err(f"--program-type must be one of: {', '.join(VALID_PROGRAM_TYPES)}")
         updates.append("program_type = ?"); params.append(args.program_type); changed.append("program_type")
     if getattr(args, "department_id", None) is not None:
-        if not conn.execute("SELECT id FROM department WHERE id = ?", (args.department_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("department")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.department_id,)).fetchone():
             err(f"Department {args.department_id} not found")
         updates.append("department_id = ?"); params.append(args.department_id); changed.append("department_id")
     if getattr(args, "total_credits_required", None) is not None:
@@ -581,7 +572,7 @@ def get_program(conn, args):
     if not program_id:
         err("--program-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_program WHERE id = ?", (program_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_program")).select(Table("educlaw_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
     if not row:
         err(f"Program {program_id} not found")
 
@@ -639,12 +630,12 @@ def add_course(conn, args):
     if not credit_hours:
         err("--credit-hours is required")
 
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     dept_id = getattr(args, "department_id", None)
     if dept_id:
-        if not conn.execute("SELECT id FROM department WHERE id = ?", (dept_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("department")).select(Field("id")).where(Field("id") == P()).get_sql(), (dept_id,)).fetchone():
             err(f"Department {dept_id} not found")
 
     course_type = getattr(args, "course_type", None) or "lecture"
@@ -658,12 +649,9 @@ def add_course(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_course
-               (id, course_code, name, description, credit_hours, department_id,
-                course_type, grade_level, max_enrollment, is_active, company_id,
-                created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_course", {"id": P(), "course_code": P(), "name": P(), "description": P(), "credit_hours": P(), "department_id": P(), "course_type": P(), "grade_level": P(), "max_enrollment": P(), "is_active": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (course_id, course_code, name, getattr(args, "description", None) or "",
              credit_val, dept_id, course_type, getattr(args, "grade_level", None) or "",
              max_enrollment, 1, company_id, now, now, getattr(args, "user_id", None) or "")
@@ -680,7 +668,7 @@ def add_course(conn, args):
                 prereq_course_id = prereq.get("course_id") if isinstance(prereq, dict) else prereq
                 if prereq_course_id == course_id:
                     err("Course cannot be its own prerequisite")
-                if not conn.execute("SELECT id FROM educlaw_course WHERE id = ?", (prereq_course_id,)).fetchone():
+                if not conn.execute(Q.from_(Table("educlaw_course")).select(Field("id")).where(Field("id") == P()).get_sql(), (prereq_course_id,)).fetchone():
                     err(f"Prerequisite course {prereq_course_id} not found")
                 prereq_id = str(uuid.uuid4())
                 conn.execute(
@@ -704,7 +692,7 @@ def update_course(conn, args):
     if not course_id:
         err("--course-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_course WHERE id = ?", (course_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course")).select(Table("educlaw_course").star).where(Field("id") == P()).get_sql(), (course_id,)).fetchone()
     if not row:
         err(f"Course {course_id} not found")
 
@@ -728,7 +716,7 @@ def update_course(conn, args):
     if getattr(args, "is_active", None) is not None:
         updates.append("is_active = ?"); params.append(int(args.is_active)); changed.append("is_active")
     if getattr(args, "department_id", None) is not None:
-        if not conn.execute("SELECT id FROM department WHERE id = ?", (args.department_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("department")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.department_id,)).fetchone():
             err(f"Department {args.department_id} not found")
         updates.append("department_id = ?"); params.append(args.department_id); changed.append("department_id")
 
@@ -749,7 +737,7 @@ def get_course(conn, args):
     if not course_id:
         err("--course-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_course WHERE id = ?", (course_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_course")).select(Table("educlaw_course").star).where(Field("id") == P()).get_sql(), (course_id,)).fetchone()
     if not row:
         err(f"Course {course_id} not found")
 
@@ -854,21 +842,21 @@ def add_section(conn, args):
     if int(max_enrollment) <= 0:
         err("--max-enrollment must be greater than 0")
 
-    if not conn.execute("SELECT id FROM educlaw_course WHERE id = ?", (course_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_course")).select(Field("id")).where(Field("id") == P()).get_sql(), (course_id,)).fetchone():
         err(f"Course {course_id} not found")
-    if not conn.execute("SELECT id FROM educlaw_academic_term WHERE id = ?", (academic_term_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_academic_term")).select(Field("id")).where(Field("id") == P()).get_sql(), (academic_term_id,)).fetchone():
         err(f"Academic term {academic_term_id} not found")
-    if not conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone():
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
         err(f"Company {company_id} not found")
 
     instructor_id = getattr(args, "instructor_id", None)
     if instructor_id:
-        if not conn.execute("SELECT id FROM educlaw_instructor WHERE id = ?", (instructor_id,)).fetchone():
+        if not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("id")).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone():
             err(f"Instructor {instructor_id} not found")
 
     room_id = getattr(args, "room_id", None)
     if room_id:
-        room_row = conn.execute("SELECT * FROM educlaw_room WHERE id = ?", (room_id,)).fetchone()
+        room_row = conn.execute(Q.from_(Table("educlaw_room")).select(Table("educlaw_room").star).where(Field("id") == P()).get_sql(), (room_id,)).fetchone()
         if not room_row:
             err(f"Room {room_id} not found")
         # Validate room capacity >= max_enrollment
@@ -894,12 +882,9 @@ def add_section(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_section
-               (id, naming_series, section_number, course_id, academic_term_id, instructor_id,
-                room_id, days_of_week, start_time, end_time, max_enrollment, current_enrollment,
-                waitlist_enabled, waitlist_max, status, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_section", {"id": P(), "naming_series": P(), "section_number": P(), "course_id": P(), "academic_term_id": P(), "instructor_id": P(), "room_id": P(), "days_of_week": P(), "start_time": P(), "end_time": P(), "max_enrollment": P(), "current_enrollment": P(), "waitlist_enabled": P(), "waitlist_max": P(), "status": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (section_id, section_series, section_number, course_id, academic_term_id,
              instructor_id, room_id, days_of_week, start_time, end_time,
              int(max_enrollment), 0, waitlist_enabled, waitlist_max,
@@ -921,7 +906,7 @@ def update_section(conn, args):
     if not section_id:
         err("--section-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_section WHERE id = ?", (section_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not row:
         err(f"Section {section_id} not found")
 
@@ -934,13 +919,12 @@ def update_section(conn, args):
     if getattr(args, "section_number", None) is not None:
         updates.append("section_number = ?"); params.append(args.section_number); changed.append("section_number")
     if getattr(args, "instructor_id", None) is not None:
-        if args.instructor_id and not conn.execute(
-                "SELECT id FROM educlaw_instructor WHERE id = ?", (args.instructor_id,)).fetchone():
+        if args.instructor_id and not conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("id")).where(Field("id") == P()).get_sql(), (args.instructor_id,)).fetchone():
             err(f"Instructor {args.instructor_id} not found")
         updates.append("instructor_id = ?"); params.append(args.instructor_id); changed.append("instructor_id")
     if getattr(args, "room_id", None) is not None:
         if args.room_id:
-            room_row = conn.execute("SELECT * FROM educlaw_room WHERE id = ?", (args.room_id,)).fetchone()
+            room_row = conn.execute(Q.from_(Table("educlaw_room")).select(Table("educlaw_room").star).where(Field("id") == P()).get_sql(), (args.room_id,)).fetchone()
             if not room_row:
                 err(f"Room {args.room_id} not found")
             new_max = getattr(args, "max_enrollment", None) or r["max_enrollment"]
@@ -991,7 +975,7 @@ def get_section(conn, args):
     if not section_id:
         err("--section-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_section WHERE id = ?", (section_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not row:
         err(f"Section {section_id} not found")
 
@@ -1049,7 +1033,7 @@ def open_section(conn, args):
     if not section_id:
         err("--section-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_section WHERE id = ?", (section_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not row:
         err(f"Section {section_id} not found")
 
@@ -1083,7 +1067,7 @@ def cancel_section(conn, args):
     if not section_id:
         err("--section-id is required")
 
-    row = conn.execute("SELECT * FROM educlaw_section WHERE id = ?", (section_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_section")).select(Table("educlaw_section").star).where(Field("id") == P()).get_sql(), (section_id,)).fetchone()
     if not row:
         err(f"Section {section_id} not found")
 
@@ -1111,11 +1095,9 @@ def cancel_section(conn, args):
         )
         # Create notification for each dropped student
         notif_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_notification
-               (id, recipient_type, recipient_id, notification_type, title, message,
-                reference_type, reference_id, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (notif_id, "student", enr["student_id"], "announcement",
              "Section Cancelled",
              f"Your enrollment in section {r['naming_series']} has been dropped due to section cancellation.",

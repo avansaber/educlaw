@@ -14,6 +14,7 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("highered_alumnus", "HALM-")
 except ImportError:
@@ -78,7 +79,7 @@ def update_alumnus(conn, args):
     alum_id = getattr(args, "id", None)
     if not alum_id:
         return err("--id is required")
-    row = conn.execute("SELECT * FROM highered_alumnus WHERE id=?", (alum_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("highered_alumnus")).select(Table("highered_alumnus").star).where(Field("id") == P()).get_sql(), (alum_id,)).fetchone()
     if not row:
         return err("Alumnus not found")
 
@@ -192,7 +193,7 @@ def add_giving_record(conn, args):
     alumnus_id = getattr(args, "alumnus_id", None)
     if not alumnus_id:
         return err("--alumnus-id is required")
-    alum = conn.execute("SELECT * FROM highered_alumnus WHERE id=?", (alumnus_id,)).fetchone()
+    alum = conn.execute(Q.from_(Table("highered_alumnus")).select(Table("highered_alumnus").star).where(Field("id") == P()).get_sql(), (alumnus_id,)).fetchone()
     if not alum:
         return err(f"Alumnus {alumnus_id} not found")
 

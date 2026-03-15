@@ -21,6 +21,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
 except ImportError:
     pass
 
@@ -65,12 +66,9 @@ def add_work_study_job(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO finaid_work_study_job
-               (id, job_title, department_id, supervisor_id, job_type, description,
-                pay_rate, hours_per_week, total_positions, filled_positions,
-                aid_year_id, status, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("finaid_work_study_job", {"id": P(), "job_title": P(), "department_id": P(), "supervisor_id": P(), "job_type": P(), "description": P(), "pay_rate": P(), "hours_per_week": P(), "total_positions": P(), "filled_positions": P(), "aid_year_id": P(), "status": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (job_id, job_title, department_id, supervisor_id, job_type, description,
              str(to_decimal(pay_rate)), str(to_decimal(hours_per_week)),
              int(total_positions), 0,
@@ -99,9 +97,7 @@ def update_work_study_job(conn, args):
     if not job_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_job WHERE id = ?", (job_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_job")).select(Table("finaid_work_study_job").star).where(Field("id") == P()).get_sql(), (job_id,)).fetchone()
     if not row:
         err(f"Work study job {job_id} not found")
 
@@ -154,9 +150,7 @@ def get_work_study_job(conn, args):
     if not job_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_job WHERE id = ?", (job_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_job")).select(Table("finaid_work_study_job").star).where(Field("id") == P()).get_sql(), (job_id,)).fetchone()
     if not row:
         err(f"Work study job {job_id} not found")
 
@@ -206,9 +200,7 @@ def close_work_study_job(conn, args):
     if not job_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_job WHERE id = ?", (job_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_job")).select(Table("finaid_work_study_job").star).where(Field("id") == P()).get_sql(), (job_id,)).fetchone()
     if not row:
         err(f"Work study job {job_id} not found")
 
@@ -255,9 +247,7 @@ def assign_student_to_job(conn, args):
         err("--award-limit is required")
 
     # Validate job exists and is open
-    job_row = conn.execute(
-        "SELECT * FROM finaid_work_study_job WHERE id = ?", (job_id,)
-    ).fetchone()
+    job_row = conn.execute(Q.from_(Table("finaid_work_study_job")).select(Table("finaid_work_study_job").star).where(Field("id") == P()).get_sql(), (job_id,)).fetchone()
     if not job_row:
         err(f"Work study job {job_id} not found")
     job = dict(job_row)
@@ -275,12 +265,9 @@ def assign_student_to_job(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO finaid_work_study_assignment
-               (id, student_id, award_id, job_id, aid_year_id, academic_term_id,
-                start_date, end_date, award_limit, earned_to_date, status,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("finaid_work_study_assignment", {"id": P(), "student_id": P(), "award_id": P(), "job_id": P(), "aid_year_id": P(), "academic_term_id": P(), "start_date": P(), "end_date": P(), "award_limit": P(), "earned_to_date": P(), "status": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (assignment_id, student_id, award_id, job_id, aid_year_id, academic_term_id,
              start_date, end_date, str(to_decimal(award_limit)), "0.00", "active",
              company_id, now, now, getattr(args, "user_id", None) or "")
@@ -314,9 +301,7 @@ def update_work_study_assignment(conn, args):
     if not assignment_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_assignment WHERE id = ?", (assignment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_assignment")).select(Table("finaid_work_study_assignment").star).where(Field("id") == P()).get_sql(), (assignment_id,)).fetchone()
     if not row:
         err(f"Work study assignment {assignment_id} not found")
 
@@ -353,9 +338,7 @@ def get_work_study_assignment(conn, args):
     if not assignment_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_assignment WHERE id = ?", (assignment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_assignment")).select(Table("finaid_work_study_assignment").star).where(Field("id") == P()).get_sql(), (assignment_id,)).fetchone()
     if not row:
         err(f"Work study assignment {assignment_id} not found")
 
@@ -410,9 +393,7 @@ def terminate_work_study_assignment(conn, args):
     if not assignment_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_assignment WHERE id = ?", (assignment_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_assignment")).select(Table("finaid_work_study_assignment").star).where(Field("id") == P()).get_sql(), (assignment_id,)).fetchone()
     if not row:
         err(f"Work study assignment {assignment_id} not found")
 
@@ -472,9 +453,7 @@ def submit_work_study_timesheet(conn, args):
         err("--submission-date is required")
 
     # Validate assignment is active
-    assignment_row = conn.execute(
-        "SELECT * FROM finaid_work_study_assignment WHERE id = ?", (assignment_id,)
-    ).fetchone()
+    assignment_row = conn.execute(Q.from_(Table("finaid_work_study_assignment")).select(Table("finaid_work_study_assignment").star).where(Field("id") == P()).get_sql(), (assignment_id,)).fetchone()
     if not assignment_row:
         err(f"Assignment {assignment_id} not found")
     assignment = dict(assignment_row)
@@ -482,10 +461,7 @@ def submit_work_study_timesheet(conn, args):
         err(f"Assignment {assignment_id} is not active (status: {assignment['status']})")
 
     # Check for duplicate (unique assignment_id + pay_period_start)
-    dup = conn.execute(
-        "SELECT id FROM finaid_work_study_timesheet WHERE assignment_id = ? AND pay_period_start = ?",
-        (assignment_id, pay_period_start)
-    ).fetchone()
+    dup = conn.execute(Q.from_(Table("finaid_work_study_timesheet")).select(Field("id")).where(Field("assignment_id") == P()).where(Field("pay_period_start") == P()).get_sql(), (assignment_id, pay_period_start)).fetchone()
     if dup:
         err(f"Timesheet already exists for assignment {assignment_id} and pay period starting {pay_period_start}")
 
@@ -515,14 +491,9 @@ def submit_work_study_timesheet(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO finaid_work_study_timesheet
-               (id, assignment_id, student_id, pay_period_start, pay_period_end,
-                hours_worked, earnings, cumulative_earnings, submission_date,
-                supervisor_approval_status, supervisor_approved_by,
-                supervisor_approved_date, rejection_reason, payroll_exported,
-                payroll_export_date, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("finaid_work_study_timesheet", {"id": P(), "assignment_id": P(), "student_id": P(), "pay_period_start": P(), "pay_period_end": P(), "hours_worked": P(), "earnings": P(), "cumulative_earnings": P(), "submission_date": P(), "supervisor_approval_status": P(), "supervisor_approved_by": P(), "supervisor_approved_date": P(), "rejection_reason": P(), "payroll_exported": P(), "payroll_export_date": P(), "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P()})
+
+        conn.execute(sql,
             (timesheet_id, assignment_id, student_id, pay_period_start, pay_period_end,
              str(hours), str(earnings), str(cumulative_earnings), submission_date,
              "pending", "", "", "", 0, "",
@@ -554,9 +525,7 @@ def update_work_study_timesheet(conn, args):
     if not timesheet_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_timesheet WHERE id = ?", (timesheet_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_timesheet")).select(Table("finaid_work_study_timesheet").star).where(Field("id") == P()).get_sql(), (timesheet_id,)).fetchone()
     if not row:
         err(f"Timesheet {timesheet_id} not found")
 
@@ -629,9 +598,7 @@ def approve_work_study_timesheet(conn, args):
     if not supervisor_approved_by:
         err("--supervisor-approved-by is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_timesheet WHERE id = ?", (timesheet_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_timesheet")).select(Table("finaid_work_study_timesheet").star).where(Field("id") == P()).get_sql(), (timesheet_id,)).fetchone()
     if not row:
         err(f"Timesheet {timesheet_id} not found")
 
@@ -684,9 +651,7 @@ def reject_work_study_timesheet(conn, args):
     if not supervisor_approved_by:
         err("--supervisor-approved-by is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_timesheet WHERE id = ?", (timesheet_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_timesheet")).select(Table("finaid_work_study_timesheet").star).where(Field("id") == P()).get_sql(), (timesheet_id,)).fetchone()
     if not row:
         err(f"Timesheet {timesheet_id} not found")
 
@@ -725,9 +690,7 @@ def get_work_study_timesheet(conn, args):
     if not timesheet_id:
         err("--id is required")
 
-    row = conn.execute(
-        "SELECT * FROM finaid_work_study_timesheet WHERE id = ?", (timesheet_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_work_study_timesheet")).select(Table("finaid_work_study_timesheet").star).where(Field("id") == P()).get_sql(), (timesheet_id,)).fetchone()
     if not row:
         err(f"Timesheet {timesheet_id} not found")
 

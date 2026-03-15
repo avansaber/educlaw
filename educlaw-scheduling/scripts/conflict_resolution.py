@@ -23,6 +23,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
 except ImportError:
     pass
 
@@ -97,9 +98,7 @@ def _update_open_conflicts(conn, master_id):
 
 
 def _get_master_company(conn, master_id):
-    row = conn.execute(
-        "SELECT company_id FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("company_id")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     return row["company_id"] if row else ""
 
 
@@ -478,9 +477,7 @@ def run_conflict_check(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    master_row = conn.execute(
-        "SELECT * FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone()
+    master_row = conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Table("educlaw_master_schedule").star).where(Field("id") == P()).get_sql(), (master_id,)).fetchone()
     if not master_row:
         err(f"Master schedule {master_id} not found")
 
@@ -577,9 +574,7 @@ def get_conflict(conn, args):
     if not conflict_id:
         err("--conflict-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_conflict WHERE id = ?", (conflict_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_conflict")).select(Table("educlaw_schedule_conflict").star).where(Field("id") == P()).get_sql(), (conflict_id,)).fetchone()
     if not row:
         err(f"Conflict {conflict_id} not found")
 
@@ -624,9 +619,7 @@ def resolve_conflict(conn, args):
     if not resolution_notes:
         err("--resolution-notes is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_conflict WHERE id = ?", (conflict_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_conflict")).select(Table("educlaw_schedule_conflict").star).where(Field("id") == P()).get_sql(), (conflict_id,)).fetchone()
     if not row:
         err(f"Conflict {conflict_id} not found")
 
@@ -661,9 +654,7 @@ def accept_conflict(conn, args):
     if not conflict_id:
         err("--conflict-id is required")
 
-    row = conn.execute(
-        "SELECT * FROM educlaw_schedule_conflict WHERE id = ?", (conflict_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("educlaw_schedule_conflict")).select(Table("educlaw_schedule_conflict").star).where(Field("id") == P()).get_sql(), (conflict_id,)).fetchone()
     if not row:
         err(f"Conflict {conflict_id} not found")
 
@@ -698,9 +689,7 @@ def get_conflict_summary(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("id")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone():
         err(f"Master schedule {master_id} not found")
 
     by_severity = conn.execute(
@@ -758,9 +747,7 @@ def get_singleton_conflict_map(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("id")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone():
         err(f"Master schedule {master_id} not found")
 
     # Find singleton courses (only one section placed in master schedule)
@@ -818,9 +805,7 @@ def get_student_conflict_report(conn, args):
     if not master_id:
         err("--master-schedule-id is required")
 
-    if not conn.execute(
-        "SELECT id FROM educlaw_master_schedule WHERE id = ?", (master_id,)
-    ).fetchone():
+    if not conn.execute(Q.from_(Table("educlaw_master_schedule")).select(Field("id")).where(Field("id") == P()).get_sql(), (master_id,)).fetchone():
         err(f"Master schedule {master_id} not found")
 
     # Students with open student_conflict records
