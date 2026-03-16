@@ -20,7 +20,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -207,7 +207,7 @@ def update_student_applicant(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(applicant_id)
-    conn.execute(
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_student_applicant SET {', '.join(updates)} WHERE id = ?", params
     )
     audit(conn, SKILL, "edu-update-student-applicant", "educlaw_student_applicant", applicant_id,
@@ -226,8 +226,9 @@ def get_applicant(conn, args):
     if applicant_id:
         row = conn.execute(Q.from_(Table("educlaw_student_applicant")).select(Table("educlaw_student_applicant").star).where(Field("id") == P()).get_sql(), (applicant_id,)).fetchone()
     else:
+        _sa = Table("educlaw_student_applicant")
         row = conn.execute(
-            "SELECT * FROM educlaw_student_applicant WHERE naming_series = ?", (naming_series,)
+            Q.from_(_sa).select(_sa.star).where(_sa.naming_series == P()).get_sql(), (naming_series,)
         ).fetchone()
 
     if not row:
@@ -244,24 +245,25 @@ def get_applicant(conn, args):
 
 
 def list_applicants(conn, args):
-    query = "SELECT * FROM educlaw_student_applicant WHERE 1=1"
+    _sa = Table("educlaw_student_applicant")
+    q = Q.from_(_sa).select(_sa.star)
     params = []
 
     if getattr(args, "applicant_status", None):
-        query += " AND status = ?"; params.append(args.applicant_status)
+        q = q.where(_sa.status == P()); params.append(args.applicant_status)
     if getattr(args, "applying_for_term_id", None):
-        query += " AND applying_for_term_id = ?"; params.append(args.applying_for_term_id)
+        q = q.where(_sa.applying_for_term_id == P()); params.append(args.applying_for_term_id)
     if getattr(args, "applying_for_program_id", None):
-        query += " AND applying_for_program_id = ?"; params.append(args.applying_for_program_id)
+        q = q.where(_sa.applying_for_program_id == P()); params.append(args.applying_for_program_id)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_sa.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY application_date DESC"
+    q = q.orderby(_sa.application_date, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"applicants": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -288,11 +290,16 @@ def review_applicant(conn, args):
         err("Cannot review an enrolled applicant")
 
     now = _now_iso()
+    _sa = Table("educlaw_student_applicant")
     conn.execute(
-        """UPDATE educlaw_student_applicant
-           SET status = ?, reviewed_by = ?, review_date = ?,
-               review_notes = ?, updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_sa)
+        .set(_sa.status, P())
+        .set(_sa.reviewed_by, P())
+        .set(_sa.review_date, P())
+        .set(_sa.review_notes, P())
+        .set(_sa.updated_at, LiteralValue("datetime('now')"))
+        .where(_sa.id == P())
+        .get_sql(),
         (new_status, reviewed_by, now[:10],
          getattr(args, "review_notes", None) or r.get("review_notes", ""),
          applicant_id)
@@ -332,8 +339,10 @@ def convert_applicant_to_student(conn, args):
     if r["status"] not in ("accepted", "confirmed"):
         err(f"Applicant must be accepted or confirmed (current: {r['status']})")
 
+    _stu = Table("educlaw_student")
     existing = conn.execute(
-        "SELECT id FROM educlaw_student WHERE student_applicant_id = ?", (applicant_id,)
+        Q.from_(_stu).select(_stu.id).where(_stu.student_applicant_id == P()).get_sql(),
+        (applicant_id,)
     ).fetchone()
     if existing:
         err(f"Applicant already converted to student {existing['id']}")
@@ -367,8 +376,13 @@ def convert_applicant_to_student(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Student creation failed: {e}")
 
+    _sa2 = Table("educlaw_student_applicant")
     conn.execute(
-        "UPDATE educlaw_student_applicant SET status = 'enrolled', updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sa2)
+        .set(_sa2.status, 'enrolled')
+        .set(_sa2.updated_at, LiteralValue("datetime('now')"))
+        .where(_sa2.id == P())
+        .get_sql(),
         (applicant_id,)
     )
     audit(conn, SKILL, "edu-convert-applicant-to-student", "educlaw_student", student_id,
@@ -506,7 +520,8 @@ def update_student(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(student_id)
-    conn.execute(f"UPDATE educlaw_student SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_student SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-student", "educlaw_student", student_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -532,13 +547,15 @@ def get_student(conn, args):
         except Exception:
             pass
 
+    _g = Table("educlaw_guardian")
+    _sg = Table("educlaw_student_guardian")
     guardians = conn.execute(
-        """SELECT g.id, g.first_name, g.last_name, g.full_name, g.email, g.phone,
-                  sg.relationship, sg.has_custody, sg.can_pickup,
-                  sg.receives_communications, sg.is_primary_contact, sg.is_emergency_contact
-           FROM educlaw_guardian g
-           JOIN educlaw_student_guardian sg ON sg.guardian_id = g.id
-           WHERE sg.student_id = ?""",
+        Q.from_(_g).join(_sg).on(_sg.guardian_id == _g.id)
+        .select(_g.id, _g.first_name, _g.last_name, _g.full_name, _g.email, _g.phone,
+                _sg.relationship, _sg.has_custody, _sg.can_pickup,
+                _sg.receives_communications, _sg.is_primary_contact, _sg.is_emergency_contact)
+        .where(_sg.student_id == P())
+        .get_sql(),
         (student_id,)
     ).fetchall()
     data["guardians"] = [dict(g) for g in guardians]
@@ -554,28 +571,30 @@ def get_student(conn, args):
 
 
 def list_students(conn, args):
-    query = ("SELECT id, naming_series, first_name, last_name, full_name, email, grade_level, "
-             "current_program_id, academic_standing, status, registration_hold, company_id "
-             "FROM educlaw_student WHERE 1=1")
+    _s = Table("educlaw_student")
+    q = Q.from_(_s).select(
+        _s.id, _s.naming_series, _s.first_name, _s.last_name, _s.full_name, _s.email,
+        _s.grade_level, _s.current_program_id, _s.academic_standing, _s.status,
+        _s.registration_hold, _s.company_id)
     params = []
 
     if getattr(args, "student_status", None):
-        query += " AND status = ?"; params.append(args.student_status)
+        q = q.where(_s.status == P()); params.append(args.student_status)
     if getattr(args, "current_program_id", None):
-        query += " AND current_program_id = ?"; params.append(args.current_program_id)
+        q = q.where(_s.current_program_id == P()); params.append(args.current_program_id)
     if getattr(args, "grade_level", None):
-        query += " AND grade_level = ?"; params.append(args.grade_level)
+        q = q.where(_s.grade_level == P()); params.append(args.grade_level)
     if getattr(args, "academic_standing", None):
-        query += " AND academic_standing = ?"; params.append(args.academic_standing)
+        q = q.where(_s.academic_standing == P()); params.append(args.academic_standing)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_s.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY last_name, first_name"
+    q = q.orderby(_s.last_name).orderby(_s.first_name)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"students": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -598,8 +617,13 @@ def change_student_status(conn, args):
         err(f"Student {student_id} not found")
 
     r = dict(row)
+    _s = Table("educlaw_student")
     conn.execute(
-        "UPDATE educlaw_student SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        Q.update(_s)
+        .set(_s.status, P())
+        .set(_s.updated_at, LiteralValue("datetime('now')"))
+        .where(_s.id == P())
+        .get_sql(),
         (new_status, student_id)
     )
     audit(conn, SKILL, "edu-change-student-status", "educlaw_student", student_id,
@@ -623,23 +647,32 @@ def graduate_student(conn, args):
     if r["status"] != "active":
         err(f"Student must be active to graduate (current: {r['status']})")
 
+    _s = Table("educlaw_student")
     conn.execute(
-        """UPDATE educlaw_student
-           SET status = 'graduated', graduation_date = ?, updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_s)
+        .set(_s.status, 'graduated')
+        .set(_s.graduation_date, P())
+        .set(_s.updated_at, LiteralValue("datetime('now')"))
+        .where(_s.id == P())
+        .get_sql(),
         (graduation_date, student_id)
     )
 
     # Complete active program enrollment
+    _pe = Table("educlaw_program_enrollment")
     prog_enr = conn.execute(
-        "SELECT id FROM educlaw_program_enrollment WHERE student_id = ? AND enrollment_status = 'active'",
+        Q.from_(_pe).select(_pe.id)
+        .where(_pe.student_id == P()).where(_pe.enrollment_status == 'active')
+        .get_sql(),
         (student_id,)
     ).fetchone()
     if prog_enr:
         conn.execute(
-            """UPDATE educlaw_program_enrollment
-               SET enrollment_status = 'completed', updated_at = datetime('now')
-               WHERE id = ?""",
+            Q.update(_pe)
+            .set(_pe.enrollment_status, 'completed')
+            .set(_pe.updated_at, LiteralValue("datetime('now')"))
+            .where(_pe.id == P())
+            .get_sql(),
             (prog_enr["id"],)
         )
 
@@ -762,7 +795,8 @@ def update_guardian(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(guardian_id)
-    conn.execute(f"UPDATE educlaw_guardian SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_guardian SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-guardian", "educlaw_guardian", guardian_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -785,11 +819,13 @@ def get_guardian(conn, args):
     except Exception:
         pass
 
+    _s = Table("educlaw_student")
+    _sg = Table("educlaw_student_guardian")
     linked_students = conn.execute(
-        """SELECT s.id, s.naming_series, s.full_name, sg.relationship, sg.is_primary_contact
-           FROM educlaw_student s
-           JOIN educlaw_student_guardian sg ON sg.student_id = s.id
-           WHERE sg.guardian_id = ?""",
+        Q.from_(_s).join(_sg).on(_sg.student_id == _s.id)
+        .select(_s.id, _s.naming_series, _s.full_name, _sg.relationship, _sg.is_primary_contact)
+        .where(_sg.guardian_id == P())
+        .get_sql(),
         (guardian_id,)
     ).fetchall()
     data["linked_students"] = [dict(s) for s in linked_students]
@@ -799,23 +835,24 @@ def get_guardian(conn, args):
 def list_guardians(conn, args):
     student_id = getattr(args, "student_id", None)
 
+    _g = Table("educlaw_guardian")
+    _sg = Table("educlaw_student_guardian")
+    params = []
+
     if student_id:
-        query = """SELECT g.* FROM educlaw_guardian g
-                   JOIN educlaw_student_guardian sg ON sg.guardian_id = g.id
-                   WHERE sg.student_id = ?"""
+        q = Q.from_(_g).join(_sg).on(_sg.guardian_id == _g.id).select(_g.star).where(_sg.student_id == P())
         params = [student_id]
     else:
-        query = "SELECT * FROM educlaw_guardian WHERE 1=1"
-        params = []
+        q = Q.from_(_g).select(_g.star)
         if getattr(args, "company_id", None):
-            query += " AND company_id = ?"; params.append(args.company_id)
-        query += " ORDER BY last_name, first_name"
+            q = q.where(_g.company_id == P()); params.append(args.company_id)
+        q = q.orderby(_g.last_name).orderby(_g.first_name)
 
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"guardians": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -971,10 +1008,14 @@ def revoke_consent(conn, args):
         err("Consent record is already revoked")
 
     revoked_date = getattr(args, "revoked_date", None) or _now_iso()[:10]
+    _cr = Table("educlaw_consent_record")
     conn.execute(
-        """UPDATE educlaw_consent_record
-           SET is_revoked = 1, revoked_date = ?, updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_cr)
+        .set(_cr.is_revoked, 1)
+        .set(_cr.revoked_date, P())
+        .set(_cr.updated_at, LiteralValue("datetime('now')"))
+        .where(_cr.id == P())
+        .get_sql(),
         (revoked_date, consent_id)
     )
     audit(conn, SKILL, "edu-revoke-consent", "educlaw_consent_record", consent_id,
@@ -1000,28 +1041,39 @@ def export_student_record(conn, args):
     student = dict(row)
     student.pop("ssn_encrypted", None)
 
+    _ce = Table("educlaw_course_enrollment")
+    _sec = Table("educlaw_section")
+    _c = Table("educlaw_course")
+    _at2 = Table("educlaw_academic_term")
     enrollments = conn.execute(
-        """SELECT ce.*, sec.naming_series as section_series, sec.section_number,
-                  c.course_code, c.name as course_name, c.credit_hours,
-                  at.name as term_name, at.start_date as term_start
-           FROM educlaw_course_enrollment ce
-           JOIN educlaw_section sec ON sec.id = ce.section_id
-           JOIN educlaw_course c ON c.id = sec.course_id
-           JOIN educlaw_academic_term at ON at.id = sec.academic_term_id
-           WHERE ce.student_id = ?
-           ORDER BY at.start_date""",
+        Q.from_(_ce)
+        .join(_sec).on(_sec.id == _ce.section_id)
+        .join(_c).on(_c.id == _sec.course_id)
+        .join(_at2).on(_at2.id == _sec.academic_term_id)
+        .select(_ce.star, _sec.naming_series.as_("section_series"), _sec.section_number,
+                _c.course_code, _c.name.as_("course_name"), _c.credit_hours,
+                _at2.name.as_("term_name"), _at2.start_date.as_("term_start"))
+        .where(_ce.student_id == P())
+        .orderby(_at2.start_date)
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
+    _att = Table("educlaw_student_attendance")
     attendance = conn.execute(
-        """SELECT attendance_date, attendance_status, late_minutes, comments, source
-           FROM educlaw_student_attendance
-           WHERE student_id = ? ORDER BY attendance_date DESC LIMIT 1000""",
+        Q.from_(_att)
+        .select(_att.attendance_date, _att.attendance_status, _att.late_minutes,
+                _att.comments, _att.source)
+        .where(_att.student_id == P())
+        .orderby(_att.attendance_date, order=Order.desc).limit(1000)
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
+    _cr = Table("educlaw_consent_record")
     consent = conn.execute(
-        "SELECT * FROM educlaw_consent_record WHERE student_id = ?", (student_id,)
+        Q.from_(_cr).select(_cr.star).where(_cr.student_id == P()).get_sql(),
+        (student_id,)
     ).fetchall()
 
     now = _now_iso()

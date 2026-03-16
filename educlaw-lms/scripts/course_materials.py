@@ -218,6 +218,7 @@ def update_course_material(conn, args):
     updates.append("updated_at = ?"); params.append(_now_iso())
     params.append(material_id)
 
+    # PyPika: skipped — dynamic UPDATE with variable columns
     conn.execute(
         f"UPDATE educlaw_lms_course_material SET {', '.join(updates)} WHERE id = ?",
         params
@@ -259,6 +260,7 @@ def list_course_materials(conn, args):
     if is_visible_filter is not None:
         where.append("is_visible_to_students = ?"); params.append(int(is_visible_filter))
 
+    # PyPika: skipped — dynamic WHERE with optional filters
     rows = conn.execute(
         f"""SELECT id, section_id, assessment_id, name, description, material_type,
                    access_type, external_url, file_path, lms_connection_id,
@@ -321,8 +323,10 @@ def delete_course_material(conn, args):
         })
 
     conn.execute(
-        "UPDATE educlaw_lms_course_material SET status = 'archived', updated_at = ? WHERE id = ?",
-        (_now_iso(), material_id)
+        update_row("educlaw_lms_course_material",
+                   data={"status": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("archived", _now_iso(), material_id)
     )
     try:
         audit(conn, SKILL, "lms-delete-course-material", "educlaw_lms_course_material", material_id,

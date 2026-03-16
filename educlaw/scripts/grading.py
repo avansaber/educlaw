@@ -19,7 +19,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case, LiteralValue
 except ImportError:
     pass
 
@@ -92,8 +92,11 @@ def add_grading_scale(conn, args):
 
     # If setting as default, clear other defaults
     if is_default:
+        _gs2 = Table("educlaw_grading_scale")
         conn.execute(
-            "UPDATE educlaw_grading_scale SET is_default = 0 WHERE company_id = ? AND id != ?",
+            Q.update(_gs2).set(_gs2.is_default, 0)
+            .where(_gs2.company_id == P()).where(_gs2.id != P())
+            .get_sql(),
             (company_id, scale_id)
         )
 
@@ -143,8 +146,11 @@ def update_grading_scale(conn, args):
 
     if getattr(args, "is_default", None) and int(args.is_default):
         r = dict(row)
+        _gs2 = Table("educlaw_grading_scale")
         conn.execute(
-            "UPDATE educlaw_grading_scale SET is_default = 0 WHERE company_id = ? AND id != ?",
+            Q.update(_gs2).set(_gs2.is_default, 0)
+            .where(_gs2.company_id == P()).where(_gs2.id != P())
+            .get_sql(),
             (r["company_id"], scale_id)
         )
 
@@ -156,7 +162,8 @@ def update_grading_scale(conn, args):
         except Exception:
             err("--entries must be valid JSON array")
 
-        conn.execute("DELETE FROM educlaw_grading_scale_entry WHERE grading_scale_id = ?", (scale_id,))
+        _gse = Table("educlaw_grading_scale_entry")
+        conn.execute(Q.from_(_gse).delete().where(_gse.grading_scale_id == P()).get_sql(), (scale_id,))
         now = _now_iso()
         for i, entry in enumerate(entries):
             entry_id = str(uuid.uuid4())
@@ -182,7 +189,8 @@ def update_grading_scale(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(scale_id)
     if updates[:-1]:  # Only update if there are non-timestamp changes
-        conn.execute(f"UPDATE educlaw_grading_scale SET {', '.join(updates)} WHERE id = ?", params)
+        conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+            f"UPDATE educlaw_grading_scale SET {', '.join(updates)} WHERE id = ?", params)
 
     audit(conn, SKILL, "edu-update-grading-scale", "educlaw_grading_scale", scale_id,
           new_values={"updated_fields": changed})
@@ -191,16 +199,17 @@ def update_grading_scale(conn, args):
 
 
 def list_grading_scales(conn, args):
-    query = "SELECT * FROM educlaw_grading_scale WHERE 1=1"
+    _gs = Table("educlaw_grading_scale")
+    q = Q.from_(_gs).select(_gs.star)
     params = []
 
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_gs.company_id == P()); params.append(args.company_id)
     if getattr(args, "is_default", None) is not None:
-        query += " AND is_default = ?"; params.append(int(args.is_default))
+        q = q.where(_gs.is_default == P()); params.append(int(args.is_default))
 
-    query += " ORDER BY name"
-    rows = conn.execute(query, params).fetchall()
+    q = q.orderby(_gs.name)
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"grading_scales": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -214,8 +223,10 @@ def get_grading_scale(conn, args):
         err(f"Grading scale {scale_id} not found")
 
     data = dict(row)
+    _gse = Table("educlaw_grading_scale_entry")
     entries = conn.execute(
-        "SELECT * FROM educlaw_grading_scale_entry WHERE grading_scale_id = ? ORDER BY sort_order",
+        Q.from_(_gse).select(_gse.star).where(_gse.grading_scale_id == P())
+        .orderby(_gse.sort_order).get_sql(),
         (scale_id,)
     ).fetchall()
     data["entries"] = [dict(e) for e in entries]
@@ -246,8 +257,9 @@ def add_assessment_plan(conn, args):
     if not conn.execute(Q.from_(Table("educlaw_grading_scale")).select(Field("id")).where(Field("id") == P()).get_sql(), (grading_scale_id,)).fetchone():
         err(f"Grading scale {grading_scale_id} not found")
 
+    _ap2 = Table("educlaw_assessment_plan")
     existing = conn.execute(
-        "SELECT id FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)
+        Q.from_(_ap2).select(_ap2.id).where(_ap2.section_id == P()).get_sql(), (section_id,)
     ).fetchone()
     if existing:
         err(f"Assessment plan already exists for section {section_id}")
@@ -322,8 +334,9 @@ def update_assessment_plan(conn, args):
         if total_weight != Decimal("100"):
             err(f"Category weights must sum to 100% (got {total_weight}%)")
 
+        _ac_del = Table("educlaw_assessment_category")
         conn.execute(
-            "DELETE FROM educlaw_assessment_category WHERE assessment_plan_id = ?", (plan_id,)
+            Q.from_(_ac_del).delete().where(_ac_del.assessment_plan_id == P()).get_sql(), (plan_id,)
         )
         now = _now_iso()
         for i, cat in enumerate(categories):
@@ -343,7 +356,8 @@ def update_assessment_plan(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(plan_id)
     if updates[:-1]:
-        conn.execute(f"UPDATE educlaw_assessment_plan SET {', '.join(updates)} WHERE id = ?", params)
+        conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+            f"UPDATE educlaw_assessment_plan SET {', '.join(updates)} WHERE id = ?", params)
 
     audit(conn, SKILL, "edu-update-assessment-plan", "educlaw_assessment_plan", plan_id,
           new_values={"updated_fields": changed})
@@ -361,21 +375,26 @@ def get_assessment_plan(conn, args):
     if plan_id:
         row = conn.execute(Q.from_(Table("educlaw_assessment_plan")).select(Table("educlaw_assessment_plan").star).where(Field("id") == P()).get_sql(), (plan_id,)).fetchone()
     else:
-        row = conn.execute("SELECT * FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)).fetchone()
+        _ap3 = Table("educlaw_assessment_plan")
+        row = conn.execute(Q.from_(_ap3).select(_ap3.star).where(_ap3.section_id == P()).get_sql(), (section_id,)).fetchone()
 
     if not row:
         err("Assessment plan not found")
 
     data = dict(row)
+    _ac = Table("educlaw_assessment_category")
     categories = conn.execute(
-        "SELECT * FROM educlaw_assessment_category WHERE assessment_plan_id = ? ORDER BY sort_order",
+        Q.from_(_ac).select(_ac.star).where(_ac.assessment_plan_id == P())
+        .orderby(_ac.sort_order).get_sql(),
         (data["id"],)
     ).fetchall()
     data["categories"] = []
     for cat in categories:
         cat_data = dict(cat)
+        _asmt = Table("educlaw_assessment")
         assessments = conn.execute(
-            "SELECT * FROM educlaw_assessment WHERE category_id = ? ORDER BY sort_order, due_date",
+            Q.from_(_asmt).select(_asmt.star).where(_asmt.category_id == P())
+            .orderby(_asmt.sort_order).orderby(_asmt.due_date).get_sql(),
             (cat_data["id"],)
         ).fetchall()
         cat_data["assessments"] = [dict(a) for a in assessments]
@@ -431,9 +450,11 @@ def add_assessment(conn, args):
     result_count = 0
     if plan_row:
         p = dict(plan_row)
+        _ce = Table("educlaw_course_enrollment")
         enrolled = conn.execute(
-            """SELECT id, student_id FROM educlaw_course_enrollment
-               WHERE section_id = ? AND enrollment_status = 'enrolled'""",
+            Q.from_(_ce).select(_ce.id, _ce.student_id)
+            .where(_ce.section_id == P()).where(_ce.enrollment_status == 'enrolled')
+            .get_sql(),
             (p["section_id"],)
         ).fetchall()
         for enr in enrolled:
@@ -494,7 +515,8 @@ def update_assessment(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(assessment_id)
-    conn.execute(f"UPDATE educlaw_assessment SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_assessment SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-assessment", "educlaw_assessment", assessment_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -502,29 +524,30 @@ def update_assessment(conn, args):
 
 
 def list_assessments(conn, args):
-    query = "SELECT * FROM educlaw_assessment WHERE 1=1"
+    _a = Table("educlaw_assessment")
+    q = Q.from_(_a).select(_a.star)
     params = []
 
     if getattr(args, "plan_id", None):
-        query += " AND assessment_plan_id = ?"; params.append(args.plan_id)
+        q = q.where(_a.assessment_plan_id == P()); params.append(args.plan_id)
     if getattr(args, "category_id", None):
-        query += " AND category_id = ?"; params.append(args.category_id)
+        q = q.where(_a.category_id == P()); params.append(args.category_id)
     if getattr(args, "is_published", None) is not None:
-        query += " AND is_published = ?"; params.append(int(args.is_published))
+        q = q.where(_a.is_published == P()); params.append(int(args.is_published))
 
     from_date = getattr(args, "due_date_from", None)
     to_date = getattr(args, "due_date_to", None)
     if from_date:
-        query += " AND due_date >= ?"; params.append(from_date)
+        q = q.where(_a.due_date >= P()); params.append(from_date)
     if to_date:
-        query += " AND due_date <= ?"; params.append(to_date)
+        q = q.where(_a.due_date <= P()); params.append(to_date)
 
-    query += " ORDER BY sort_order, due_date"
+    q = q.orderby(_a.sort_order).orderby(_a.due_date)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"assessments": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -554,8 +577,9 @@ def enter_assessment_result(conn, args):
             err(f"Points earned ({pts}) cannot exceed max_points ({a['max_points']}) for this assessment")
 
     # Find existing result
+    _ar = Table("educlaw_assessment_result")
     result_row = conn.execute(
-        "SELECT * FROM educlaw_assessment_result WHERE assessment_id = ? AND student_id = ?",
+        Q.from_(_ar).select(_ar.star).where(_ar.assessment_id == P()).where(_ar.student_id == P()).get_sql(),
         (assessment_id, student_id)
     ).fetchone()
 
@@ -568,18 +592,26 @@ def enter_assessment_result(conn, args):
     if result_row:
         r = dict(result_row)
         # Check enrollment grade not already submitted
+        _ce2 = Table("educlaw_course_enrollment")
         enr_row = conn.execute(
-            "SELECT is_grade_submitted FROM educlaw_course_enrollment WHERE id = ?",
+            Q.from_(_ce2).select(_ce2.is_grade_submitted).where(_ce2.id == P()).get_sql(),
             (r["course_enrollment_id"],)
         ).fetchone()
         if enr_row and dict(enr_row)["is_grade_submitted"]:
             err("Cannot modify grades after final grades have been submitted")
 
+        _ar2 = Table("educlaw_assessment_result")
         conn.execute(
-            """UPDATE educlaw_assessment_result
-               SET points_earned = ?, is_exempt = ?, is_late = ?, comments = ?,
-                   graded_by = ?, graded_at = ?, updated_at = datetime('now')
-               WHERE id = ?""",
+            Q.update(_ar2)
+            .set(_ar2.points_earned, P())
+            .set(_ar2.is_exempt, P())
+            .set(_ar2.is_late, P())
+            .set(_ar2.comments, P())
+            .set(_ar2.graded_by, P())
+            .set(_ar2.graded_at, P())
+            .set(_ar2.updated_at, LiteralValue("datetime('now')"))
+            .where(_ar2.id == P())
+            .get_sql(),
             (str(pts) if points_earned is not None else None,
              is_exempt, is_late, comments, graded_by, now, r["id"])
         )
@@ -589,13 +621,17 @@ def enter_assessment_result(conn, args):
         enrollment_id = getattr(args, "enrollment_id", None)
         if not enrollment_id:
             # Try to find it
+            _ap4 = Table("educlaw_assessment_plan")
             plan_row = conn.execute(
-                "SELECT section_id FROM educlaw_assessment_plan WHERE id = ?",
+                Q.from_(_ap4).select(_ap4.section_id).where(_ap4.id == P()).get_sql(),
                 (a["assessment_plan_id"],)
             ).fetchone()
             if plan_row:
+                _ce3 = Table("educlaw_course_enrollment")
                 enr_row = conn.execute(
-                    "SELECT id FROM educlaw_course_enrollment WHERE student_id = ? AND section_id = ?",
+                    Q.from_(_ce3).select(_ce3.id)
+                    .where(_ce3.student_id == P()).where(_ce3.section_id == P())
+                    .get_sql(),
                     (student_id, dict(plan_row)["section_id"])
                 ).fetchone()
                 enrollment_id = dict(enr_row)["id"] if enr_row else None
@@ -637,8 +673,9 @@ def batch_enter_results(conn, args):
         err(f"Assessment {assessment_id} not found")
     a = dict(a_row)
 
+    _ap5 = Table("educlaw_assessment_plan")
     plan_row = conn.execute(
-        "SELECT section_id FROM educlaw_assessment_plan WHERE id = ?",
+        Q.from_(_ap5).select(_ap5.section_id).where(_ap5.id == P()).get_sql(),
         (a["assessment_plan_id"],)
     ).fetchone()
     section_id = dict(plan_row)["section_id"] if plan_row else None
@@ -674,11 +711,18 @@ def batch_enter_results(conn, args):
 
         try:
             if existing:
+                _ar3 = Table("educlaw_assessment_result")
                 conn.execute(
-                    """UPDATE educlaw_assessment_result
-                       SET points_earned = ?, is_exempt = ?, is_late = ?, comments = ?,
-                           graded_by = ?, graded_at = ?, updated_at = datetime('now')
-                       WHERE id = ?""",
+                    Q.update(_ar3)
+                    .set(_ar3.points_earned, P())
+                    .set(_ar3.is_exempt, P())
+                    .set(_ar3.is_late, P())
+                    .set(_ar3.comments, P())
+                    .set(_ar3.graded_by, P())
+                    .set(_ar3.graded_at, P())
+                    .set(_ar3.updated_at, LiteralValue("datetime('now')"))
+                    .where(_ar3.id == P())
+                    .get_sql(),
                     (pts_str, is_exempt, is_late, comments, graded_by, now, dict(existing)["id"])
                 )
             elif enrollment_id:
@@ -703,8 +747,10 @@ def batch_enter_results(conn, args):
 
 def _calculate_grade_for_student(conn, plan_id, student_id, enrollment_id, scale_entries):
     """Calculate weighted final grade. Returns (percentage, letter_grade, grade_points)."""
+    _ac = Table("educlaw_assessment_category")
     categories = conn.execute(
-        "SELECT * FROM educlaw_assessment_category WHERE assessment_plan_id = ? ORDER BY sort_order",
+        Q.from_(_ac).select(_ac.star).where(_ac.assessment_plan_id == P())
+        .orderby(_ac.sort_order).get_sql(),
         (plan_id,)
     ).fetchall()
 
@@ -716,8 +762,9 @@ def _calculate_grade_for_student(conn, plan_id, student_id, enrollment_id, scale
         cat_weight = _d(c["weight_percentage"]) / Decimal("100")
 
         # Get all assessments in this category
+        _asmt2 = Table("educlaw_assessment")
         assessments = conn.execute(
-            "SELECT * FROM educlaw_assessment WHERE category_id = ?", (c["id"],)
+            Q.from_(_asmt2).select(_asmt2.star).where(_asmt2.category_id == P()).get_sql(), (c["id"],)
         ).fetchall()
 
         cat_earned = Decimal("0")
@@ -725,9 +772,11 @@ def _calculate_grade_for_student(conn, plan_id, student_id, enrollment_id, scale
 
         for asmnt in assessments:
             a = dict(asmnt)
+            _ar4 = Table("educlaw_assessment_result")
             result = conn.execute(
-                """SELECT * FROM educlaw_assessment_result
-                   WHERE assessment_id = ? AND student_id = ?""",
+                Q.from_(_ar4).select(_ar4.star)
+                .where(_ar4.assessment_id == P()).where(_ar4.student_id == P())
+                .get_sql(),
                 (a["id"], student_id)
             ).fetchone()
 
@@ -779,16 +828,18 @@ def calculate_section_grade(conn, args):
     if not section_id:
         err("--section-id is required")
 
+    _ap = Table("educlaw_assessment_plan")
     plan_row = conn.execute(
-        "SELECT * FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)
+        Q.from_(_ap).select(_ap.star).where(_ap.section_id == P()).get_sql(), (section_id,)
     ).fetchone()
     if not plan_row:
         err(f"No assessment plan found for section {section_id}")
 
     plan = dict(plan_row)
+    _gse = Table("educlaw_grading_scale_entry")
     scale_entries = conn.execute(
-        """SELECT * FROM educlaw_grading_scale_entry
-           WHERE grading_scale_id = ? ORDER BY sort_order""",
+        Q.from_(_gse).select(_gse.star).where(_gse.grading_scale_id == P())
+        .orderby(_gse.sort_order).get_sql(),
         (plan["grading_scale_id"],)
     ).fetchall()
 
@@ -805,9 +856,11 @@ def calculate_section_grade(conn, args):
             "is_preview": True})
     else:
         # All enrolled students
+        _ce4 = Table("educlaw_course_enrollment")
         enrollments = conn.execute(
-            """SELECT id, student_id FROM educlaw_course_enrollment
-               WHERE section_id = ? AND enrollment_status = 'enrolled'""",
+            Q.from_(_ce4).select(_ce4.id, _ce4.student_id)
+            .where(_ce4.section_id == P()).where(_ce4.enrollment_status == 'enrolled')
+            .get_sql(),
             (section_id,)
         ).fetchall()
         results = []
@@ -831,22 +884,26 @@ def submit_grades(conn, args):
     if not submitted_by:
         err("--submitted-by is required")
 
+    _ap6 = Table("educlaw_assessment_plan")
     plan_row = conn.execute(
-        "SELECT * FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)
+        Q.from_(_ap6).select(_ap6.star).where(_ap6.section_id == P()).get_sql(), (section_id,)
     ).fetchone()
     if not plan_row:
         err(f"No assessment plan found for section {section_id}")
 
     plan = dict(plan_row)
+    _gse2 = Table("educlaw_grading_scale_entry")
     scale_entries = conn.execute(
-        """SELECT * FROM educlaw_grading_scale_entry
-           WHERE grading_scale_id = ? ORDER BY sort_order""",
+        Q.from_(_gse2).select(_gse2.star).where(_gse2.grading_scale_id == P())
+        .orderby(_gse2.sort_order).get_sql(),
         (plan["grading_scale_id"],)
     ).fetchall()
 
+    _ce5 = Table("educlaw_course_enrollment")
     enrollments = conn.execute(
-        """SELECT * FROM educlaw_course_enrollment
-           WHERE section_id = ? AND enrollment_status = 'enrolled'""",
+        Q.from_(_ce5).select(_ce5.star)
+        .where(_ce5.section_id == P()).where(_ce5.enrollment_status == 'enrolled')
+        .get_sql(),
         (section_id,)
     ).fetchall()
 
@@ -864,13 +921,19 @@ def submit_grades(conn, args):
             conn, plan["id"], e["student_id"], e["id"], scale_entries
         )
 
+        _ce6 = Table("educlaw_course_enrollment")
         conn.execute(
-            """UPDATE educlaw_course_enrollment
-               SET enrollment_status = 'completed', final_letter_grade = ?,
-                   final_grade_points = ?, final_percentage = ?,
-                   grade_submitted_by = ?, grade_submitted_at = ?,
-                   is_grade_submitted = 1, updated_at = datetime('now')
-               WHERE id = ?""",
+            Q.update(_ce6)
+            .set(_ce6.enrollment_status, 'completed')
+            .set(_ce6.final_letter_grade, P())
+            .set(_ce6.final_grade_points, P())
+            .set(_ce6.final_percentage, P())
+            .set(_ce6.grade_submitted_by, P())
+            .set(_ce6.grade_submitted_at, P())
+            .set(_ce6.is_grade_submitted, 1)
+            .set(_ce6.updated_at, LiteralValue("datetime('now')"))
+            .where(_ce6.id == P())
+            .get_sql(),
             (letter, pts, pct, submitted_by, now, e["id"])
         )
 
@@ -933,10 +996,14 @@ def amend_grade(conn, args):
          now, amended_by)
     )
 
+    _ce7 = Table("educlaw_course_enrollment")
     conn.execute(
-        """UPDATE educlaw_course_enrollment
-           SET final_letter_grade = ?, final_grade_points = ?, updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_ce7)
+        .set(_ce7.final_letter_grade, P())
+        .set(_ce7.final_grade_points, P())
+        .set(_ce7.updated_at, LiteralValue("datetime('now')"))
+        .where(_ce7.id == P())
+        .get_sql(),
         (new_letter_grade,
          str(_d(new_grade_points)) if new_grade_points else r["final_grade_points"],
          enrollment_id)
@@ -954,13 +1021,16 @@ def amend_grade(conn, args):
 
 def _calculate_gpa_internal(conn, student_id):
     """Recalculate cumulative GPA and total credits for student."""
+    _ce8 = Table("educlaw_course_enrollment")
+    _s2 = Table("educlaw_section")
+    _c2 = Table("educlaw_course")
     enrollments = conn.execute(
-        """SELECT ce.final_grade_points, ce.final_letter_grade, c.credit_hours, ce.grade_type
-           FROM educlaw_course_enrollment ce
-           JOIN educlaw_section s ON s.id = ce.section_id
-           JOIN educlaw_course c ON c.id = s.course_id
-           WHERE ce.student_id = ? AND ce.is_grade_submitted = 1
-           AND ce.enrollment_status = 'completed'""",
+        Q.from_(_ce8).join(_s2).on(_s2.id == _ce8.section_id)
+        .join(_c2).on(_c2.id == _s2.course_id)
+        .select(_ce8.final_grade_points, _ce8.final_letter_grade, _c2.credit_hours, _ce8.grade_type)
+        .where(_ce8.student_id == P()).where(_ce8.is_grade_submitted == 1)
+        .where(_ce8.enrollment_status == 'completed')
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
@@ -997,11 +1067,15 @@ def _calculate_gpa_internal(conn, student_id):
     else:
         standing = "good"
 
+    _stu = Table("educlaw_student")
     conn.execute(
-        """UPDATE educlaw_student
-           SET cumulative_gpa = ?, total_credits_earned = ?,
-               academic_standing = ?, updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_stu)
+        .set(_stu.cumulative_gpa, P())
+        .set(_stu.total_credits_earned, P())
+        .set(_stu.academic_standing, P())
+        .set(_stu.updated_at, LiteralValue("datetime('now')"))
+        .where(_stu.id == P())
+        .get_sql(),
         (cumulative_gpa, str(all_credits), standing, student_id)
     )
 
@@ -1042,18 +1116,24 @@ def generate_transcript(conn, args):
     student = dict(student_row)
     student.pop("ssn_encrypted", None)
 
+    _ce9 = Table("educlaw_course_enrollment")
+    _sec2 = Table("educlaw_section")
+    _c3 = Table("educlaw_course")
+    _at2 = Table("educlaw_academic_term")
+    _ay2 = Table("educlaw_academic_year")
     enrollments = conn.execute(
-        """SELECT ce.*, s.section_number, s.naming_series as section_series,
-                  c.course_code, c.name as course_name, c.credit_hours,
-                  at.name as term_name, at.start_date, at.end_date,
-                  ay.name as year_name
-           FROM educlaw_course_enrollment ce
-           JOIN educlaw_section s ON s.id = ce.section_id
-           JOIN educlaw_course c ON c.id = s.course_id
-           JOIN educlaw_academic_term at ON at.id = s.academic_term_id
-           JOIN educlaw_academic_year ay ON ay.id = at.academic_year_id
-           WHERE ce.student_id = ? AND ce.is_grade_submitted = 1
-           ORDER BY at.start_date, c.course_code""",
+        Q.from_(_ce9)
+        .join(_sec2).on(_sec2.id == _ce9.section_id)
+        .join(_c3).on(_c3.id == _sec2.course_id)
+        .join(_at2).on(_at2.id == _sec2.academic_term_id)
+        .join(_ay2).on(_ay2.id == _at2.academic_year_id)
+        .select(_ce9.star, _sec2.section_number, _sec2.naming_series.as_("section_series"),
+                _c3.course_code, _c3.name.as_("course_name"), _c3.credit_hours,
+                _at2.name.as_("term_name"), _at2.start_date, _at2.end_date,
+                _ay2.name.as_("year_name"))
+        .where(_ce9.student_id == P()).where(_ce9.is_grade_submitted == 1)
+        .orderby(_at2.start_date).orderby(_c3.course_code)
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
@@ -1132,18 +1212,21 @@ def generate_report_card(conn, args):
 
     student = dict(student_row)
 
+    _ce10 = Table("educlaw_course_enrollment")
+    _sec3 = Table("educlaw_section")
+    _c4 = Table("educlaw_course")
     enrollments = conn.execute(
-        """SELECT ce.*, c.course_code, c.name as course_name, c.credit_hours,
-                  s.section_number
-           FROM educlaw_course_enrollment ce
-           JOIN educlaw_section s ON s.id = ce.section_id
-           JOIN educlaw_course c ON c.id = s.course_id
-           WHERE ce.student_id = ? AND s.academic_term_id = ?
-           ORDER BY c.course_code""",
+        Q.from_(_ce10).join(_sec3).on(_sec3.id == _ce10.section_id)
+        .join(_c4).on(_c4.id == _sec3.course_id)
+        .select(_ce10.star, _c4.course_code, _c4.name.as_("course_name"),
+                _c4.credit_hours, _sec3.section_number)
+        .where(_ce10.student_id == P()).where(_sec3.academic_term_id == P())
+        .orderby(_c4.course_code)
+        .get_sql(),
         (student_id, academic_term_id)
     ).fetchall()
 
-    # Attendance summary for term
+    # Attendance summary for term — PyPika: skipped — SUM(CASE WHEN) complex aggregation
     attendance_summary = conn.execute(
         """SELECT
              COUNT(*) as total_days,
@@ -1172,26 +1255,28 @@ def generate_report_card(conn, args):
 
 
 def list_grades(conn, args):
-    query = "SELECT * FROM educlaw_course_enrollment WHERE 1=1"
+    _ce = Table("educlaw_course_enrollment")
+    q = Q.from_(_ce).select(_ce.star)
     params = []
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"; params.append(args.student_id)
+        q = q.where(_ce.student_id == P()); params.append(args.student_id)
     if getattr(args, "section_id", None):
-        query += " AND section_id = ?"; params.append(args.section_id)
+        q = q.where(_ce.section_id == P()); params.append(args.section_id)
     if getattr(args, "academic_term_id", None):
-        query += """ AND section_id IN
-                     (SELECT id FROM educlaw_section WHERE academic_term_id = ?)"""
+        _sec_sub = Table("educlaw_section")
+        sub = Q.from_(_sec_sub).select(_sec_sub.id).where(_sec_sub.academic_term_id == P())
+        q = q.where(_ce.section_id.isin(sub))
         params.append(args.academic_term_id)
     if getattr(args, "is_grade_submitted", None) is not None:
-        query += " AND is_grade_submitted = ?"; params.append(int(args.is_grade_submitted))
+        q = q.where(_ce.is_grade_submitted == P()); params.append(int(args.is_grade_submitted))
 
-    query += " ORDER BY is_grade_submitted, student_id"
+    q = q.orderby(_ce.is_grade_submitted).orderby(_ce.student_id)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"grades": [dict(r) for r in rows], "count": len(rows)})
 
 

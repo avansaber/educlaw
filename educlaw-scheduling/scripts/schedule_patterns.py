@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, LiteralValue
 except ImportError:
     pass
 
@@ -123,28 +123,25 @@ def update_schedule_pattern(conn, args):
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
-    updates, params, changed = [], [], []
+    data = {}
+    changed = []
 
     if getattr(args, "name", None) is not None:
-        updates.append("name = ?"); params.append(args.name); changed.append("name")
+        data["name"] = args.name; changed.append("name")
     if getattr(args, "description", None) is not None:
-        updates.append("description = ?"); params.append(args.description)
-        changed.append("description")
+        data["description"] = args.description; changed.append("description")
     if getattr(args, "notes", None) is not None:
-        updates.append("notes = ?"); params.append(args.notes); changed.append("notes")
+        data["notes"] = args.notes; changed.append("notes")
     if getattr(args, "total_periods_per_cycle", None) is not None:
-        updates.append("total_periods_per_cycle = ?")
-        params.append(int(args.total_periods_per_cycle))
+        data["total_periods_per_cycle"] = int(args.total_periods_per_cycle)
         changed.append("total_periods_per_cycle")
 
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
-    params.append(pattern_id)
-    conn.execute(
-        f"UPDATE educlaw_schedule_pattern SET {', '.join(updates)} WHERE id = ?", params
-    )
+    data["updated_at"] = LiteralValue("datetime('now')")
+    sql, params = dynamic_update("educlaw_schedule_pattern", data=data, where={"id": pattern_id})
+    conn.execute(sql, params)
     audit(conn, SKILL, "schedule-update-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -162,14 +159,16 @@ def get_schedule_pattern(conn, args):
         err(f"Schedule pattern {pattern_id} not found")
 
     data = dict(row)
+    _dt = Table("educlaw_day_type")
     day_types = conn.execute(
-        "SELECT * FROM educlaw_day_type WHERE schedule_pattern_id = ? ORDER BY sort_order",
+        Q.from_(_dt).select(_dt.star).where(_dt.schedule_pattern_id == P()).orderby(_dt.sort_order).get_sql(),
         (pattern_id,)
     ).fetchall()
     data["day_types"] = [dict(d) for d in day_types]
 
+    _bp = Table("educlaw_bell_period")
     bell_periods = conn.execute(
-        "SELECT * FROM educlaw_bell_period WHERE schedule_pattern_id = ? ORDER BY sort_order",
+        Q.from_(_bp).select(_bp.star).where(_bp.schedule_pattern_id == P()).orderby(_bp.sort_order).get_sql(),
         (pattern_id,)
     ).fetchall()
     for bp in bell_periods:
@@ -187,6 +186,7 @@ def get_schedule_pattern(conn, args):
 
 def list_schedule_patterns(conn, args):
     """List schedule patterns with optional filters."""
+    # PyPika: skipped — LIKE with OR clause for search
     query = "SELECT * FROM educlaw_schedule_pattern WHERE 1=1"
     params = []
 
@@ -207,10 +207,10 @@ def list_schedule_patterns(conn, args):
         query += " AND (name LIKE ? OR description LIKE ?)"
         params.extend([f"%{search}%", f"%{search}%"])
 
-    query += " ORDER BY name"
+    query += " ORDER BY name LIMIT ? OFFSET ?"
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    params.extend([limit, offset])
 
     rows = conn.execute(query, params).fetchall()
     ok({"schedule_patterns": [dict(r) for r in rows], "count": len(rows)})
@@ -350,8 +350,9 @@ def activate_schedule_pattern(conn, args):
         err("Cannot activate: pattern must have at least one bell period. "
             "Use add-bell-period to add bell periods first.")
 
+    _sp = Table("educlaw_schedule_pattern")
     conn.execute(
-        "UPDATE educlaw_schedule_pattern SET is_active = 1, updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sp).set(_sp.is_active, 1).set(_sp.updated_at, LiteralValue("datetime('now')")).where(_sp.id == P()).get_sql(),
         (pattern_id,)
     )
     audit(conn, SKILL, "schedule-activate-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
@@ -383,8 +384,9 @@ def map_day_type_to_dates(conn, args):
     if not row:
         err(f"Schedule pattern {pattern_id} not found")
 
+    _dt = Table("educlaw_day_type")
     day_types = conn.execute(
-        "SELECT * FROM educlaw_day_type WHERE schedule_pattern_id = ? ORDER BY sort_order, code",
+        Q.from_(_dt).select(_dt.star).where(_dt.schedule_pattern_id == P()).orderby(_dt.sort_order).orderby(_dt.code).get_sql(),
         (pattern_id,)
     ).fetchall()
     if not day_types:
@@ -448,15 +450,16 @@ def get_pattern_calendar(conn, args):
 
     pattern = dict(row)
 
+    _dt = Table("educlaw_day_type")
     day_types = conn.execute(
-        "SELECT * FROM educlaw_day_type WHERE schedule_pattern_id = ? ORDER BY sort_order",
+        Q.from_(_dt).select(_dt.star).where(_dt.schedule_pattern_id == P()).orderby(_dt.sort_order).get_sql(),
         (pattern_id,)
     ).fetchall()
     day_type_list = [dict(d) for d in day_types]
 
+    _bp = Table("educlaw_bell_period")
     bell_periods = conn.execute(
-        """SELECT * FROM educlaw_bell_period WHERE schedule_pattern_id = ?
-           ORDER BY sort_order, start_time""",
+        Q.from_(_bp).select(_bp.star).where(_bp.schedule_pattern_id == P()).orderby(_bp.sort_order).orderby(_bp.start_time).get_sql(),
         (pattern_id,)
     ).fetchall()
 
@@ -509,6 +512,7 @@ def calculate_contact_hours(conn, args):
 
     if section_id and master_schedule_id:
         # Calculate from actual placed meetings
+        # PyPika: skipped — JOIN with multiple selected columns from both tables
         meetings = conn.execute(
             """SELECT sm.*, bp.duration_minutes, bp.period_type, bp.period_name
                FROM educlaw_section_meeting sm
@@ -534,14 +538,15 @@ def calculate_contact_hours(conn, args):
         })
     else:
         # Theoretical: all class periods in the pattern
+        _dt = Table("educlaw_day_type")
         day_types = conn.execute(
-            "SELECT id FROM educlaw_day_type WHERE schedule_pattern_id = ?", (pattern_id,)
+            Q.from_(_dt).select(_dt.id).where(_dt.schedule_pattern_id == P()).get_sql(), (pattern_id,)
         ).fetchall()
         all_day_type_ids = [d["id"] for d in day_types]
 
+        _bp = Table("educlaw_bell_period")
         periods = conn.execute(
-            """SELECT * FROM educlaw_bell_period WHERE schedule_pattern_id = ?
-               ORDER BY sort_order""",
+            Q.from_(_bp).select(_bp.star).where(_bp.schedule_pattern_id == P()).orderby(_bp.sort_order).get_sql(),
             (pattern_id,)
         ).fetchall()
 

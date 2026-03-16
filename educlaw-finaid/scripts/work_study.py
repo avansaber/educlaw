@@ -21,7 +21,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row, LiteralValue
 except ImportError:
     pass
 
@@ -101,46 +101,37 @@ def update_work_study_job(conn, args):
     if not row:
         err(f"Work study job {job_id} not found")
 
-    updates, params, changed = [], [], []
+    data = {}
+    changed = []
 
     if getattr(args, "job_title", None) is not None:
-        updates.append("job_title = ?")
-        params.append(args.job_title)
+        data["job_title"] = args.job_title
         changed.append("job_title")
     if getattr(args, "description", None) is not None:
-        updates.append("description = ?")
-        params.append(args.description)
+        data["description"] = args.description
         changed.append("description")
     if getattr(args, "pay_rate", None) is not None:
-        updates.append("pay_rate = ?")
-        params.append(str(to_decimal(args.pay_rate)))
+        data["pay_rate"] = str(to_decimal(args.pay_rate))
         changed.append("pay_rate")
     if getattr(args, "hours_per_week", None) is not None:
-        updates.append("hours_per_week = ?")
-        params.append(str(to_decimal(args.hours_per_week)))
+        data["hours_per_week"] = str(to_decimal(args.hours_per_week))
         changed.append("hours_per_week")
     if getattr(args, "total_positions", None) is not None:
-        updates.append("total_positions = ?")
-        params.append(int(args.total_positions))
+        data["total_positions"] = int(args.total_positions)
         changed.append("total_positions")
     if getattr(args, "department_id", None) is not None:
-        updates.append("department_id = ?")
-        params.append(args.department_id)
+        data["department_id"] = args.department_id
         changed.append("department_id")
     if getattr(args, "supervisor_id", None) is not None:
-        updates.append("supervisor_id = ?")
-        params.append(args.supervisor_id)
+        data["supervisor_id"] = args.supervisor_id
         changed.append("supervisor_id")
 
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = ?")
-    params.append(_now_iso())
-    params.append(job_id)
-    conn.execute(
-        f"UPDATE finaid_work_study_job SET {', '.join(updates)} WHERE id = ?", params
-    )
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("finaid_work_study_job", data=data, where={"id": job_id})
+    conn.execute(sql, params)
     conn.commit()
     ok({"id": job_id, "updated_fields": changed})
 
@@ -156,9 +147,10 @@ def get_work_study_job(conn, args):
 
     data = dict(row)
 
+    _wa = Table("finaid_work_study_assignment")
     active_count_row = conn.execute(
-        "SELECT COUNT(*) as cnt FROM finaid_work_study_assignment WHERE job_id = ? AND status = 'active'",
-        (job_id,)
+        Q.from_(_wa).select(fn.Count("*").as_("cnt")).where(_wa.job_id == P()).where(_wa.status == P()).get_sql(),
+        (job_id, "active")
     ).fetchone()
     data["active_assignment_count"] = active_count_row["cnt"] if active_count_row else 0
 
@@ -170,28 +162,29 @@ def list_work_study_jobs(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    query = "SELECT * FROM finaid_work_study_job WHERE company_id = ?"
+    t = Table("finaid_work_study_job")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
 
     if getattr(args, "aid_year_id", None):
-        query += " AND aid_year_id = ?"
+        q = q.where(t.aid_year_id == P())
         params.append(args.aid_year_id)
     if getattr(args, "department_id", None):
-        query += " AND department_id = ?"
+        q = q.where(t.department_id == P())
         params.append(args.department_id)
     if getattr(args, "status", None):
-        query += " AND status = ?"
+        q = q.where(t.status == P())
         params.append(args.status)
     if getattr(args, "job_type", None):
-        query += " AND job_type = ?"
+        q = q.where(t.job_type == P())
         params.append(args.job_type)
 
-    query += " ORDER BY created_at DESC"
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
+    params.extend([limit, offset])
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"jobs": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -204,10 +197,9 @@ def close_work_study_job(conn, args):
     if not row:
         err(f"Work study job {job_id} not found")
 
-    conn.execute(
-        "UPDATE finaid_work_study_job SET status = 'closed', updated_at = ? WHERE id = ?",
-        (_now_iso(), job_id)
-    )
+    _wj = Table("finaid_work_study_job")
+    sql = Q.update(_wj).set(_wj.status, "closed").set(_wj.updated_at, P()).where(_wj.id == P()).get_sql()
+    conn.execute(sql, (_now_iso(), job_id))
     conn.commit()
     ok({"id": job_id, "status": "closed"})
 
@@ -255,8 +247,10 @@ def assign_student_to_job(conn, args):
         err(f"Job {job_id} is not open (status: {job['status']})")
 
     # Validate award_id is a valid FWS award
+    _fa = Table("finaid_award")
     award_row = conn.execute(
-        "SELECT * FROM finaid_award WHERE id = ? AND aid_type = 'fws'", (award_id,)
+        Q.from_(_fa).select(_fa.star).where(_fa.id == P()).where(_fa.aid_type == P()).get_sql(),
+        (award_id, "fws")
     ).fetchone()
     if not award_row:
         err(f"Award {award_id} not found or is not a Federal Work Study (fws) award")
@@ -278,10 +272,9 @@ def assign_student_to_job(conn, args):
     # Increment filled_positions
     new_filled = job["filled_positions"] + 1
     new_status = "filled" if new_filled >= job["total_positions"] else job["status"]
-    conn.execute(
-        "UPDATE finaid_work_study_job SET filled_positions = ?, status = ?, updated_at = ? WHERE id = ?",
-        (new_filled, new_status, now, job_id)
-    )
+    _wj = Table("finaid_work_study_job")
+    sql = Q.update(_wj).set(_wj.filled_positions, P()).set(_wj.status, P()).set(_wj.updated_at, P()).where(_wj.id == P()).get_sql()
+    conn.execute(sql, (new_filled, new_status, now, job_id))
 
     audit(conn, SKILL, "finaid-assign-student-to-job", "finaid_work_study_assignment", assignment_id,
           new_values={"student_id": student_id, "job_id": job_id, "status": "active"})
@@ -305,30 +298,25 @@ def update_work_study_assignment(conn, args):
     if not row:
         err(f"Work study assignment {assignment_id} not found")
 
-    updates, params, changed = [], [], []
+    data = {}
+    changed = []
 
     if getattr(args, "start_date", None) is not None:
-        updates.append("start_date = ?")
-        params.append(args.start_date)
+        data["start_date"] = args.start_date
         changed.append("start_date")
     if getattr(args, "end_date", None) is not None:
-        updates.append("end_date = ?")
-        params.append(args.end_date)
+        data["end_date"] = args.end_date
         changed.append("end_date")
     if getattr(args, "award_limit", None) is not None:
-        updates.append("award_limit = ?")
-        params.append(str(to_decimal(args.award_limit)))
+        data["award_limit"] = str(to_decimal(args.award_limit))
         changed.append("award_limit")
 
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = ?")
-    params.append(_now_iso())
-    params.append(assignment_id)
-    conn.execute(
-        f"UPDATE finaid_work_study_assignment SET {', '.join(updates)} WHERE id = ?", params
-    )
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("finaid_work_study_assignment", data=data, where={"id": assignment_id})
+    conn.execute(sql, params)
     conn.commit()
     ok({"id": assignment_id, "updated_fields": changed})
 
@@ -345,6 +333,7 @@ def get_work_study_assignment(conn, args):
     data = dict(row)
 
     # Earnings summary: sum of approved timesheet earnings
+    # PyPika: skipped — COALESCE(SUM(CAST(... AS REAL))) aggregate
     earnings_row = conn.execute(
         """SELECT COALESCE(SUM(CAST(earnings AS REAL)), 0) as approved_earnings
            FROM finaid_work_study_timesheet
@@ -363,28 +352,29 @@ def list_work_study_assignments(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    query = "SELECT * FROM finaid_work_study_assignment WHERE company_id = ?"
+    t = Table("finaid_work_study_assignment")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"
+        q = q.where(t.student_id == P())
         params.append(args.student_id)
     if getattr(args, "job_id", None):
-        query += " AND job_id = ?"
+        q = q.where(t.job_id == P())
         params.append(args.job_id)
     if getattr(args, "academic_term_id", None):
-        query += " AND academic_term_id = ?"
+        q = q.where(t.academic_term_id == P())
         params.append(args.academic_term_id)
     if getattr(args, "status", None):
-        query += " AND status = ?"
+        q = q.where(t.status == P())
         params.append(args.status)
 
-    query += " ORDER BY created_at DESC"
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
+    params.extend([limit, offset])
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"assignments": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -400,23 +390,21 @@ def terminate_work_study_assignment(conn, args):
     assignment = dict(row)
     now = _now_iso()
 
-    conn.execute(
-        "UPDATE finaid_work_study_assignment SET status = 'terminated', updated_at = ? WHERE id = ?",
-        (now, assignment_id)
-    )
+    _wa = Table("finaid_work_study_assignment")
+    sql = Q.update(_wa).set(_wa.status, "terminated").set(_wa.updated_at, P()).where(_wa.id == P()).get_sql()
+    conn.execute(sql, (now, assignment_id))
 
     # Decrement job filled_positions; if job was filled, set back to open
+    _wj = Table("finaid_work_study_job")
     job_row = conn.execute(
-        "SELECT * FROM finaid_work_study_job WHERE id = ?", (assignment["job_id"],)
+        Q.from_(_wj).select(_wj.star).where(_wj.id == P()).get_sql(), (assignment["job_id"],)
     ).fetchone()
     if job_row:
         job = dict(job_row)
         new_filled = max(0, job["filled_positions"] - 1)
         new_job_status = "open" if job["status"] == "filled" else job["status"]
-        conn.execute(
-            "UPDATE finaid_work_study_job SET filled_positions = ?, status = ?, updated_at = ? WHERE id = ?",
-            (new_filled, new_job_status, now, job["id"])
-        )
+        sql = Q.update(_wj).set(_wj.filled_positions, P()).set(_wj.status, P()).set(_wj.updated_at, P()).where(_wj.id == P()).get_sql()
+        conn.execute(sql, (new_filled, new_job_status, now, job["id"]))
 
     audit(conn, SKILL, "finaid-terminate-work-study-assignment", "finaid_work_study_assignment",
           assignment_id, new_values={"status": "terminated"})
@@ -466,8 +454,9 @@ def submit_work_study_timesheet(conn, args):
         err(f"Timesheet already exists for assignment {assignment_id} and pay period starting {pay_period_start}")
 
     # Get pay_rate from job
+    _wj = Table("finaid_work_study_job")
     job_row = conn.execute(
-        "SELECT * FROM finaid_work_study_job WHERE id = ?", (assignment["job_id"],)
+        Q.from_(_wj).select(_wj.star).where(_wj.id == P()).get_sql(), (assignment["job_id"],)
     ).fetchone()
     if not job_row:
         err(f"Job {assignment['job_id']} not found")
@@ -540,15 +529,17 @@ def update_work_study_timesheet(conn, args):
         hours = to_decimal(hours_worked)
 
         # Recompute earnings based on job pay_rate
+        _wa = Table("finaid_work_study_assignment")
         assignment_row = conn.execute(
-            "SELECT * FROM finaid_work_study_assignment WHERE id = ?", (ts["assignment_id"],)
+            Q.from_(_wa).select(_wa.star).where(_wa.id == P()).get_sql(), (ts["assignment_id"],)
         ).fetchone()
         if not assignment_row:
             err(f"Assignment {ts['assignment_id']} not found")
         assignment = dict(assignment_row)
 
+        _wj = Table("finaid_work_study_job")
         job_row = conn.execute(
-            "SELECT * FROM finaid_work_study_job WHERE id = ?", (assignment["job_id"],)
+            Q.from_(_wj).select(_wj.star).where(_wj.id == P()).get_sql(), (assignment["job_id"],)
         ).fetchone()
         if not job_row:
             err(f"Job {assignment['job_id']} not found")
@@ -579,12 +570,12 @@ def update_work_study_timesheet(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = ?")
-    params.append(_now_iso())
-    params.append(timesheet_id)
-    conn.execute(
-        f"UPDATE finaid_work_study_timesheet SET {', '.join(updates)} WHERE id = ?", params
-    )
+    data = {}
+    for i, field_name in enumerate(changed):
+        data[field_name] = params[i]
+    data["updated_at"] = _now_iso()
+    _sql, _params = dynamic_update("finaid_work_study_timesheet", data=data, where={"id": timesheet_id})
+    conn.execute(_sql, _params)
     conn.commit()
     ok({"id": timesheet_id, "updated_fields": changed})
 
@@ -609,18 +600,18 @@ def approve_work_study_timesheet(conn, args):
     today = _today()
     now = _now_iso()
 
-    conn.execute(
-        """UPDATE finaid_work_study_timesheet
-           SET supervisor_approval_status = 'approved',
-               supervisor_approved_by = ?,
-               supervisor_approved_date = ?,
-               updated_at = ?
-           WHERE id = ?""",
-        (supervisor_approved_by, today, now, timesheet_id)
-    )
+    _ts = Table("finaid_work_study_timesheet")
+    sql = (Q.update(_ts)
+           .set(_ts.supervisor_approval_status, "approved")
+           .set(_ts.supervisor_approved_by, P())
+           .set(_ts.supervisor_approved_date, P())
+           .set(_ts.updated_at, P())
+           .where(_ts.id == P()).get_sql())
+    conn.execute(sql, (supervisor_approved_by, today, now, timesheet_id))
 
     # Update assignment.earned_to_date += earnings
     earnings = to_decimal(ts["earnings"])
+    # PyPika: skipped — inline CAST(ROUND(CAST(...) + ?, 2) AS TEXT) expression
     conn.execute(
         """UPDATE finaid_work_study_assignment
            SET earned_to_date = CAST(ROUND(CAST(earned_to_date AS REAL) + ?, 2) AS TEXT),
@@ -662,15 +653,14 @@ def reject_work_study_timesheet(conn, args):
     rejection_reason = getattr(args, "rejection_reason", None) or ""
     now = _now_iso()
 
-    conn.execute(
-        """UPDATE finaid_work_study_timesheet
-           SET supervisor_approval_status = 'rejected',
-               supervisor_approved_by = ?,
-               rejection_reason = ?,
-               updated_at = ?
-           WHERE id = ?""",
-        (supervisor_approved_by, rejection_reason, now, timesheet_id)
-    )
+    _ts = Table("finaid_work_study_timesheet")
+    sql = (Q.update(_ts)
+           .set(_ts.supervisor_approval_status, "rejected")
+           .set(_ts.supervisor_approved_by, P())
+           .set(_ts.rejection_reason, P())
+           .set(_ts.updated_at, P())
+           .where(_ts.id == P()).get_sql())
+    conn.execute(sql, (supervisor_approved_by, rejection_reason, now, timesheet_id))
 
     audit(conn, SKILL, "finaid-reject-work-study-timesheet", "finaid_work_study_timesheet",
           timesheet_id,
@@ -702,28 +692,29 @@ def list_work_study_timesheets(conn, args):
     if not company_id:
         err("--company-id is required")
 
-    query = "SELECT * FROM finaid_work_study_timesheet WHERE company_id = ?"
+    t = Table("finaid_work_study_timesheet")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"
+        q = q.where(t.student_id == P())
         params.append(args.student_id)
     if getattr(args, "assignment_id", None):
-        query += " AND assignment_id = ?"
+        q = q.where(t.assignment_id == P())
         params.append(args.assignment_id)
     if getattr(args, "supervisor_approval_status", None):
-        query += " AND supervisor_approval_status = ?"
+        q = q.where(t.supervisor_approval_status == P())
         params.append(args.supervisor_approval_status)
     if getattr(args, "pay_period_start", None):
-        query += " AND pay_period_start = ?"
+        q = q.where(t.pay_period_start == P())
         params.append(args.pay_period_start)
 
-    query += " ORDER BY pay_period_start DESC"
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.orderby(t.pay_period_start, order=Order.desc).limit(P()).offset(P())
+    params.extend([limit, offset])
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"timesheets": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -736,6 +727,7 @@ def export_work_study_payroll(conn, args):
     if not company_id:
         err("--company-id is required")
 
+    # PyPika: skipped — complex 3-table JOIN with conditional WHERE appends
     query = """
         SELECT
             t.id as timesheet_id,
@@ -800,11 +792,10 @@ def export_work_study_payroll(conn, args):
     now = _now_iso()
 
     # Mark timesheets as exported
+    _ts = Table("finaid_work_study_timesheet")
+    _mark_sql = Q.update(_ts).set(_ts.payroll_exported, 1).set(_ts.payroll_export_date, P()).set(_ts.updated_at, P()).where(_ts.id == P()).get_sql()
     for ts_id in timesheet_ids:
-        conn.execute(
-            "UPDATE finaid_work_study_timesheet SET payroll_exported = 1, payroll_export_date = ?, updated_at = ? WHERE id = ?",
-            (today, now, ts_id)
-        )
+        conn.execute(_mark_sql, (today, now, ts_id))
 
     conn.commit()
     ok({
@@ -831,6 +822,7 @@ def get_work_study_earnings_summary(conn, args):
         err("--company-id is required")
 
     # Get the active assignment for this student/aid_year/company
+    # PyPika: skipped — JOIN with column alias from joined table
     assignment_row = conn.execute(
         """SELECT a.*, j.job_type
            FROM finaid_work_study_assignment a
@@ -846,6 +838,7 @@ def get_work_study_earnings_summary(conn, args):
         award_limit = to_decimal(dict(assignment_row)["award_limit"])
 
     # Sum of approved timesheet earnings for the student/aid_year
+    # PyPika: skipped — COALESCE(SUM(CAST(... AS REAL))) with JOIN
     earned_row = conn.execute(
         """SELECT COALESCE(SUM(CAST(t.earnings AS REAL)), 0) as total_earned
            FROM finaid_work_study_timesheet t
@@ -859,6 +852,7 @@ def get_work_study_earnings_summary(conn, args):
     remaining_limit = round_currency(max(Decimal("0"), award_limit - earned_to_date))
 
     # Community service hours: sum of hours from on_campus or off_campus_community jobs
+    # PyPika: skipped — COALESCE(SUM(CAST())) with 3-table JOIN and IN clause
     community_hours_row = conn.execute(
         """SELECT COALESCE(SUM(CAST(t.hours_worked AS REAL)), 0) as community_hours
            FROM finaid_work_study_timesheet t

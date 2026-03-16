@@ -14,7 +14,8 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
+    from erpclaw_lib.vendor.pypika.terms import LiteralValue
 
     ENTITY_PREFIXES.setdefault("educlaw_scholarship", "HAID-")
 except ImportError:
@@ -54,13 +55,13 @@ def add_aid_package(conn, args):
     pkg_id = str(uuid.uuid4())
     now = _now_iso()
     naming = get_next_name(conn, "educlaw_scholarship", company_id=company_id)
-    conn.execute("""
-        INSERT INTO educlaw_scholarship
-        (id, naming_series, student_id, aid_year, total_cost, efc, total_need,
-         grants, scholarships, loans, work_study, total_aid,
-         package_status, company_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (pkg_id, naming, student_id, aid_year, total_cost, efc, total_need,
+    sql, _ = insert_row("educlaw_scholarship", {
+        "id": P(), "naming_series": P(), "student_id": P(), "aid_year": P(),
+        "total_cost": P(), "efc": P(), "total_need": P(), "grants": P(),
+        "scholarships": P(), "loans": P(), "work_study": P(), "total_aid": P(),
+        "package_status": P(), "company_id": P(), "created_at": P(), "updated_at": P(),
+    })
+    conn.execute(sql, (pkg_id, naming, student_id, aid_year, total_cost, efc, total_need,
           grants, scholarships, loans, work_study, total_aid,
           "draft", company_id, now, now))
     audit(conn, SKILL, "highered-add-aid-package", "educlaw_scholarship", pkg_id,
@@ -79,27 +80,24 @@ def update_aid_package(conn, args):
         return err("Aid package not found")
     if row["package_status"] == "cancelled":
         return err("Cannot update a cancelled package")
-    updates, params = [], []
+    data = {}
     for field in ("aid_year",):
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{field}=?")
-            params.append(val)
+            data[field] = val
     for mf in ("total_cost", "efc", "total_need", "grants", "scholarships", "loans", "work_study"):
         val = getattr(args, mf, None)
         if val is not None:
-            updates.append(f"{mf}=?")
-            params.append(_to_money(val))
+            data[mf] = _to_money(val)
     package_status = getattr(args, "package_status", None)
     if package_status is not None:
         if package_status not in VALID_PACKAGE_STATUSES:
             return err(f"Invalid package_status: {package_status}")
-        updates.append("package_status=?")
-        params.append(package_status)
-    if not updates:
+        data["package_status"] = package_status
+    if not data:
         return err("No fields to update")
     recalc = {"grants", "scholarships", "loans", "work_study"}
-    if recalc.intersection(f.split("=")[0] for f in updates):
+    if recalc.intersection(data.keys()):
         cur = dict(row)
         for mf in ("grants", "scholarships", "loans", "work_study"):
             val = getattr(args, mf, None)
@@ -109,12 +107,10 @@ def update_aid_package(conn, args):
             to_decimal(cur["grants"]) + to_decimal(cur["scholarships"]) +
             to_decimal(cur["loans"]) + to_decimal(cur["work_study"])
         ))
-        updates.append("total_aid=?")
-        params.append(total_aid)
-    updates.append("updated_at=?")
-    params.append(_now_iso())
-    params.append(pkg_id)
-    conn.execute(f"UPDATE educlaw_scholarship SET {','.join(updates)} WHERE id=?", params)
+        data["total_aid"] = total_aid
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("educlaw_scholarship", data, {"id": pkg_id})
+    conn.execute(sql, params)
     conn.commit()
     ok({"id": pkg_id, "updated": True})
 
@@ -133,25 +129,26 @@ def list_aid_packages(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM educlaw_scholarship WHERE company_id=?"
+    t = Table("educlaw_scholarship")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     p = [company_id]
     student_id = getattr(args, "student_id", None)
     if student_id:
-        q += " AND student_id=?"
+        q = q.where(t.student_id == P())
         p.append(student_id)
     aid_year = getattr(args, "aid_year", None)
     if aid_year:
-        q += " AND aid_year=?"
+        q = q.where(t.aid_year == P())
         p.append(aid_year)
     package_status = getattr(args, "package_status", None)
     if package_status:
-        q += " AND package_status=?"
+        q = q.where(t.package_status == P())
         p.append(package_status)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     p.extend([limit, offset])
-    rows = conn.execute(q, p).fetchall()
+    rows = conn.execute(q.get_sql(), p).fetchall()
     ok({"packages": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -176,13 +173,13 @@ def add_disbursement(conn, args):
     fund_source = getattr(args, "fund_source", None) or ""
     disbursement_date = getattr(args, "disbursement_date", None) or _now_iso()
     disb_id = str(uuid.uuid4())
-    conn.execute("""
-        INSERT INTO highered_disbursement
-        (id, aid_package_id, disbursement_date, amount, aid_type,
-         fund_source, disbursement_status, company_id, created_at)
-        VALUES (?,?,?,?,?,?,'pending',?,?)
-    """, (disb_id, aid_package_id, disbursement_date, amount, aid_type,
-          fund_source, company_id, _now_iso()))
+    sql, _ = insert_row("highered_disbursement", {
+        "id": P(), "aid_package_id": P(), "disbursement_date": P(),
+        "amount": P(), "aid_type": P(), "fund_source": P(),
+        "disbursement_status": P(), "company_id": P(), "created_at": P(),
+    })
+    conn.execute(sql, (disb_id, aid_package_id, disbursement_date, amount, aid_type,
+          fund_source, "pending", company_id, _now_iso()))
     conn.commit()
     ok({"id": disb_id, "aid_package_id": aid_package_id,
         "amount": amount, "aid_type": aid_type, "disbursement_status": "pending"})
@@ -192,17 +189,18 @@ def list_disbursements(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_disbursement WHERE company_id=?"
+    t = Table("highered_disbursement")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     p = [company_id]
     aid_package_id = getattr(args, "aid_package_id", None)
     if aid_package_id:
-        q += " AND aid_package_id=?"
+        q = q.where(t.aid_package_id == P())
         p.append(aid_package_id)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     p.extend([limit, offset])
-    rows = conn.execute(q, p).fetchall()
+    rows = conn.execute(q.get_sql(), p).fetchall()
     ok({"disbursements": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -262,13 +260,14 @@ def aid_summary_report(conn, args):
     if not company_id:
         return err("--company-id is required")
     aid_year = getattr(args, "aid_year", None)
-    q = "SELECT package_status, COUNT(*) as count FROM educlaw_scholarship WHERE company_id=?"
+    t = Table("educlaw_scholarship")
+    q = Q.from_(t).select(t.package_status, fn.Count(t.star).as_("count")).where(t.company_id == P())
     p = [company_id]
     if aid_year:
-        q += " AND aid_year=?"
+        q = q.where(t.aid_year == P())
         p.append(aid_year)
-    q += " GROUP BY package_status"
-    rows = conn.execute(q, p).fetchall()
+    q = q.groupby(t.package_status)
+    rows = conn.execute(q.get_sql(), p).fetchall()
     ok({"summary": [dict(r) for r in rows]})
 
 

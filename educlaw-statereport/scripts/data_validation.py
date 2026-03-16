@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case, dynamic_update, update_row
 except ImportError:
     pass
 
@@ -120,11 +120,8 @@ def update_validation_rule(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_validation_rule SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [row["id"]]
-    )
+    sql, params = dynamic_update("sr_validation_rule", data=updates, where={"id": row["id"]})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_validation_rule", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": row["id"], "message": "Validation rule updated"})
@@ -810,11 +807,8 @@ def update_error_resolution(conn, args):
     if notes:
         updates["resolution_notes"] = notes
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_submission_error SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [error_id]
-    )
+    sql, params = dynamic_update("sr_submission_error", data=updates, where={"id": error_id})
+    conn.execute(sql, params)
     conn.commit()
 
     # If resolved, also mark corresponding validation result as resolved

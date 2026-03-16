@@ -19,7 +19,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -59,8 +59,10 @@ def add_instructor(conn, args):
         err(f"Company {company_id} not found")
 
     # OHIO: check not already an instructor
+    _instr = Table("educlaw_instructor")
     existing = conn.execute(
-        "SELECT id FROM educlaw_instructor WHERE employee_id = ?", (employee_id,)
+        Q.from_(_instr).select(_instr.id).where(_instr.employee_id == P()).get_sql(),
+        (employee_id,)
     ).fetchone()
     if existing:
         err(f"Employee {employee_id} is already registered as instructor {existing['id']}")
@@ -136,7 +138,8 @@ def update_instructor(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(instructor_id)
-    conn.execute(f"UPDATE educlaw_instructor SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_instructor SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-instructor", "educlaw_instructor", instructor_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -163,19 +166,25 @@ def get_instructor(conn, args):
             data[field] = []
 
     # Get employee details
-    emp_row = conn.execute("SELECT * FROM employee WHERE id = ?", (data["employee_id"],)).fetchone()
+    _emp = Table("employee")
+    emp_row = conn.execute(Q.from_(_emp).select(_emp.star).where(_emp.id == P()).get_sql(), (data["employee_id"],)).fetchone()
     if emp_row:
         data["employee"] = dict(emp_row)
 
     # Current sections
+    _s = Table("educlaw_section")
+    _c = Table("educlaw_course")
+    _at = Table("educlaw_academic_term")
     current_sections = conn.execute(
-        """SELECT s.id, s.naming_series, s.section_number, c.course_code, c.name as course_name,
-                  c.credit_hours, at.name as term_name, s.days_of_week, s.start_time, s.end_time
-           FROM educlaw_section s
-           JOIN educlaw_course c ON c.id = s.course_id
-           JOIN educlaw_academic_term at ON at.id = s.academic_term_id
-           WHERE s.instructor_id = ? AND s.status NOT IN ('cancelled', 'closed')
-           ORDER BY at.start_date DESC""",
+        Q.from_(_s).join(_c).on(_c.id == _s.course_id)
+        .join(_at).on(_at.id == _s.academic_term_id)
+        .select(_s.id, _s.naming_series, _s.section_number, _c.course_code,
+                _c.name.as_("course_name"), _c.credit_hours, _at.name.as_("term_name"),
+                _s.days_of_week, _s.start_time, _s.end_time)
+        .where(_s.instructor_id == P())
+        .where(_s.status.notin(['cancelled', 'closed']))
+        .orderby(_at.start_date, order=Order.desc)
+        .get_sql(),
         (instructor_id,)
     ).fetchall()
     data["current_sections"] = [dict(s) for s in current_sections]
@@ -183,24 +192,24 @@ def get_instructor(conn, args):
 
 
 def list_instructors(conn, args):
-    query = """SELECT i.* FROM educlaw_instructor i
-               JOIN employee e ON e.id = i.employee_id
-               WHERE 1=1"""
+    _i = Table("educlaw_instructor")
+    _e = Table("employee")
+    q = Q.from_(_i).join(_e).on(_e.id == _i.employee_id).select(_i.star)
     params = []
 
     if getattr(args, "department_id", None):
-        query += " AND e.department_id = ?"; params.append(args.department_id)
+        q = q.where(_e.department_id == P()); params.append(args.department_id)
     if getattr(args, "is_active", None) is not None:
-        query += " AND i.is_active = ?"; params.append(int(args.is_active))
+        q = q.where(_i.is_active == P()); params.append(int(args.is_active))
     if getattr(args, "company_id", None):
-        query += " AND i.company_id = ?"; params.append(args.company_id)
+        q = q.where(_i.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY i.naming_series"
+    q = q.orderby(_i.naming_series)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"instructors": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -218,14 +227,17 @@ def get_teaching_load(conn, args):
         err(f"Instructor {instructor_id} not found")
 
     instr = dict(instr_row)
+    _s = Table("educlaw_section")
+    _c = Table("educlaw_course")
     sections = conn.execute(
-        """SELECT s.id, s.naming_series, s.section_number, s.current_enrollment,
-                  s.max_enrollment, s.days_of_week, s.start_time, s.end_time,
-                  c.course_code, c.name as course_name, c.credit_hours
-           FROM educlaw_section s
-           JOIN educlaw_course c ON c.id = s.course_id
-           WHERE s.instructor_id = ? AND s.academic_term_id = ? AND s.status != 'cancelled'
-           ORDER BY s.start_time""",
+        Q.from_(_s).join(_c).on(_c.id == _s.course_id)
+        .select(_s.id, _s.naming_series, _s.section_number, _s.current_enrollment,
+                _s.max_enrollment, _s.days_of_week, _s.start_time, _s.end_time,
+                _c.course_code, _c.name.as_("course_name"), _c.credit_hours)
+        .where(_s.instructor_id == P()).where(_s.academic_term_id == P())
+        .where(_s.status != 'cancelled')
+        .orderby(_s.start_time)
+        .get_sql(),
         (instructor_id, academic_term_id)
     ).fetchall()
 

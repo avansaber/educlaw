@@ -507,8 +507,10 @@ def sync_assessment_update(conn, args):
                 warning = result.get("warning")
         except Exception as e:
             conn.execute(
-                "UPDATE educlaw_lms_assignment_mapping SET sync_status = 'error', sync_error = ? WHERE id = ?",
-                (str(e)[:500], mapping["id"])
+                update_row("educlaw_lms_assignment_mapping",
+                           data={"sync_status": P(), "sync_error": P()},
+                           where={"id": P()}),
+                ("error", str(e)[:500], mapping["id"])
             )
             conn.commit()
             err(f"LMS update failed: {e}")
@@ -566,6 +568,7 @@ def list_lms_assignments(conn, args):
             err(f"--assignment-sync-status must be one of: {', '.join(VALID_ASSIGNMENT_SYNC_STATUSES)}")
         where.append("am.sync_status = ?"); params.append(sync_status_filter)
 
+    # PyPika: skipped — complex multi-table JOIN with dynamic WHERE
     rows = conn.execute(
         f"""SELECT am.id as mapping_id, am.assessment_id, am.lms_assignment_id,
                    am.lms_assignment_url, am.lms_grade_scheme, am.push_direction,

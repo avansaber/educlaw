@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 except ImportError:
     pass
 
@@ -255,11 +255,9 @@ def update_student_supplement(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = now
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [rec["id"]]
-
     try:
-        conn.execute(f"UPDATE sr_student_supplement SET {set_clause} WHERE id = ?", values)
+        sql, params = dynamic_update("sr_student_supplement", data=updates, where={"id": rec["id"]})
+        conn.execute(sql, params)
         conn.commit()
     except sqlite3.IntegrityError as e:
         err(f"Cannot update supplement: {e}")
@@ -359,11 +357,8 @@ def assign_ssid(conn, args):
     if ssid_state_code:
         updates["ssid_state_code"] = ssid_state_code
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_student_supplement SET {set_clause} WHERE student_id = ?",
-        list(updates.values()) + [student_id]
-    )
+    sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": row["id"], "ssid": ssid, "ssid_status": "assigned", "message": "SSID assigned"})
@@ -426,11 +421,8 @@ def update_el_status(conn, args):
         err("No EL fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_student_supplement SET {set_clause} WHERE student_id = ?",
-        list(updates.values()) + [student_id]
-    )
+    sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": row["id"], "message": "EL status updated"})
@@ -455,11 +447,8 @@ def update_sped_status(conn, args):
         err("No SPED fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_student_supplement SET {set_clause} WHERE student_id = ?",
-        list(updates.values()) + [student_id]
-    )
+    sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": row["id"], "message": "SPED status updated"})
@@ -489,11 +478,8 @@ def update_economic_status(conn, args):
         err("No economic status fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_student_supplement SET {set_clause} WHERE student_id = ?",
-        list(updates.values()) + [student_id]
-    )
+    sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": row["id"], "message": "Economic status updated"})
@@ -596,11 +582,8 @@ def update_sped_placement(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_sped_placement SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [placement_id]
-    )
+    sql, params = dynamic_update("sr_sped_placement", data=updates, where={"id": placement_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_sped_placement", placement_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": placement_id, "message": "SPED placement updated"})
@@ -739,11 +722,8 @@ def update_sped_service(conn, args):
     if not updates:
         err("No fields to update")
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_sped_service SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [service_id]
-    )
+    sql, params = dynamic_update("sr_sped_service", data=updates, where={"id": service_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_sped_service", service_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": service_id, "message": "SPED service updated"})
@@ -884,11 +864,8 @@ def update_el_program(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_el_program SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [el_program_id]
-    )
+    sql, params = dynamic_update("sr_el_program", data=updates, where={"id": el_program_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_el_program", el_program_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": el_program_id, "message": "EL program updated"})

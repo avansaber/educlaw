@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -64,9 +64,11 @@ def enroll_in_program(conn, args):
         err(f"Company {company_id} not found")
 
     # Check for existing active enrollment in same program/year
+    _pe = Table("educlaw_program_enrollment")
     existing = conn.execute(
-        """SELECT id FROM educlaw_program_enrollment
-           WHERE student_id = ? AND program_id = ? AND academic_year_id = ?""",
+        Q.from_(_pe).select(_pe.id)
+        .where(_pe.student_id == P()).where(_pe.program_id == P()).where(_pe.academic_year_id == P())
+        .get_sql(),
         (student_id, program_id, academic_year_id)
     ).fetchone()
     if existing:
@@ -120,10 +122,13 @@ def withdraw_from_program(conn, args):
         err(f"Only active enrollments can be withdrawn (current: {r['enrollment_status']})")
 
     now = _now_iso()
+    _pe = Table("educlaw_program_enrollment")
     conn.execute(
-        """UPDATE educlaw_program_enrollment
-           SET enrollment_status = 'withdrawn', updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_pe)
+        .set(_pe.enrollment_status, 'withdrawn')
+        .set(_pe.updated_at, LiteralValue("datetime('now')"))
+        .where(_pe.id == P())
+        .get_sql(),
         (enrollment_id,)
     )
 
@@ -145,26 +150,27 @@ def withdraw_from_program(conn, args):
 
 
 def list_program_enrollments(conn, args):
-    query = "SELECT * FROM educlaw_program_enrollment WHERE 1=1"
+    _pe = Table("educlaw_program_enrollment")
+    q = Q.from_(_pe).select(_pe.star)
     params = []
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"; params.append(args.student_id)
+        q = q.where(_pe.student_id == P()); params.append(args.student_id)
     if getattr(args, "program_id", None):
-        query += " AND program_id = ?"; params.append(args.program_id)
+        q = q.where(_pe.program_id == P()); params.append(args.program_id)
     if getattr(args, "academic_year_id", None):
-        query += " AND academic_year_id = ?"; params.append(args.academic_year_id)
+        q = q.where(_pe.academic_year_id == P()); params.append(args.academic_year_id)
     if getattr(args, "enrollment_status", None):
-        query += " AND enrollment_status = ?"; params.append(args.enrollment_status)
+        q = q.where(_pe.enrollment_status == P()); params.append(args.enrollment_status)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_pe.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY enrollment_date DESC"
+    q = q.orderby(_pe.enrollment_date, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"program_enrollments": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -174,12 +180,13 @@ def list_program_enrollments(conn, args):
 
 def _check_prerequisite(conn, student_id, course_id):
     """Check if student has met all prerequisites for a course. Returns error msg or None."""
+    _cp = Table("educlaw_course_prerequisite")
+    _c = Table("educlaw_course")
     prereqs = conn.execute(
-        """SELECT cp.prerequisite_course_id, cp.min_grade, cp.is_corequisite,
-                  c.course_code
-           FROM educlaw_course_prerequisite cp
-           JOIN educlaw_course c ON c.id = cp.prerequisite_course_id
-           WHERE cp.course_id = ?""",
+        Q.from_(_cp).join(_c).on(_c.id == _cp.prerequisite_course_id)
+        .select(_cp.prerequisite_course_id, _cp.min_grade, _cp.is_corequisite, _c.course_code)
+        .where(_cp.course_id == P())
+        .get_sql(),
         (course_id,)
     ).fetchall()
 
@@ -189,14 +196,16 @@ def _check_prerequisite(conn, student_id, course_id):
             continue  # Corequisites can be taken concurrently
 
         # Check if student has completed this prerequisite with sufficient grade
+        _ce = Table("educlaw_course_enrollment")
+        _s = Table("educlaw_section")
         completed = conn.execute(
-            """SELECT ce.final_letter_grade, ce.final_grade_points, ce.is_grade_submitted,
-                      ce.enrollment_status
-               FROM educlaw_course_enrollment ce
-               JOIN educlaw_section s ON s.id = ce.section_id
-               WHERE ce.student_id = ? AND s.course_id = ?
-               AND ce.is_grade_submitted = 1
-               AND ce.enrollment_status = 'completed'""",
+            Q.from_(_ce).join(_s).on(_s.id == _ce.section_id)
+            .select(_ce.final_letter_grade, _ce.final_grade_points, _ce.is_grade_submitted,
+                    _ce.enrollment_status)
+            .where(_ce.student_id == P()).where(_s.course_id == P())
+            .where(_ce.is_grade_submitted == 1)
+            .where(_ce.enrollment_status == 'completed')
+            .get_sql(),
             (student_id, p["prerequisite_course_id"])
         ).fetchone()
 
@@ -248,14 +257,18 @@ def enroll_in_section(conn, args):
         err(f"Section is not open for enrollment (status: {section['status']})")
 
     # Check for active program enrollment in same term
+    _at = Table("educlaw_academic_term")
     term_row = conn.execute(
-        "SELECT academic_year_id FROM educlaw_academic_term WHERE id = ?",
+        Q.from_(_at).select(_at.academic_year_id).where(_at.id == P()).get_sql(),
         (section["academic_term_id"],)
     ).fetchone()
     if term_row:
+        _pe = Table("educlaw_program_enrollment")
         prog_enr = conn.execute(
-            """SELECT id FROM educlaw_program_enrollment
-               WHERE student_id = ? AND academic_year_id = ? AND enrollment_status = 'active'""",
+            Q.from_(_pe).select(_pe.id)
+            .where(_pe.student_id == P()).where(_pe.academic_year_id == P())
+            .where(_pe.enrollment_status == 'active')
+            .get_sql(),
             (student_id, term_row["academic_year_id"])
         ).fetchone()
         if not prog_enr:
@@ -267,11 +280,15 @@ def enroll_in_section(conn, args):
         err("Student is already enrolled in this section")
 
     # Check for duplicate course in same term (same course, different section)
+    _ce2 = Table("educlaw_course_enrollment")
+    _s2 = Table("educlaw_section")
     same_course = conn.execute(
-        """SELECT ce.id FROM educlaw_course_enrollment ce
-           JOIN educlaw_section s ON s.id = ce.section_id
-           WHERE ce.student_id = ? AND s.course_id = ? AND s.academic_term_id = ?
-           AND ce.enrollment_status IN ('enrolled', 'waitlisted')""",
+        Q.from_(_ce2).join(_s2).on(_s2.id == _ce2.section_id)
+        .select(_ce2.id)
+        .where(_ce2.student_id == P()).where(_s2.course_id == P())
+        .where(_s2.academic_term_id == P())
+        .where(_ce2.enrollment_status.isin(['enrolled', 'waitlisted']))
+        .get_sql(),
         (student_id, section["course_id"], section["academic_term_id"])
     ).fetchone()
     if same_course:
@@ -289,8 +306,11 @@ def enroll_in_section(conn, args):
     if section["current_enrollment"] >= section["max_enrollment"]:
         if section["waitlist_enabled"]:
             # Add to waitlist
+            _wl = Table("educlaw_waitlist")
             wait_count = conn.execute(
-                "SELECT COUNT(*) FROM educlaw_waitlist WHERE section_id = ? AND waitlist_status = 'waiting'",
+                Q.from_(_wl).select(fn.Count(_wl.star))
+                .where(_wl.section_id == P()).where(_wl.waitlist_status == 'waiting')
+                .get_sql(),
                 (section_id,)
             ).fetchone()[0]
             if section["waitlist_max"] > 0 and wait_count >= section["waitlist_max"]:
@@ -322,8 +342,13 @@ def enroll_in_section(conn, args):
     )
 
     # Increment section enrollment count
+    _sec = Table("educlaw_section")
     conn.execute(
-        "UPDATE educlaw_section SET current_enrollment = current_enrollment + 1, updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sec)
+        .set(_sec.current_enrollment, LiteralValue('"current_enrollment"+1'))
+        .set(_sec.updated_at, LiteralValue("datetime('now')"))
+        .where(_sec.id == P())
+        .get_sql(),
         (section_id,)
     )
 
@@ -351,23 +376,32 @@ def drop_enrollment(conn, args):
 
     now = _now_iso()
     drop_reason = getattr(args, "drop_reason", None) or ""
+    _ce = Table("educlaw_course_enrollment")
     conn.execute(
-        """UPDATE educlaw_course_enrollment
-           SET enrollment_status = 'dropped', drop_date = ?, drop_reason = ?,
-               updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_ce)
+        .set(_ce.enrollment_status, 'dropped')
+        .set(_ce.drop_date, P())
+        .set(_ce.drop_reason, P())
+        .set(_ce.updated_at, LiteralValue("datetime('now')"))
+        .where(_ce.id == P())
+        .get_sql(),
         (now[:10], drop_reason, enrollment_id)
     )
 
     # Decrement section count
+    _sec = Table("educlaw_section")
     conn.execute(
-        "UPDATE educlaw_section SET current_enrollment = MAX(0, current_enrollment - 1), updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sec)
+        .set(_sec.current_enrollment, LiteralValue('MAX(0,"current_enrollment"-1)'))
+        .set(_sec.updated_at, LiteralValue("datetime('now')"))
+        .where(_sec.id == P())
+        .get_sql(),
         (r["section_id"],)
     )
 
     # Process waitlist if enabled
     section_row = conn.execute(
-        "SELECT * FROM educlaw_section WHERE id = ?", (r["section_id"],)
+        Q.from_(_sec).select(_sec.star).where(_sec.id == P()).get_sql(), (r["section_id"],)
     ).fetchone()
     if section_row and dict(section_row)["waitlist_enabled"]:
         _advance_waitlist(conn, r["section_id"], dict(section_row)["company_id"], now)
@@ -395,17 +429,26 @@ def withdraw_enrollment(conn, args):
         err("Cannot withdraw after grades have been submitted")
 
     now = _now_iso()
+    _ce = Table("educlaw_course_enrollment")
     conn.execute(
-        """UPDATE educlaw_course_enrollment
-           SET enrollment_status = 'withdrawn', drop_date = ?,
-               drop_reason = ?, final_letter_grade = 'W',
-               updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_ce)
+        .set(_ce.enrollment_status, 'withdrawn')
+        .set(_ce.drop_date, P())
+        .set(_ce.drop_reason, P())
+        .set(_ce.final_letter_grade, 'W')
+        .set(_ce.updated_at, LiteralValue("datetime('now')"))
+        .where(_ce.id == P())
+        .get_sql(),
         (now[:10], getattr(args, "drop_reason", None) or "Student withdrawal", enrollment_id)
     )
 
+    _sec = Table("educlaw_section")
     conn.execute(
-        "UPDATE educlaw_section SET current_enrollment = MAX(0, current_enrollment - 1), updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sec)
+        .set(_sec.current_enrollment, LiteralValue('MAX(0,"current_enrollment"-1)'))
+        .set(_sec.updated_at, LiteralValue("datetime('now')"))
+        .where(_sec.id == P())
+        .get_sql(),
         (r["section_id"],)
     )
 
@@ -428,14 +471,18 @@ def get_enrollment(conn, args):
     data = dict(row)
 
     # Assessment results summary
+    _ar = Table("educlaw_assessment_result")
+    _a = Table("educlaw_assessment")
+    _ac = Table("educlaw_assessment_category")
     results = conn.execute(
-        """SELECT ar.*, a.name as assessment_name, a.max_points, a.due_date,
-                  ac.name as category_name
-           FROM educlaw_assessment_result ar
-           JOIN educlaw_assessment a ON a.id = ar.assessment_id
-           JOIN educlaw_assessment_category ac ON ac.id = a.category_id
-           WHERE ar.course_enrollment_id = ?
-           ORDER BY a.due_date""",
+        Q.from_(_ar)
+        .join(_a).on(_a.id == _ar.assessment_id)
+        .join(_ac).on(_ac.id == _a.category_id)
+        .select(_ar.star, _a.name.as_("assessment_name"), _a.max_points, _a.due_date,
+                _ac.name.as_("category_name"))
+        .where(_ar.course_enrollment_id == P())
+        .orderby(_a.due_date)
+        .get_sql(),
         (enrollment_id,)
     ).fetchall()
     data["assessment_results"] = [dict(r) for r in results]
@@ -443,39 +490,43 @@ def get_enrollment(conn, args):
 
 
 def list_enrollments(conn, args):
-    query = "SELECT * FROM educlaw_course_enrollment WHERE 1=1"
+    _ce = Table("educlaw_course_enrollment")
+    q = Q.from_(_ce).select(_ce.star)
     params = []
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"; params.append(args.student_id)
+        q = q.where(_ce.student_id == P()); params.append(args.student_id)
     if getattr(args, "section_id", None):
-        query += " AND section_id = ?"; params.append(args.section_id)
+        q = q.where(_ce.section_id == P()); params.append(args.section_id)
     if getattr(args, "academic_term_id", None):
-        query += """ AND section_id IN (
-            SELECT id FROM educlaw_section WHERE academic_term_id = ?)"""
+        _sec_sub = Table("educlaw_section")
+        sub = Q.from_(_sec_sub).select(_sec_sub.id).where(_sec_sub.academic_term_id == P())
+        q = q.where(_ce.section_id.isin(sub))
         params.append(args.academic_term_id)
     if getattr(args, "enrollment_status", None):
-        query += " AND enrollment_status = ?"; params.append(args.enrollment_status)
+        q = q.where(_ce.enrollment_status == P()); params.append(args.enrollment_status)
     if getattr(args, "is_grade_submitted", None) is not None:
-        query += " AND is_grade_submitted = ?"; params.append(int(args.is_grade_submitted))
+        q = q.where(_ce.is_grade_submitted == P()); params.append(int(args.is_grade_submitted))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_ce.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY enrollment_date DESC"
+    q = q.orderby(_ce.enrollment_date, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"enrollments": [dict(r) for r in rows], "count": len(rows)})
 
 
 def _advance_waitlist(conn, section_id, company_id, now):
     """Advance waitlist — offer seat to first waiting student."""
+    _wl = Table("educlaw_waitlist")
     next_wait = conn.execute(
-        """SELECT * FROM educlaw_waitlist
-           WHERE section_id = ? AND waitlist_status = 'waiting'
-           ORDER BY position ASC LIMIT 1""",
+        Q.from_(_wl).select(_wl.star)
+        .where(_wl.section_id == P()).where(_wl.waitlist_status == 'waiting')
+        .orderby(_wl.position, order=Order.asc).limit(1)
+        .get_sql(),
         (section_id,)
     ).fetchone()
     if not next_wait:
@@ -487,9 +538,12 @@ def _advance_waitlist(conn, section_id, company_id, now):
     offer_expires = (datetime.now(timezone.utc) + timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     conn.execute(
-        """UPDATE educlaw_waitlist
-           SET waitlist_status = 'offered', offer_expires_at = ?, updated_at = datetime('now')
-           WHERE id = ?""",
+        Q.update(_wl)
+        .set(_wl.waitlist_status, 'offered')
+        .set(_wl.offer_expires_at, P())
+        .set(_wl.updated_at, LiteralValue("datetime('now')"))
+        .where(_wl.id == P())
+        .get_sql(),
         (offer_expires, w["id"])
     )
     notif_id = str(uuid.uuid4())
@@ -525,24 +579,25 @@ def process_waitlist(conn, args):
 
 
 def list_waitlist(conn, args):
-    query = "SELECT * FROM educlaw_waitlist WHERE 1=1"
+    _wl = Table("educlaw_waitlist")
+    q = Q.from_(_wl).select(_wl.star)
     params = []
 
     if getattr(args, "section_id", None):
-        query += " AND section_id = ?"; params.append(args.section_id)
+        q = q.where(_wl.section_id == P()); params.append(args.section_id)
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"; params.append(args.student_id)
+        q = q.where(_wl.student_id == P()); params.append(args.student_id)
     if getattr(args, "waitlist_status", None):
-        query += " AND waitlist_status = ?"; params.append(args.waitlist_status)
+        q = q.where(_wl.waitlist_status == P()); params.append(args.waitlist_status)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_wl.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY section_id, position"
+    q = q.orderby(_wl.section_id).orderby(_wl.position)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"waitlist": [dict(r) for r in rows], "count": len(rows)})
 
 

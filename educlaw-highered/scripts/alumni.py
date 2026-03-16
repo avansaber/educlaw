@@ -14,7 +14,8 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
+    from erpclaw_lib.vendor.pypika.terms import LiteralValue
 
     ENTITY_PREFIXES.setdefault("highered_alumnus", "HALM-")
 except ImportError:
@@ -60,14 +61,14 @@ def add_alumnus(conn, args):
     now = _now_iso()
     naming = get_next_name(conn, "highered_alumnus", company_id=company_id)
 
-    conn.execute("""
-        INSERT INTO highered_alumnus
-        (id, naming_series, name, email, graduation_year, degree_program,
-         employer, job_title, is_donor, total_giving, engagement_level,
-         company_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,0,'0',?,?,?,?)
-    """, (alum_id, naming, name, email, graduation_year, degree_program,
-          employer, job_title, engagement_level, company_id, now, now))
+    sql, _ = insert_row("highered_alumnus", {
+        "id": P(), "naming_series": P(), "name": P(), "email": P(),
+        "graduation_year": P(), "degree_program": P(), "employer": P(),
+        "job_title": P(), "is_donor": P(), "total_giving": P(),
+        "engagement_level": P(), "company_id": P(), "created_at": P(), "updated_at": P(),
+    })
+    conn.execute(sql, (alum_id, naming, name, email, graduation_year, degree_program,
+          employer, job_title, 0, "0", engagement_level, company_id, now, now))
     audit(conn, SKILL, "highered-add-alumnus", "highered_alumnus", alum_id,
           new_values={"name": name})
     conn.commit()
@@ -83,28 +84,24 @@ def update_alumnus(conn, args):
     if not row:
         return err("Alumnus not found")
 
-    updates, params = [], []
+    data = {}
     for field in ("name", "email", "degree_program", "employer", "job_title"):
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{field}=?")
-            params.append(val)
+            data[field] = val
     graduation_year = getattr(args, "graduation_year", None)
     if graduation_year is not None:
-        updates.append("graduation_year=?")
-        params.append(int(graduation_year))
+        data["graduation_year"] = int(graduation_year)
     engagement_level = getattr(args, "engagement_level", None)
     if engagement_level is not None:
         if engagement_level not in VALID_ENGAGEMENT_LEVELS:
             return err(f"Invalid engagement_level: {engagement_level}")
-        updates.append("engagement_level=?")
-        params.append(engagement_level)
-    if not updates:
+        data["engagement_level"] = engagement_level
+    if not data:
         return err("No fields to update")
-    updates.append("updated_at=?")
-    params.append(_now_iso())
-    params.append(alum_id)
-    conn.execute(f"UPDATE highered_alumnus SET {','.join(updates)} WHERE id=?", params)
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("highered_alumnus", data, {"id": alum_id})
+    conn.execute(sql, params)
     conn.commit()
     ok({"id": alum_id, "updated": True})
 
@@ -113,25 +110,26 @@ def list_alumni(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_alumnus WHERE company_id=?"
+    t = Table("highered_alumnus")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     graduation_year = getattr(args, "graduation_year", None)
     if graduation_year:
-        q += " AND graduation_year=?"
+        q = q.where(t.graduation_year == P())
         params.append(int(graduation_year))
     engagement_level = getattr(args, "engagement_level", None)
     if engagement_level:
-        q += " AND engagement_level=?"
+        q = q.where(t.engagement_level == P())
         params.append(engagement_level)
     is_donor = getattr(args, "is_donor", None)
     if is_donor is not None:
-        q += " AND is_donor=?"
+        q = q.where(t.is_donor == P())
         params.append(int(is_donor))
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY name LIMIT ? OFFSET ?"
+    q = q.orderby(t.name).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"alumni": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -155,11 +153,11 @@ def add_alumni_event(conn, args):
     attendees = int(getattr(args, "attendees", None) or 0)
 
     event_id = str(uuid.uuid4())
-    conn.execute("""
-        INSERT INTO highered_alumni_event
-        (id, name, event_date, event_type, attendees, company_id, created_at)
-        VALUES (?,?,?,?,?,?,?)
-    """, (event_id, name, event_date, event_type, attendees, company_id, _now_iso()))
+    sql, _ = insert_row("highered_alumni_event", {
+        "id": P(), "name": P(), "event_date": P(), "event_type": P(),
+        "attendees": P(), "company_id": P(), "created_at": P(),
+    })
+    conn.execute(sql, (event_id, name, event_date, event_type, attendees, company_id, _now_iso()))
     conn.commit()
     ok({"id": event_id, "name": name, "event_type": event_type})
 
@@ -168,17 +166,18 @@ def list_alumni_events(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_alumni_event WHERE company_id=?"
+    t = Table("highered_alumni_event")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     event_type = getattr(args, "event_type", None)
     if event_type:
-        q += " AND event_type=?"
+        q = q.where(t.event_type == P())
         params.append(event_type)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY event_date DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.event_date, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"events": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -207,20 +206,19 @@ def add_giving_record(conn, args):
         return err(f"Invalid gift_type: {gift_type}")
 
     record_id = str(uuid.uuid4())
-    conn.execute("""
-        INSERT INTO highered_giving_record
-        (id, alumnus_id, amount, giving_date, campaign, gift_type,
-         company_id, created_at)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, (record_id, alumnus_id, amount, giving_date, campaign, gift_type,
+    sql, _ = insert_row("highered_giving_record", {
+        "id": P(), "alumnus_id": P(), "amount": P(), "giving_date": P(),
+        "campaign": P(), "gift_type": P(), "company_id": P(), "created_at": P(),
+    })
+    conn.execute(sql, (record_id, alumnus_id, amount, giving_date, campaign, gift_type,
           company_id, _now_iso()))
 
     # Update alumnus total giving and donor status
     new_total = str(round_currency(to_decimal(alum["total_giving"]) + to_decimal(amount)))
-    conn.execute(
-        "UPDATE highered_alumnus SET total_giving=?, is_donor=1, updated_at=? WHERE id=?",
-        (new_total, _now_iso(), alumnus_id)
-    )
+    sql_upd, upd_params = dynamic_update("highered_alumnus",
+        {"total_giving": new_total, "is_donor": 1, "updated_at": _now_iso()},
+        {"id": alumnus_id})
+    conn.execute(sql_upd, upd_params)
     conn.commit()
     ok({"id": record_id, "alumnus_id": alumnus_id, "amount": amount,
         "gift_type": gift_type, "total_giving": new_total})

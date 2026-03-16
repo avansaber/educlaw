@@ -21,7 +21,7 @@ from erpclaw_lib.naming import get_next_name
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
-from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row, LiteralValue
 
 SKILL = "k12-educlaw-k12"
 
@@ -71,16 +71,17 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
     academic_year_id = inc["academic_year_id"]
 
     # Sum all suspension duration_days for this student in this academic year
-    rows = conn.execute(
-        """SELECT da.duration_days
-           FROM educlaw_k12_discipline_action da
-           JOIN educlaw_k12_discipline_student ds2 ON da.discipline_student_id = ds2.id
-           JOIN educlaw_k12_discipline_incident di ON ds2.incident_id = di.id
-           WHERE ds2.student_id = ?
-             AND di.academic_year_id = ?
-             AND da.action_type IN ('in_school_suspension', 'out_of_school_suspension')""",
-        (student_id, academic_year_id)
-    ).fetchall()
+    da_t = Table("educlaw_k12_discipline_action")
+    ds2_t = Table("educlaw_k12_discipline_student")
+    di_t = Table("educlaw_k12_discipline_incident")
+    q = (Q.from_(da_t)
+         .join(ds2_t).on(da_t.discipline_student_id == ds2_t.id)
+         .join(di_t).on(ds2_t.incident_id == di_t.id)
+         .select(da_t.duration_days)
+         .where(ds2_t.student_id == P())
+         .where(di_t.academic_year_id == P())
+         .where(da_t.action_type.isin(["in_school_suspension", "out_of_school_suspension"])))
+    rows = conn.execute(q.get_sql(), (student_id, academic_year_id)).fetchall()
 
     total = to_decimal("0")
     for row in rows:
@@ -93,7 +94,9 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
 
     # Update this discipline_student record
     conn.execute(
-        "UPDATE educlaw_k12_discipline_student SET cumulative_suspension_days_ytd = ? WHERE id = ?",
+        update_row("educlaw_k12_discipline_student",
+                   data={"cumulative_suspension_days_ytd": P()},
+                   where={"id": P()}),
         (total_str, discipline_student_id)
     )
 
@@ -102,8 +105,10 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
     if ds_full and ds_full["is_idea_eligible"]:
         if total >= to_decimal("10"):
             conn.execute(
-                "UPDATE educlaw_k12_discipline_student SET mdr_required = 1 WHERE id = ?",
-                (discipline_student_id,)
+                update_row("educlaw_k12_discipline_student",
+                           data={"mdr_required": P()},
+                           where={"id": P()}),
+                (1, discipline_student_id)
             )
 
     return total_str
@@ -157,18 +162,20 @@ def add_discipline_incident(conn, args):
     naming_series = get_next_name(conn, "educlaw_k12_discipline_incident", year=current_year, company_id=company_id)
     incident_id = str(uuid.uuid4())
 
-    conn.execute(
-        """INSERT INTO educlaw_k12_discipline_incident
-           (id, naming_series, incident_date, incident_time, location, location_detail,
-            incident_type, severity, description, is_reported_to_law_enforcement,
-            is_mandatory_report, mandatory_report_date, mandatory_report_agency,
-            is_title_ix, incident_status, academic_year_id, academic_term_id,
-            company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_discipline_incident", {
+        "id": P(), "naming_series": P(), "incident_date": P(), "incident_time": P(),
+        "location": P(), "location_detail": P(), "incident_type": P(), "severity": P(),
+        "description": P(), "is_reported_to_law_enforcement": P(),
+        "is_mandatory_report": P(), "mandatory_report_date": P(),
+        "mandatory_report_agency": P(), "is_title_ix": P(), "incident_status": P(),
+        "academic_year_id": P(), "academic_term_id": P(),
+        "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (incident_id, naming_series, incident_date, incident_time, location, location_detail,
          incident_type, severity, description, is_reported_to_law_enforcement,
          is_mandatory_report, mandatory_report_date, mandatory_report_agency,
-         is_title_ix, academic_year_id, academic_term_id,
+         is_title_ix, "open", academic_year_id, academic_term_id,
          company_id, now, now, created_by)
     )
     conn.commit()
@@ -219,11 +226,8 @@ def update_discipline_incident(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_discipline_incident SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [incident_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_discipline_incident", data=updates, where={"id": incident_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-discipline-incident", "educlaw_k12_discipline_incident",
           incident_id)
@@ -264,12 +268,13 @@ def add_discipline_student(conn, args):
 
     now = _now_iso()
     ds_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_discipline_student
-           (id, incident_id, student_id, role, is_idea_eligible,
-            cumulative_suspension_days_ytd, mdr_required, notes, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, '0', 0, ?, ?, ?)""",
-        (ds_id, incident_id, student_id, role, is_idea_eligible, notes, now, created_by)
+    sql, _ = insert_row("educlaw_k12_discipline_student", {
+        "id": P(), "incident_id": P(), "student_id": P(), "role": P(),
+        "is_idea_eligible": P(), "cumulative_suspension_days_ytd": P(),
+        "mdr_required": P(), "notes": P(), "created_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
+        (ds_id, incident_id, student_id, role, is_idea_eligible, "0", 0, notes, now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-discipline-student", "educlaw_k12_discipline_student", ds_id)
@@ -363,10 +368,10 @@ def close_discipline_incident(conn, args):
 
     now = _now_iso()
     conn.execute(
-        """UPDATE educlaw_k12_discipline_incident
-           SET incident_status = 'closed', reviewed_by = ?, reviewed_at = ?, updated_at = ?
-           WHERE id = ?""",
-        (reviewed_by, now, now, incident_id)
+        update_row("educlaw_k12_discipline_incident",
+                   data={"incident_status": P(), "reviewed_by": P(), "reviewed_at": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("closed", reviewed_by, now, now, incident_id)
     )
     conn.commit()
     audit(conn, SKILL, "k12-complete-discipline-incident", "educlaw_k12_discipline_incident",
@@ -396,20 +401,20 @@ def get_discipline_incident(conn, args):
     company_id = incident_dict["company_id"]
 
     # Get student involvements
-    students = conn.execute(
-        """SELECT ds.*, s.first_name, s.last_name, s.full_name, s.grade_level
-           FROM educlaw_k12_discipline_student ds
-           JOIN educlaw_student s ON ds.student_id = s.id
-           WHERE ds.incident_id = ?""",
-        (incident_id,)
-    ).fetchall()
+    ds = Table("educlaw_k12_discipline_student")
+    s = Table("educlaw_student")
+    q = (Q.from_(ds).join(s).on(ds.student_id == s.id)
+         .select(ds.star, s.first_name, s.last_name, s.full_name, s.grade_level)
+         .where(ds.incident_id == P()))
+    students = conn.execute(q.get_sql(), (incident_id,)).fetchall()
 
     students_list = []
     for ds in students:
         ds_dict = row_to_dict(ds)
         # Get actions for this student
+        da = Table("educlaw_k12_discipline_action")
         actions = conn.execute(
-            "SELECT * FROM educlaw_k12_discipline_action WHERE discipline_student_id = ?",
+            Q.from_(da).select(da.star).where(da.discipline_student_id == P()).get_sql(),
             (ds_dict["id"],)
         ).fetchall()
         ds_dict["actions"] = rows_to_list(actions)
@@ -440,8 +445,8 @@ def list_discipline_incidents(conn, args):
     limit = getattr(args, "limit", None) or 50
     offset = getattr(args, "offset", None) or 0
 
+    # PyPika: skipped — DISTINCT + conditional JOIN with dynamic alias switching
     if student_id:
-        # Filter by student involvement
         query = """SELECT DISTINCT di.*
                    FROM educlaw_k12_discipline_incident di
                    JOIN educlaw_k12_discipline_student ds ON di.id = ds.incident_id
@@ -494,22 +499,27 @@ def get_discipline_history(conn, args):
     if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
+    ds_t = Table("educlaw_k12_discipline_student")
+    di_t = Table("educlaw_k12_discipline_incident")
     incidents_raw = conn.execute(
-        """SELECT di.*, ds.id AS ds_id, ds.role, ds.is_idea_eligible,
-                  ds.cumulative_suspension_days_ytd, ds.mdr_required, ds.notes AS student_notes
-           FROM educlaw_k12_discipline_student ds
-           JOIN educlaw_k12_discipline_incident di ON ds.incident_id = di.id
-           WHERE ds.student_id = ?
-           ORDER BY di.incident_date DESC""",
+        Q.from_(ds_t).join(di_t).on(ds_t.incident_id == di_t.id)
+        .select(di_t.star,
+                ds_t.id.as_("ds_id"), ds_t.role, ds_t.is_idea_eligible,
+                ds_t.cumulative_suspension_days_ytd, ds_t.mdr_required,
+                ds_t.notes.as_("student_notes"))
+        .where(ds_t.student_id == P())
+        .orderby(di_t.incident_date, order=Order.desc)
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
     history = []
+    da_t = Table("educlaw_k12_discipline_action")
     for row in incidents_raw:
         d = row_to_dict(row)
         # Get actions
         actions = conn.execute(
-            "SELECT * FROM educlaw_k12_discipline_action WHERE discipline_student_id = ?",
+            Q.from_(da_t).select(da_t.star).where(da_t.discipline_student_id == P()).get_sql(),
             (d["ds_id"],)
         ).fetchall()
         d["actions"] = rows_to_list(actions)
@@ -539,16 +549,17 @@ def get_cumulative_suspension_days(conn, args):
     if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
         return err(f"Student {student_id} not found")
 
-    rows = conn.execute(
-        """SELECT da.duration_days, da.action_type
-           FROM educlaw_k12_discipline_action da
-           JOIN educlaw_k12_discipline_student ds ON da.discipline_student_id = ds.id
-           JOIN educlaw_k12_discipline_incident di ON ds.incident_id = di.id
-           WHERE ds.student_id = ?
-             AND di.academic_year_id = ?
-             AND da.action_type IN ('in_school_suspension', 'out_of_school_suspension')""",
-        (student_id, academic_year_id)
-    ).fetchall()
+    da_t = Table("educlaw_k12_discipline_action")
+    ds_t = Table("educlaw_k12_discipline_student")
+    di_t = Table("educlaw_k12_discipline_incident")
+    q = (Q.from_(da_t)
+         .join(ds_t).on(da_t.discipline_student_id == ds_t.id)
+         .join(di_t).on(ds_t.incident_id == di_t.id)
+         .select(da_t.duration_days, da_t.action_type)
+         .where(ds_t.student_id == P())
+         .where(di_t.academic_year_id == P())
+         .where(da_t.action_type.isin(["in_school_suspension", "out_of_school_suspension"])))
+    rows = conn.execute(q.get_sql(), (student_id, academic_year_id)).fetchall()
 
     total = to_decimal("0")
     iss_days = to_decimal("0")
@@ -565,9 +576,11 @@ def get_cumulative_suspension_days(conn, args):
             pass
 
     # Check if student has active IEP
+    iep_t = Table("educlaw_k12_iep")
     active_iep = conn.execute(
-        """SELECT id FROM educlaw_k12_iep
-           WHERE student_id = ? AND iep_status = 'active'""",
+        Q.from_(iep_t).select(iep_t.id)
+        .where(iep_t.student_id == P()).where(iep_t.iep_status == "active")
+        .get_sql(),
         (student_id,)
     ).fetchone()
     is_idea_eligible = bool(active_iep)
@@ -625,16 +638,18 @@ def add_manifestation_review(conn, args):
 
     now = _now_iso()
     mdr_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_manifestation_review
-           (id, discipline_student_id, student_id, iep_id, mdr_date,
-            question_1_result, question_2_result, determination, outcome_action,
-            fba_required, bip_required, fba_bip_notes, parent_notified_date,
-            procedural_safeguards_sent, notes, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, 'not_determined', 'not_determined', 'pending', 'pending',
-                   0, 0, '', '', 0, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_manifestation_review", {
+        "id": P(), "discipline_student_id": P(), "student_id": P(), "iep_id": P(),
+        "mdr_date": P(), "question_1_result": P(), "question_2_result": P(),
+        "determination": P(), "outcome_action": P(), "fba_required": P(),
+        "bip_required": P(), "fba_bip_notes": P(), "parent_notified_date": P(),
+        "procedural_safeguards_sent": P(), "notes": P(), "company_id": P(),
+        "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (mdr_id, discipline_student_id, student_id, iep_id, mdr_date,
-         notes, company_id, now, now, created_by)
+         "not_determined", "not_determined", "pending", "pending",
+         0, 0, "", "", 0, notes, company_id, now, now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-manifestation-review", "educlaw_k12_manifestation_review", mdr_id)
@@ -672,11 +687,8 @@ def update_manifestation_review(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_manifestation_review SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [mdr_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_manifestation_review", data=updates, where={"id": mdr_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-manifestation-review", "educlaw_k12_manifestation_review", mdr_id)
     return ok({"id": mdr_id, "message": "Manifestation review updated"})
@@ -723,28 +735,31 @@ def add_pbis_recognition(conn, args):
     naming_series = get_next_name(conn, "educlaw_k12_discipline_incident", year=current_year, company_id=company_id)
     incident_id = str(uuid.uuid4())
 
-    conn.execute(
-        """INSERT INTO educlaw_k12_discipline_incident
-           (id, naming_series, incident_date, incident_time, location, location_detail,
-            incident_type, severity, description, is_reported_to_law_enforcement,
-            is_mandatory_report, mandatory_report_date, mandatory_report_agency,
-            is_title_ix, incident_status, academic_year_id, academic_term_id,
-            company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, '', 'other_minor', 'minor', ?, 0, 0, '', '',
-                   0, 'closed', ?, ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_discipline_incident", {
+        "id": P(), "naming_series": P(), "incident_date": P(), "incident_time": P(),
+        "location": P(), "location_detail": P(), "incident_type": P(), "severity": P(),
+        "description": P(), "is_reported_to_law_enforcement": P(),
+        "is_mandatory_report": P(), "mandatory_report_date": P(),
+        "mandatory_report_agency": P(), "is_title_ix": P(), "incident_status": P(),
+        "academic_year_id": P(), "academic_term_id": P(),
+        "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (incident_id, naming_series, incident_date, incident_time, location,
-         pbis_description, academic_year_id, academic_term_id,
-         company_id, now, now, created_by)
+         "", "other_minor", "minor", pbis_description, 0, 0, "", "", 0, "closed",
+         academic_year_id, academic_term_id, company_id, now, now, created_by)
     )
 
     # Add student involvement as recognition recipient
     ds_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_discipline_student
-           (id, incident_id, student_id, role, is_idea_eligible,
-            cumulative_suspension_days_ytd, mdr_required, notes, created_at, created_by)
-           VALUES (?, ?, ?, 'bystander', 0, '0', 0, ?, ?, ?)""",
-        (ds_id, incident_id, student_id, "PBIS positive recognition", now, created_by)
+    sql2, _ = insert_row("educlaw_k12_discipline_student", {
+        "id": P(), "incident_id": P(), "student_id": P(), "role": P(),
+        "is_idea_eligible": P(), "cumulative_suspension_days_ytd": P(),
+        "mdr_required": P(), "notes": P(), "created_at": P(), "created_by": P(),
+    })
+    conn.execute(sql2,
+        (ds_id, incident_id, student_id, "bystander", 0, "0", 0,
+         "PBIS positive recognition", now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-pbis-recognition", "educlaw_k12_discipline_incident",
@@ -775,13 +790,13 @@ def notify_guardians_discipline(conn, args):
     naming_series = incident["naming_series"]
 
     # Get all students involved (offenders and victims)
-    students = conn.execute(
-        """SELECT ds.student_id, ds.role, s.full_name
-           FROM educlaw_k12_discipline_student ds
-           JOIN educlaw_student s ON ds.student_id = s.id
-           WHERE ds.incident_id = ? AND ds.role IN ('offender', 'victim')""",
-        (incident_id,)
-    ).fetchall()
+    ds_t = Table("educlaw_k12_discipline_student")
+    s_t = Table("educlaw_student")
+    q = (Q.from_(ds_t).join(s_t).on(ds_t.student_id == s_t.id)
+         .select(ds_t.student_id, ds_t.role, s_t.full_name)
+         .where(ds_t.incident_id == P())
+         .where(ds_t.role.isin(["offender", "victim"])))
+    students = conn.execute(q.get_sql(), (incident_id,)).fetchall()
 
     notifications_created = 0
     now = _now_iso()
@@ -791,10 +806,11 @@ def notify_guardians_discipline(conn, args):
         student_name = student_row["full_name"]
 
         # Get guardians for this student
+        sg_t = Table("educlaw_student_guardian")
         guardians = conn.execute(
-            """SELECT sg.guardian_id
-               FROM educlaw_student_guardian sg
-               WHERE sg.student_id = ? AND sg.receives_communications = 1""",
+            Q.from_(sg_t).select(sg_t.guardian_id)
+            .where(sg_t.student_id == P()).where(sg_t.receives_communications == 1)
+            .get_sql(),
             (student_id,)
         ).fetchall()
 
@@ -806,15 +822,17 @@ def notify_guardians_discipline(conn, args):
 
         for g_row in guardians:
             notif_id = str(uuid.uuid4())
-            conn.execute(
-                """INSERT INTO educlaw_notification
-                   (id, recipient_type, recipient_id, notification_type, title, message,
-                    reference_type, reference_id, is_read, sent_via, sent_at,
-                    company_id, created_at, created_by)
-                   VALUES (?, 'guardian', ?, 'announcement', ?, ?, 'discipline_incident',
-                           ?, 0, 'system', ?, ?, ?, ?)""",
-                (notif_id, g_row["guardian_id"], notif_title, notif_msg,
-                 incident_id, now, company_id, now, user_id)
+            nsql, _ = insert_row("educlaw_notification", {
+                "id": P(), "recipient_type": P(), "recipient_id": P(),
+                "notification_type": P(), "title": P(), "message": P(),
+                "reference_type": P(), "reference_id": P(), "is_read": P(),
+                "sent_via": P(), "sent_at": P(), "company_id": P(),
+                "created_at": P(), "created_by": P(),
+            })
+            conn.execute(nsql,
+                (notif_id, "guardian", g_row["guardian_id"], "announcement",
+                 notif_title, notif_msg, "discipline_incident",
+                 incident_id, 0, "system", now, company_id, now, user_id)
             )
             notifications_created += 1
 
@@ -838,6 +856,7 @@ def generate_discipline_report(conn, args):
     date_from = getattr(args, "date_from", None) or None
     date_to = getattr(args, "date_to", None) or None
 
+    # PyPika: skipped — dynamic WHERE with f-string across multiple GROUP BY aggregate queries
     where_parts = ["di.company_id = ?"]
     params = [company_id]
     if academic_year_id:
@@ -943,6 +962,7 @@ def generate_discipline_state_report(conn, args):
     if not academic_year_id:
         return err("--academic-year-id is required")
 
+    # PyPika: skipped — complex multi-JOIN with IN clause + GROUP BY aggregate
     # Suspension actions in this year
     suspension_rows = conn.execute(
         """SELECT da.action_type, da.duration_days,
@@ -994,6 +1014,7 @@ def generate_discipline_state_report(conn, args):
         else:
             by_disability["not_idea_eligible"] += 1
 
+    # PyPika: skipped — multi-JOIN aggregate
     # MDR records
     mdr_count = conn.execute(
         """SELECT COUNT(*) as cnt FROM educlaw_k12_manifestation_review mr

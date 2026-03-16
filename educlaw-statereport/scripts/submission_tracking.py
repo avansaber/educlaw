@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
     from erpclaw_lib.naming import get_next_name
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
     import erpclaw_lib.naming as _naming_lib
     # Register educlaw-statereport submission naming series
     _naming_lib.ENTITY_PREFIXES.setdefault("SUB", "SUB-")
@@ -124,11 +124,8 @@ def update_submission_status(conn, args):
         if val is not None:
             updates[field] = val
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_submission SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [submission_id]
-    )
+    sql, params = dynamic_update("sr_submission", data=updates, where={"id": submission_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_submission", submission_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": submission_id, "submission_status": submission_status,

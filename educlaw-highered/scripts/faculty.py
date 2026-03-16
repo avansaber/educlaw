@@ -14,7 +14,8 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
+    from erpclaw_lib.vendor.pypika.terms import LiteralValue
 
     ENTITY_PREFIXES.setdefault("educlaw_instructor", "HFAC-")
 except ImportError:
@@ -62,12 +63,12 @@ def add_faculty(conn, args):
     now = _now_iso()
     naming = get_next_name(conn, "educlaw_instructor", company_id=company_id)
 
-    conn.execute("""
-        INSERT INTO educlaw_instructor
-        (id, naming_series, name, email, department, rank, tenure_status,
-         hire_date, company_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (fac_id, naming, name, email, department, rank, tenure_status,
+    sql, _ = insert_row("educlaw_instructor", {
+        "id": P(), "naming_series": P(), "name": P(), "email": P(),
+        "department": P(), "rank": P(), "tenure_status": P(), "hire_date": P(),
+        "company_id": P(), "created_at": P(), "updated_at": P(),
+    })
+    conn.execute(sql, (fac_id, naming, name, email, department, rank, tenure_status,
           hire_date, company_id, now, now))
     audit(conn, SKILL, "highered-add-faculty", "educlaw_instructor", fac_id,
           new_values={"name": name, "rank": rank})
@@ -84,30 +85,26 @@ def update_faculty(conn, args):
     if not row:
         return err("Faculty not found")
 
-    updates, params = [], []
+    data = {}
     for field in ("name", "email", "department", "hire_date"):
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{field}=?")
-            params.append(val)
+            data[field] = val
     rank = getattr(args, "rank", None)
     if rank is not None:
         if rank not in VALID_RANKS:
             return err(f"Invalid rank: {rank}")
-        updates.append("rank=?")
-        params.append(rank)
+        data["rank"] = rank
     tenure_status = getattr(args, "tenure_status", None)
     if tenure_status is not None:
         if tenure_status not in VALID_TENURE_STATUSES:
             return err(f"Invalid tenure_status: {tenure_status}")
-        updates.append("tenure_status=?")
-        params.append(tenure_status)
-    if not updates:
+        data["tenure_status"] = tenure_status
+    if not data:
         return err("No fields to update")
-    updates.append("updated_at=?")
-    params.append(_now_iso())
-    params.append(fac_id)
-    conn.execute(f"UPDATE educlaw_instructor SET {','.join(updates)} WHERE id=?", params)
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("educlaw_instructor", data, {"id": fac_id})
+    conn.execute(sql, params)
     conn.commit()
     ok({"id": fac_id, "updated": True})
 
@@ -116,25 +113,26 @@ def list_faculty(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM educlaw_instructor WHERE company_id=?"
+    t = Table("educlaw_instructor")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     department = getattr(args, "department", None)
     if department:
-        q += " AND department=?"
+        q = q.where(t.department == P())
         params.append(department)
     rank = getattr(args, "rank", None)
     if rank:
-        q += " AND rank=?"
+        q = q.where(t.rank == P())
         params.append(rank)
     tenure_status = getattr(args, "tenure_status", None)
     if tenure_status:
-        q += " AND tenure_status=?"
+        q = q.where(t.tenure_status == P())
         params.append(tenure_status)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY name LIMIT ? OFFSET ?"
+    q = q.orderby(t.name).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"faculty": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -163,11 +161,11 @@ def add_course_assignment(conn, args):
 
     assign_id = str(uuid.uuid4())
     try:
-        conn.execute("""
-            INSERT INTO highered_course_assignment
-            (id, faculty_id, section_id, role, company_id, created_at)
-            VALUES (?,?,?,?,?,?)
-        """, (assign_id, faculty_id, section_id, role, company_id, _now_iso()))
+        sql, _ = insert_row("highered_course_assignment", {
+            "id": P(), "faculty_id": P(), "section_id": P(),
+            "role": P(), "company_id": P(), "created_at": P(),
+        })
+        conn.execute(sql, (assign_id, faculty_id, section_id, role, company_id, _now_iso()))
         conn.commit()
         ok({"id": assign_id, "faculty_id": faculty_id,
             "section_id": section_id, "role": role})
@@ -181,21 +179,22 @@ def list_course_assignments(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_course_assignment WHERE company_id=?"
+    t = Table("highered_course_assignment")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     faculty_id = getattr(args, "faculty_id", None)
     if faculty_id:
-        q += " AND faculty_id=?"
+        q = q.where(t.faculty_id == P())
         params.append(faculty_id)
     section_id = getattr(args, "section_id", None)
     if section_id:
-        q += " AND section_id=?"
+        q = q.where(t.section_id == P())
         params.append(section_id)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"assignments": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -225,12 +224,12 @@ def add_research_grant(conn, args):
         return err(f"Invalid grant_status: {grant_status}")
 
     grant_id = str(uuid.uuid4())
-    conn.execute("""
-        INSERT INTO highered_research_grant
-        (id, faculty_id, title, funding_agency, amount, start_date, end_date,
-         grant_status, company_id, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    """, (grant_id, faculty_id, title, funding_agency, amount, start_date,
+    sql, _ = insert_row("highered_research_grant", {
+        "id": P(), "faculty_id": P(), "title": P(), "funding_agency": P(),
+        "amount": P(), "start_date": P(), "end_date": P(),
+        "grant_status": P(), "company_id": P(), "created_at": P(),
+    })
+    conn.execute(sql, (grant_id, faculty_id, title, funding_agency, amount, start_date,
           end_date, grant_status, company_id, _now_iso()))
     conn.commit()
     ok({"id": grant_id, "faculty_id": faculty_id, "title": title,
@@ -241,21 +240,22 @@ def list_research_grants(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_research_grant WHERE company_id=?"
+    t = Table("highered_research_grant")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     faculty_id = getattr(args, "faculty_id", None)
     if faculty_id:
-        q += " AND faculty_id=?"
+        q = q.where(t.faculty_id == P())
         params.append(faculty_id)
     grant_status = getattr(args, "grant_status", None)
     if grant_status:
-        q += " AND grant_status=?"
+        q = q.where(t.grant_status == P())
         params.append(grant_status)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"grants": [dict(r) for r in rows], "count": len(rows)})
 
 

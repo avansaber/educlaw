@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -173,7 +173,8 @@ def update_attendance(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(attendance_id)
-    conn.execute(f"UPDATE educlaw_student_attendance SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_student_attendance SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
     ok({"id": attendance_id, "updated_fields": changed})
 
@@ -190,28 +191,29 @@ def get_attendance(conn, args):
 
 
 def list_attendance(conn, args):
-    query = "SELECT * FROM educlaw_student_attendance WHERE 1=1"
+    _sa = Table("educlaw_student_attendance")
+    q = Q.from_(_sa).select(_sa.star)
     params = []
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"; params.append(args.student_id)
+        q = q.where(_sa.student_id == P()); params.append(args.student_id)
     if getattr(args, "section_id", None):
-        query += " AND section_id = ?"; params.append(args.section_id)
+        q = q.where(_sa.section_id == P()); params.append(args.section_id)
     if getattr(args, "attendance_date_from", None):
-        query += " AND attendance_date >= ?"; params.append(args.attendance_date_from)
+        q = q.where(_sa.attendance_date >= P()); params.append(args.attendance_date_from)
     if getattr(args, "attendance_date_to", None):
-        query += " AND attendance_date <= ?"; params.append(args.attendance_date_to)
+        q = q.where(_sa.attendance_date <= P()); params.append(args.attendance_date_to)
     if getattr(args, "attendance_status", None):
-        query += " AND attendance_status = ?"; params.append(args.attendance_status)
+        q = q.where(_sa.attendance_status == P()); params.append(args.attendance_status)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_sa.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY attendance_date DESC, student_id"
+    q = q.orderby(_sa.attendance_date, order=Order.desc).orderby(_sa.student_id)
     limit = int(getattr(args, "limit", None) or 100)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"attendance_records": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -220,22 +222,23 @@ def get_attendance_summary(conn, args):
     if not student_id:
         err("--student-id is required")
 
-    query = "SELECT attendance_status, COUNT(*) as cnt FROM educlaw_student_attendance WHERE student_id = ?"
+    _sa = Table("educlaw_student_attendance")
+    q = Q.from_(_sa).select(_sa.attendance_status, fn.Count(_sa.star).as_("cnt")).where(_sa.student_id == P())
     params = [student_id]
 
     section_id = getattr(args, "section_id", None)
     if section_id:
-        query += " AND section_id = ?"; params.append(section_id)
+        q = q.where(_sa.section_id == P()); params.append(section_id)
 
     from_date = getattr(args, "attendance_date_from", None)
     to_date = getattr(args, "attendance_date_to", None)
     if from_date:
-        query += " AND attendance_date >= ?"; params.append(from_date)
+        q = q.where(_sa.attendance_date >= P()); params.append(from_date)
     if to_date:
-        query += " AND attendance_date <= ?"; params.append(to_date)
+        q = q.where(_sa.attendance_date <= P()); params.append(to_date)
 
-    query += " GROUP BY attendance_status"
-    rows = conn.execute(query, params).fetchall()
+    q = q.groupby(_sa.attendance_status)
+    rows = conn.execute(q.get_sql(), params).fetchall()
 
     counts = {r["attendance_status"]: r["cnt"] for r in rows}
     total = sum(counts.values())
@@ -266,10 +269,11 @@ def get_section_attendance(conn, args):
     if not section_id:
         err("--section-id is required")
 
-    query = """SELECT sa.*, s.first_name, s.last_name, s.naming_series
-               FROM educlaw_student_attendance sa
-               JOIN educlaw_student s ON s.id = sa.student_id
-               WHERE sa.section_id = ?"""
+    _sa = Table("educlaw_student_attendance")
+    _s = Table("educlaw_student")
+    q = (Q.from_(_sa).join(_s).on(_s.id == _sa.student_id)
+         .select(_sa.star, _s.first_name, _s.last_name, _s.naming_series)
+         .where(_sa.section_id == P()))
     params = [section_id]
 
     from_date = getattr(args, "attendance_date_from", None)
@@ -277,17 +281,17 @@ def get_section_attendance(conn, args):
     att_date = getattr(args, "attendance_date", None)
 
     if att_date:
-        query += " AND sa.attendance_date = ?"; params.append(att_date)
+        q = q.where(_sa.attendance_date == P()); params.append(att_date)
     if from_date:
-        query += " AND sa.attendance_date >= ?"; params.append(from_date)
+        q = q.where(_sa.attendance_date >= P()); params.append(from_date)
     if to_date:
-        query += " AND sa.attendance_date <= ?"; params.append(to_date)
+        q = q.where(_sa.attendance_date <= P()); params.append(to_date)
 
-    query += " ORDER BY sa.attendance_date, s.last_name, s.first_name"
+    q = q.orderby(_sa.attendance_date).orderby(_s.last_name).orderby(_s.first_name)
     limit = int(getattr(args, "limit", None) or 200)
-    query += f" LIMIT {limit}"
+    q = q.limit(limit)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"section_id": section_id, "attendance_records": [dict(r) for r in rows],
         "count": len(rows)})
 
@@ -305,29 +309,31 @@ def get_truancy_report(conn, args):
     section_id = getattr(args, "section_id", None)
 
     # Get all active students for company
-    student_query = "SELECT id, naming_series, full_name, grade_level FROM educlaw_student WHERE company_id = ? AND status = 'active'"
+    _st = Table("educlaw_student")
+    sq = Q.from_(_st).select(_st.id, _st.naming_series, _st.full_name, _st.grade_level).where(_st.company_id == P()).where(_st.status == 'active')
     student_params = [company_id]
     if grade_level:
-        student_query += " AND grade_level = ?"; student_params.append(grade_level)
+        sq = sq.where(_st.grade_level == P()); student_params.append(grade_level)
 
-    students = conn.execute(student_query, student_params).fetchall()
+    students = conn.execute(sq.get_sql(), student_params).fetchall()
     truant_students = []
 
     for student in students:
         s = dict(student)
         # Count attendance for this student
-        att_query = "SELECT attendance_status, COUNT(*) as cnt FROM educlaw_student_attendance WHERE student_id = ? AND company_id = ?"
+        _sa2 = Table("educlaw_student_attendance")
+        aq = Q.from_(_sa2).select(_sa2.attendance_status, fn.Count(_sa2.star).as_("cnt")).where(_sa2.student_id == P()).where(_sa2.company_id == P())
         att_params = [s["id"], company_id]
         if section_id:
-            att_query += " AND section_id = ?"; att_params.append(section_id)
+            aq = aq.where(_sa2.section_id == P()); att_params.append(section_id)
         if from_date:
-            att_query += " AND attendance_date >= ?"; att_params.append(from_date)
+            aq = aq.where(_sa2.attendance_date >= P()); att_params.append(from_date)
         if to_date:
-            att_query += " AND attendance_date <= ?"; att_params.append(to_date)
-        att_query += " GROUP BY attendance_status"
+            aq = aq.where(_sa2.attendance_date <= P()); att_params.append(to_date)
+        aq = aq.groupby(_sa2.attendance_status)
 
         counts = {r["attendance_status"]: r["cnt"]
-                  for r in conn.execute(att_query, att_params).fetchall()}
+                  for r in conn.execute(aq.get_sql(), att_params).fetchall()}
         total = sum(counts.values())
         if total == 0:
             continue
@@ -339,12 +345,14 @@ def get_truancy_report(conn, args):
 
         if att_pct < threshold:
             # Get guardian contact
+            _g = Table("educlaw_guardian")
+            _sg = Table("educlaw_student_guardian")
             guardians = conn.execute(
-                """SELECT g.full_name, g.phone, g.email, sg.is_primary_contact
-                   FROM educlaw_guardian g
-                   JOIN educlaw_student_guardian sg ON sg.guardian_id = g.id
-                   WHERE sg.student_id = ? AND sg.receives_communications = 1
-                   ORDER BY sg.is_primary_contact DESC""",
+                Q.from_(_g).join(_sg).on(_sg.guardian_id == _g.id)
+                .select(_g.full_name, _g.phone, _g.email, _sg.is_primary_contact)
+                .where(_sg.student_id == P()).where(_sg.receives_communications == 1)
+                .orderby(_sg.is_primary_contact, order=Order.desc)
+                .get_sql(),
                 (s["id"],)
             ).fetchall()
 

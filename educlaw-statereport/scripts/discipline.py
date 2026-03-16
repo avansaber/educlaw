@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
     from erpclaw_lib.naming import get_next_name
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
     import erpclaw_lib.naming as _naming_lib
     # Register educlaw-statereport discipline naming series
     _naming_lib.ENTITY_PREFIXES.setdefault("INC", "INC-")
@@ -126,11 +126,8 @@ def update_discipline_incident(conn, args):
         err(f"--incident-type must be one of: {', '.join(VALID_INCIDENT_TYPES)}")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_discipline_incident SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [incident_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_discipline_incident", data=updates, where={"id": incident_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "educlaw_k12_discipline_incident", incident_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": incident_id, "message": "Discipline incident updated"})
@@ -320,11 +317,8 @@ def update_discipline_student(conn, args):
     if not updates:
         err("No fields to update")
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_discipline_student SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [discipline_student_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_discipline_student", data=updates, where={"id": discipline_student_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "educlaw_k12_discipline_student", discipline_student_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": discipline_student_id, "message": "Discipline student record updated"})
@@ -477,11 +471,8 @@ def update_discipline_action(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_discipline_action SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [action_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_discipline_action", data=updates, where={"id": action_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "educlaw_k12_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": action_id, "message": "Discipline action updated"})

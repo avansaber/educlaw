@@ -19,7 +19,7 @@ try:
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 except ImportError:
     def to_decimal(v, places=4):
         try:
@@ -144,11 +144,8 @@ def update_collection_window(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_collection_window SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [window_id]
-    )
+    sql, params = dynamic_update("sr_collection_window", data=updates, where={"id": window_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_collection_window", window_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": window_id, "message": "Collection window updated"})

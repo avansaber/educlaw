@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -40,14 +40,16 @@ def _create_notification(conn, recipient_type, recipient_id, notification_type,
     """Internal helper to insert a single notification record."""
     now = _now_iso()
     notif_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_notification
-           (id, recipient_type, recipient_id, notification_type, title, message,
-            reference_type, reference_id, is_read, sent_via, sent_at, company_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_notification", {
+        "id": P(), "recipient_type": P(), "recipient_id": P(),
+        "notification_type": P(), "title": P(), "message": P(),
+        "reference_type": P(), "reference_id": P(), "is_read": P(),
+        "sent_via": P(), "sent_at": P(), "company_id": P(), "created_at": P()
+    })
+    conn.execute(sql,
         (notif_id, recipient_type, recipient_id, notification_type,
          title, message, reference_type, reference_id,
-         sent_via, now, company_id, now)
+         0, sent_via, now, company_id, now)
     )
     return notif_id
 
@@ -63,26 +65,32 @@ def _get_audience_recipients(conn, audience_type, audience_filter_json, company_
             af = {}
 
     if audience_type in ("all", "students"):
+        _st = Table("educlaw_student")
         rows = conn.execute(
-            "SELECT id FROM educlaw_student WHERE company_id = ? AND status = 'active'",
+            Q.from_(_st).select(_st.id).where(_st.company_id == P()).where(_st.status == 'active').get_sql(),
             (company_id,)
         ).fetchall()
         recipients.extend(("student", r["id"]) for r in rows)
 
     if audience_type in ("all", "guardians"):
+        _g = Table("educlaw_guardian")
+        _sg = Table("educlaw_student_guardian")
+        _st2 = Table("educlaw_student")
         rows = conn.execute(
-            """SELECT DISTINCT g.id FROM educlaw_guardian g
-               JOIN educlaw_student_guardian sg ON sg.guardian_id = g.id
-               JOIN educlaw_student s ON s.id = sg.student_id
-               WHERE s.company_id = ? AND s.status = 'active'
-               AND sg.receives_communications = 1""",
+            Q.from_(_g).join(_sg).on(_sg.guardian_id == _g.id)
+            .join(_st2).on(_st2.id == _sg.student_id)
+            .select(_g.id).distinct()
+            .where(_st2.company_id == P()).where(_st2.status == 'active')
+            .where(_sg.receives_communications == 1)
+            .get_sql(),
             (company_id,)
         ).fetchall()
         recipients.extend(("guardian", r["id"]) for r in rows)
 
     if audience_type in ("all", "staff"):
+        _emp = Table("employee")
         rows = conn.execute(
-            "SELECT id FROM employee WHERE company_id = ?",
+            Q.from_(_emp).select(_emp.id).where(_emp.company_id == P()).get_sql(),
             (company_id,)
         ).fetchall()
         recipients.extend(("employee", r["id"]) for r in rows)
@@ -90,11 +98,14 @@ def _get_audience_recipients(conn, audience_type, audience_filter_json, company_
     if audience_type == "program":
         program_id = af.get("program_id")
         if program_id:
+            _st3 = Table("educlaw_student")
+            _pe = Table("educlaw_program_enrollment")
             rows = conn.execute(
-                """SELECT DISTINCT s.id FROM educlaw_student s
-                   JOIN educlaw_program_enrollment pe ON pe.student_id = s.id
-                   WHERE pe.program_id = ? AND pe.enrollment_status = 'active'
-                   AND s.company_id = ?""",
+                Q.from_(_st3).join(_pe).on(_pe.student_id == _st3.id)
+                .select(_st3.id).distinct()
+                .where(_pe.program_id == P()).where(_pe.enrollment_status == 'active')
+                .where(_st3.company_id == P())
+                .get_sql(),
                 (program_id, company_id)
             ).fetchall()
             recipients.extend(("student", r["id"]) for r in rows)
@@ -102,11 +113,14 @@ def _get_audience_recipients(conn, audience_type, audience_filter_json, company_
     if audience_type == "section":
         section_id = af.get("section_id")
         if section_id:
+            _st4 = Table("educlaw_student")
+            _ce = Table("educlaw_course_enrollment")
             rows = conn.execute(
-                """SELECT DISTINCT s.id FROM educlaw_student s
-                   JOIN educlaw_course_enrollment ce ON ce.student_id = s.id
-                   WHERE ce.section_id = ? AND ce.enrollment_status = 'enrolled'
-                   AND s.company_id = ?""",
+                Q.from_(_st4).join(_ce).on(_ce.student_id == _st4.id)
+                .select(_st4.id).distinct()
+                .where(_ce.section_id == P()).where(_ce.enrollment_status == 'enrolled')
+                .where(_st4.company_id == P())
+                .get_sql(),
                 (section_id, company_id)
             ).fetchall()
             recipients.extend(("student", r["id"]) for r in rows)
@@ -114,8 +128,11 @@ def _get_audience_recipients(conn, audience_type, audience_filter_json, company_
     if audience_type == "department":
         department_id = af.get("department_id")
         if department_id:
+            _emp2 = Table("employee")
             rows = conn.execute(
-                "SELECT id FROM employee WHERE department_id = ? AND company_id = ?",
+                Q.from_(_emp2).select(_emp2.id)
+                .where(_emp2.department_id == P()).where(_emp2.company_id == P())
+                .get_sql(),
                 (department_id, company_id)
             ).fetchall()
             recipients.extend(("employee", r["id"]) for r in rows)
@@ -123,9 +140,12 @@ def _get_audience_recipients(conn, audience_type, audience_filter_json, company_
     if audience_type == "grade_level":
         grade_level = af.get("grade_level")
         if grade_level:
+            _st5 = Table("educlaw_student")
             rows = conn.execute(
-                """SELECT id FROM educlaw_student
-                   WHERE grade_level = ? AND company_id = ? AND status = 'active'""",
+                Q.from_(_st5).select(_st5.id)
+                .where(_st5.grade_level == P()).where(_st5.company_id == P())
+                .where(_st5.status == 'active')
+                .get_sql(),
                 (grade_level, company_id)
             ).fetchall()
             recipients.extend(("student", r["id"]) for r in rows)
@@ -172,16 +192,18 @@ def add_announcement(conn, args):
     now = _now_iso()
 
     try:
-        conn.execute(
-            """INSERT INTO educlaw_announcement
-               (id, title, body, priority, audience_type, audience_filter,
-                publish_date, expiry_date, announcement_status, published_by,
-                company_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', NULL, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_announcement", {
+            "id": P(), "title": P(), "body": P(), "priority": P(),
+            "audience_type": P(), "audience_filter": P(),
+            "publish_date": P(), "expiry_date": P(), "announcement_status": P(),
+            "published_by": P(), "company_id": P(), "created_at": P(), "updated_at": P()
+        })
+        conn.execute(sql,
             (ann_id, title, body, priority, audience_type,
              audience_filter,
              getattr(args, "publish_date", None),
              getattr(args, "expiry_date", None),
+             "draft", None,
              company_id, now, now)
         )
     except sqlite3.IntegrityError as e:
@@ -235,7 +257,8 @@ def update_announcement(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(announcement_id)
-    conn.execute(f"UPDATE educlaw_announcement SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_announcement SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-announcement", "educlaw_announcement", announcement_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -260,10 +283,15 @@ def publish_announcement(conn, args):
     # Use publish_date from record or now
     publish_date = row["publish_date"] or now
 
+    _ann = Table("educlaw_announcement")
     conn.execute(
-        """UPDATE educlaw_announcement
-           SET announcement_status = 'published', published_by = ?, publish_date = ?, updated_at = ?
-           WHERE id = ?""",
+        Q.update(_ann)
+        .set(_ann.announcement_status, 'published')
+        .set(_ann.published_by, P())
+        .set(_ann.publish_date, P())
+        .set(_ann.updated_at, P())
+        .where(_ann.id == P())
+        .get_sql(),
         (published_by, publish_date, now, announcement_id)
     )
 
@@ -294,28 +322,29 @@ def publish_announcement(conn, args):
 
 def list_announcements(conn, args):
     """List announcements with optional filters."""
-    query = "SELECT * FROM educlaw_announcement WHERE 1=1"
+    _ann = Table("educlaw_announcement")
+    q = Q.from_(_ann).select(_ann.star)
     params = []
 
     if getattr(args, "announcement_status", None):
-        query += " AND announcement_status = ?"; params.append(args.announcement_status)
+        q = q.where(_ann.announcement_status == P()); params.append(args.announcement_status)
     if getattr(args, "audience_type", None):
-        query += " AND audience_type = ?"; params.append(args.audience_type)
+        q = q.where(_ann.audience_type == P()); params.append(args.audience_type)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_ann.company_id == P()); params.append(args.company_id)
     if getattr(args, "date_from", None):
-        query += " AND publish_date >= ?"; params.append(args.date_from)
+        q = q.where(_ann.publish_date >= P()); params.append(args.date_from)
     if getattr(args, "date_to", None):
-        query += " AND publish_date <= ?"; params.append(args.date_to)
+        q = q.where(_ann.publish_date <= P()); params.append(args.date_to)
     if getattr(args, "priority", None):
-        query += " AND priority = ?"; params.append(args.priority)
+        q = q.where(_ann.priority == P()); params.append(args.priority)
 
-    query += " ORDER BY created_at DESC"
+    q = q.orderby(_ann.created_at, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
 
     announcements = []
     for r in rows:
@@ -348,8 +377,9 @@ def get_announcement(conn, args):
             data["audience_filter"] = {}
 
     # Count notifications sent for this announcement
+    _n = Table("educlaw_notification")
     notif_count = conn.execute(
-        "SELECT COUNT(*) as cnt FROM educlaw_notification WHERE reference_id = ?",
+        Q.from_(_n).select(fn.Count(_n.star).as_("cnt")).where(_n.reference_id == P()).get_sql(),
         (announcement_id,)
     ).fetchone()
     data["notifications_sent"] = notif_count["cnt"] if notif_count else 0
@@ -419,26 +449,27 @@ def send_notification(conn, args):
 
 def list_notifications(conn, args):
     """List notifications with optional filters."""
-    query = "SELECT * FROM educlaw_notification WHERE 1=1"
+    _n = Table("educlaw_notification")
+    q = Q.from_(_n).select(_n.star)
     params = []
 
     if getattr(args, "recipient_type", None):
-        query += " AND recipient_type = ?"; params.append(args.recipient_type)
+        q = q.where(_n.recipient_type == P()); params.append(args.recipient_type)
     if getattr(args, "recipient_id", None):
-        query += " AND recipient_id = ?"; params.append(args.recipient_id)
+        q = q.where(_n.recipient_id == P()); params.append(args.recipient_id)
     if getattr(args, "notification_type", None):
-        query += " AND notification_type = ?"; params.append(args.notification_type)
+        q = q.where(_n.notification_type == P()); params.append(args.notification_type)
     if getattr(args, "is_read", None) is not None:
-        query += " AND is_read = ?"; params.append(int(args.is_read))
+        q = q.where(_n.is_read == P()); params.append(int(args.is_read))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_n.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY created_at DESC"
+    q = q.orderby(_n.created_at, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 100)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"notifications": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -473,25 +504,30 @@ def send_progress_report(conn, args):
     term = dict(term_row)
 
     # Get current grades per section in this term
+    _ce = Table("educlaw_course_enrollment")
+    _sec = Table("educlaw_section")
+    _c = Table("educlaw_course")
     enrollments = conn.execute(
-        """SELECT ce.id, ce.section_id, ce.final_percentage, ce.final_letter_grade,
-                  ce.is_grade_submitted, ce.enrollment_status,
-                  s.section_number, c.course_code, c.name as course_name, c.credit_hours
-           FROM educlaw_course_enrollment ce
-           JOIN educlaw_section s ON s.id = ce.section_id
-           JOIN educlaw_course c ON c.id = s.course_id
-           WHERE ce.student_id = ? AND s.academic_term_id = ?
-           AND ce.enrollment_status NOT IN ('dropped','withdrawn')
-           ORDER BY c.course_code""",
+        Q.from_(_ce).join(_sec).on(_sec.id == _ce.section_id)
+        .join(_c).on(_c.id == _sec.course_id)
+        .select(_ce.id, _ce.section_id, _ce.final_percentage, _ce.final_letter_grade,
+                _ce.is_grade_submitted, _ce.enrollment_status,
+                _sec.section_number, _c.course_code, _c.name.as_("course_name"), _c.credit_hours)
+        .where(_ce.student_id == P()).where(_sec.academic_term_id == P())
+        .where(_ce.enrollment_status.notin(['dropped', 'withdrawn']))
+        .orderby(_c.course_code)
+        .get_sql(),
         (student_id, academic_term_id)
     ).fetchall()
 
     # Get attendance summary for the term
+    _sa = Table("educlaw_student_attendance")
     att_rows = conn.execute(
-        """SELECT attendance_status, COUNT(*) as cnt
-           FROM educlaw_student_attendance
-           WHERE student_id = ? AND attendance_date >= ? AND attendance_date <= ?
-           GROUP BY attendance_status""",
+        Q.from_(_sa).select(_sa.attendance_status, fn.Count(_sa.star).as_("cnt"))
+        .where(_sa.student_id == P())
+        .where(_sa.attendance_date >= P()).where(_sa.attendance_date <= P())
+        .groupby(_sa.attendance_status)
+        .get_sql(),
         (student_id, term["start_date"], term["end_date"])
     ).fetchall()
     att_counts = {r["attendance_status"]: r["cnt"] for r in att_rows}
@@ -533,10 +569,13 @@ def send_progress_report(conn, args):
     notifications_created.append({"recipient_type": "student", "recipient_id": student_id, "notif_id": notif_id})
 
     # Send to guardians who receive communications
+    _g = Table("educlaw_guardian")
+    _sg = Table("educlaw_student_guardian")
     guardians = conn.execute(
-        """SELECT g.id, g.full_name FROM educlaw_guardian g
-           JOIN educlaw_student_guardian sg ON sg.guardian_id = g.id
-           WHERE sg.student_id = ? AND sg.receives_communications = 1""",
+        Q.from_(_g).join(_sg).on(_sg.guardian_id == _g.id)
+        .select(_g.id, _g.full_name)
+        .where(_sg.student_id == P()).where(_sg.receives_communications == 1)
+        .get_sql(),
         (student_id,)
     ).fetchall()
     for g in guardians:
@@ -584,13 +623,15 @@ def send_emergency_alert(conn, args):
 
     # Create emergency announcement
     ann_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_announcement
-           (id, title, body, priority, audience_type, audience_filter,
-            publish_date, expiry_date, announcement_status, published_by,
-            company_id, created_at, updated_at)
-           VALUES (?, ?, ?, 'emergency', 'all', NULL, ?, NULL, 'published', ?, ?, ?, ?)""",
-        (ann_id, title, message, now, sent_by, company_id, now, now)
+    sql, _ = insert_row("educlaw_announcement", {
+        "id": P(), "title": P(), "body": P(), "priority": P(),
+        "audience_type": P(), "audience_filter": P(),
+        "publish_date": P(), "expiry_date": P(), "announcement_status": P(),
+        "published_by": P(), "company_id": P(), "created_at": P(), "updated_at": P()
+    })
+    conn.execute(sql,
+        (ann_id, title, message, "emergency", "all", None,
+         now, None, "published", sent_by, company_id, now, now)
     )
 
     # Get ALL recipients in the company

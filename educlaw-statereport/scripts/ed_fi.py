@@ -21,7 +21,7 @@ try:
     from erpclaw_lib.crypto import encrypt_field as _encrypt_field_raw
     from erpclaw_lib.crypto import decrypt_field as _decrypt_field_raw
     from erpclaw_lib.crypto import derive_key
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 
     # Derive a stable field-encryption key from env passphrase
     _FIELD_PASSPHRASE = os.environ.get("ERPCLAW_FIELD_KEY")
@@ -162,11 +162,8 @@ def update_edfi_config(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_edfi_config SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [config_id]
-    )
+    sql, params = dynamic_update("sr_edfi_config", data=updates, where={"id": config_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_edfi_config", config_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": config_id, "message": "Ed-Fi config updated"})
@@ -317,11 +314,8 @@ def update_org_mapping(conn, args):
         err("No fields to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_org_mapping SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [mapping_id]
-    )
+    sql, params = dynamic_update("sr_org_mapping", data=updates, where={"id": mapping_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_org_mapping", mapping_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": mapping_id, "message": "Org mapping updated"})
@@ -434,11 +428,8 @@ def update_descriptor_mapping(conn, args):
     if not updates:
         err("No fields to update")
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE sr_edfi_descriptor_map SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [desc_id]
-    )
+    sql, params = dynamic_update("sr_edfi_descriptor_map", data=updates, where={"id": desc_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, "sr_edfi_descriptor_map", desc_id, "UPDATE", getattr(args, "user_id", None) or "")
     ok({"id": desc_id, "message": "Descriptor mapping updated"})

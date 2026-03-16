@@ -13,7 +13,8 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
+    from erpclaw_lib.vendor.pypika.terms import LiteralValue
 
     ENTITY_PREFIXES.setdefault("highered_application", "HAPP-")
 except ImportError:
@@ -68,16 +69,16 @@ def add_application(conn, args):
     now = _now_iso()
     naming = get_next_name(conn, "highered_application", company_id=company_id)
 
-    conn.execute("""
-        INSERT INTO highered_application
-        (id, naming_series, applicant_name, email, phone, program_id,
-         application_date, intended_term, intended_year, gpa_incoming,
-         test_scores, documents, application_status, notes,
-         company_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'submitted',?,?,?,?)
-    """, (app_id, naming, applicant_name, email, phone, program_id,
+    sql, _ = insert_row("highered_application", {
+        "id": P(), "naming_series": P(), "applicant_name": P(), "email": P(),
+        "phone": P(), "program_id": P(), "application_date": P(),
+        "intended_term": P(), "intended_year": P(), "gpa_incoming": P(),
+        "test_scores": P(), "documents": P(), "application_status": P(),
+        "notes": P(), "company_id": P(), "created_at": P(), "updated_at": P(),
+    })
+    conn.execute(sql, (app_id, naming, applicant_name, email, phone, program_id,
           application_date, intended_term, intended_year, gpa_incoming,
-          test_scores, documents, notes, company_id, now, now))
+          test_scores, documents, "submitted", notes, company_id, now, now))
     audit(conn, SKILL, "highered-add-application", "highered_application", app_id,
           new_values={"applicant_name": applicant_name})
     conn.commit()
@@ -88,21 +89,22 @@ def add_application(conn, args):
 def list_applications(conn, args):
     company_id = getattr(args, "company_id", None)
     _validate_company(conn, company_id)
-    q = "SELECT * FROM highered_application WHERE company_id=?"
+    t = Table("highered_application")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     program_id = getattr(args, "program_id", None)
     if program_id:
-        q += " AND program_id=?"
+        q = q.where(t.program_id == P())
         params.append(program_id)
     application_status = getattr(args, "application_status", None)
     if application_status:
-        q += " AND application_status=?"
+        q = q.where(t.application_status == P())
         params.append(application_status)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY application_date DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.application_date, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"applications": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -143,12 +145,12 @@ def add_admission_decision(conn, args):
 
     dec_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.execute("""
-        INSERT INTO highered_admission_decision
-        (id, application_id, decision, decided_by, decision_date, conditions,
-         scholarship_offered, notes, company_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (dec_id, application_id, decision, decided_by, decision_date,
+    sql, _ = insert_row("highered_admission_decision", {
+        "id": P(), "application_id": P(), "decision": P(), "decided_by": P(),
+        "decision_date": P(), "conditions": P(), "scholarship_offered": P(),
+        "notes": P(), "company_id": P(), "created_at": P(), "updated_at": P(),
+    })
+    conn.execute(sql, (dec_id, application_id, decision, decided_by, decision_date,
           conditions, scholarship_offered, notes, company_id, now, now))
 
     # Update application status based on decision
@@ -161,10 +163,10 @@ def add_admission_decision(conn, args):
     }
     new_app_status = status_map.get(decision)
     if new_app_status:
-        conn.execute(
-            "UPDATE highered_application SET application_status=?, updated_at=? WHERE id=?",
-            (new_app_status, now, application_id)
-        )
+        sql_upd, upd_params = dynamic_update("highered_application",
+            {"application_status": new_app_status, "updated_at": now},
+            {"id": application_id})
+        conn.execute(sql_upd, upd_params)
     conn.commit()
     ok({"id": dec_id, "application_id": application_id, "decision": decision,
         "scholarship_offered": scholarship_offered})
@@ -178,32 +180,27 @@ def update_admission_decision(conn, args):
     if not row:
         return err("Decision not found")
 
-    updates, params = [], []
+    data = {}
     decision = getattr(args, "decision", None)
     if decision is not None:
         if decision not in VALID_DECISIONS:
             return err(f"Invalid decision: {decision}")
-        updates.append("decision=?")
-        params.append(decision)
+        data["decision"] = decision
     for field in ("decided_by", "conditions", "notes"):
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{field}=?")
-            params.append(val)
+            data[field] = val
     decision_date = getattr(args, "decision_date", None)
     if decision_date is not None:
-        updates.append("decision_date=?")
-        params.append(decision_date)
+        data["decision_date"] = decision_date
     scholarship_offered = getattr(args, "scholarship_offered", None)
     if scholarship_offered is not None:
-        updates.append("scholarship_offered=?")
-        params.append(_to_money(scholarship_offered))
-    if not updates:
+        data["scholarship_offered"] = _to_money(scholarship_offered)
+    if not data:
         return err("No fields to update")
-    updates.append("updated_at=?")
-    params.append(_now_iso())
-    params.append(dec_id)
-    conn.execute(f"UPDATE highered_admission_decision SET {','.join(updates)} WHERE id=?", params)
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("highered_admission_decision", data, {"id": dec_id})
+    conn.execute(sql, params)
     conn.commit()
     ok({"id": dec_id, "updated": True})
 
@@ -211,21 +208,22 @@ def update_admission_decision(conn, args):
 def list_admission_decisions(conn, args):
     company_id = getattr(args, "company_id", None)
     _validate_company(conn, company_id)
-    q = "SELECT * FROM highered_admission_decision WHERE company_id=?"
+    t = Table("highered_admission_decision")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     application_id = getattr(args, "application_id", None)
     if application_id:
-        q += " AND application_id=?"
+        q = q.where(t.application_id == P())
         params.append(application_id)
     decision = getattr(args, "decision", None)
     if decision:
-        q += " AND decision=?"
+        q = q.where(t.decision == P())
         params.append(decision)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY decision_date DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.decision_date, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"decisions": [dict(r) for r in rows], "count": len(rows)})
 
 

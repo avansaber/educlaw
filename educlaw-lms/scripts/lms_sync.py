@@ -95,6 +95,7 @@ def _next_lms_series(conn, entity_type, prefix, company_id, use_year=False):
     year = datetime.now(timezone.utc).year
     full_prefix = f"{prefix}{year}-" if use_year else prefix
     entry_id = str(uuid.uuid4())
+    # PyPika: skipped — ON CONFLICT / UPSERT not supported by PyPika
     conn.execute(
         """INSERT INTO naming_series (id, entity_type, prefix, current_value, company_id)
            VALUES (?, ?, ?, 1, ?)
@@ -102,8 +103,10 @@ def _next_lms_series(conn, entity_type, prefix, company_id, use_year=False):
            DO UPDATE SET current_value = current_value + 1""",
         (entry_id, entity_type, full_prefix, company_id)
     )
+    _tns = Table("naming_series")
     row = conn.execute(
-        "SELECT current_value FROM naming_series WHERE entity_type = ? AND prefix = ? AND company_id = ?",
+        Q.from_(_tns).select(_tns.current_value)
+        .where(_tns.entity_type == P()).where(_tns.prefix == P()).where(_tns.company_id == P()).get_sql(),
         (entity_type, full_prefix, company_id)
     ).fetchone()
     seq = row[0] if row else 1
@@ -114,11 +117,12 @@ def _log_ferpa_access(conn, student_id, company_id, access_reason, triggered_by=
     """Write a FERPA data access log entry (uses 'api' as access_type — constraint-safe)."""
     log_id = str(uuid.uuid4())
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {
+            "id": P(), "user_id": P(), "student_id": P(), "data_category": P(),
+            "access_type": P(), "access_reason": P(), "is_emergency_access": P(),
+            "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P(),
+        })
+        conn.execute(sql,
             (log_id, triggered_by, student_id, "demographics", "api",
              access_reason, 0, "", company_id, _now_iso(), triggered_by)
         )
@@ -356,6 +360,7 @@ def update_lms_connection(conn, args):
     updates.append("updated_at = ?"); params.append(_now_iso())
     params.append(conn_id)
 
+    # PyPika: skipped — dynamic UPDATE with variable columns
     conn.execute(
         f"UPDATE educlaw_lms_connection SET {', '.join(updates)} WHERE id = ?",
         params
@@ -428,6 +433,7 @@ def list_lms_connections(conn, args):
             err(f"--connection-status must be one of: {', '.join(VALID_CONN_STATUSES)}")
         where.append("status = ?"); params.append(status_filter)
 
+    # PyPika: skipped — dynamic WHERE with optional filters
     rows = conn.execute(
         f"""SELECT id, naming_series, display_name, lms_type, status,
                    last_sync_at, has_dpa_signed, is_coppa_verified,
@@ -468,7 +474,9 @@ def test_lms_connection(conn, args):
         dpa_check = _check_dpa(row)
         new_status = "active" if not dpa_check else "draft"
         conn.execute(
-            "UPDATE educlaw_lms_connection SET status = ?, lms_site_name = ?, lms_version = ?, updated_at = ? WHERE id = ?",
+            update_row("educlaw_lms_connection",
+                       data={"status": P(), "lms_site_name": P(), "lms_version": P(), "updated_at": P()},
+                       where={"id": P()}),
             (new_status, "OneRoster CSV Export", "1.1", _now_iso(), conn_id)
         )
         conn.commit()
@@ -517,7 +525,9 @@ def test_lms_connection(conn, args):
         })
     else:
         conn.execute(
-            "UPDATE educlaw_lms_connection SET status = ?, updated_at = ? WHERE id = ?",
+            update_row("educlaw_lms_connection",
+                       data={"status": P(), "updated_at": P()},
+                       where={"id": P()}),
             ("error", _now_iso(), conn_id)
         )
         conn.commit()
@@ -570,9 +580,10 @@ def sync_courses(conn, args):
     term = dict(term)
 
     # Block concurrent sync runs
+    _tsl = Table("educlaw_lms_sync_log")
     existing_run = conn.execute(
-        "SELECT id FROM educlaw_lms_sync_log WHERE lms_connection_id = ? AND status = 'running'",
-        (conn_id,)
+        Q.from_(_tsl).select(_tsl.id).where(_tsl.lms_connection_id == P()).where(_tsl.status == P()).get_sql(),
+        (conn_id, 'running')
     ).fetchone()
     if existing_run:
         err(f"A sync run is already in progress (log_id={existing_run[0]}). Wait for it to complete.")
@@ -950,7 +961,9 @@ def sync_courses(conn, args):
 
     # Update last_sync_at on connection
     conn.execute(
-        "UPDATE educlaw_lms_connection SET last_sync_at = ?, updated_at = ? WHERE id = ?",
+        update_row("educlaw_lms_connection",
+                   data={"last_sync_at": P(), "updated_at": P()},
+                   where={"id": P()}),
         (_now_iso(), _now_iso(), conn_id)
     )
     conn.commit()
@@ -1020,6 +1033,7 @@ def list_sync_logs(conn, args):
     if to_date:
         where.append("created_at <= ?"); params.append(to_date)
 
+    # PyPika: skipped — dynamic WHERE with optional filters
     rows = conn.execute(
         f"""SELECT id, naming_series, sync_type, status, academic_term_id,
                    section_id, triggered_by, sections_synced, students_synced,
@@ -1107,8 +1121,10 @@ def resolve_sync_conflict(conn, args):
             new_status = "synced"
 
         conn.execute(
-            "UPDATE educlaw_lms_user_mapping SET sync_status = ?, sync_error = '', last_synced_at = ? WHERE id = ?",
-            (new_status, now, row["id"])
+            update_row("educlaw_lms_user_mapping",
+                       data={"sync_status": P(), "sync_error": P(), "last_synced_at": P()},
+                       where={"id": P()}),
+            (new_status, '', now, row["id"])
         )
         try:
             audit(conn, SKILL, "lms-apply-sync-resolution", "educlaw_lms_user_mapping", row["id"],
@@ -1145,8 +1161,10 @@ def resolve_sync_conflict(conn, args):
             new_status = "synced"
 
         conn.execute(
-            "UPDATE educlaw_lms_course_mapping SET sync_status = ?, sync_error = '', last_synced_at = ? WHERE id = ?",
-            (new_status, now, row["id"])
+            update_row("educlaw_lms_course_mapping",
+                       data={"sync_status": P(), "sync_error": P(), "last_synced_at": P()},
+                       where={"id": P()}),
+            (new_status, '', now, row["id"])
         )
         try:
             audit(conn, SKILL, "lms-apply-sync-resolution", "educlaw_lms_course_mapping", row["id"],

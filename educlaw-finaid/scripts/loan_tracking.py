@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 except ImportError:
     pass
 
@@ -74,10 +74,9 @@ def _load_holds(conn, award_id):
 
 
 def _save_holds(conn, award_id, holds):
-    conn.execute(
-        "UPDATE finaid_award SET disbursement_holds=?, updated_at=? WHERE id=?",
-        (json.dumps(holds), _now_iso(), award_id),
-    )
+    t = Table("finaid_award")
+    sql = Q.update(t).set(t.disbursement_holds, P()).set(t.updated_at, P()).where(t.id == P()).get_sql()
+    conn.execute(sql, (json.dumps(holds), _now_iso(), award_id))
 
 
 # ---------------------------------------------------------------------------
@@ -93,8 +92,9 @@ def add_loan(conn, args):
                 return err(f"Missing required field: {field}")
 
         # Validate award exists and has a loan aid_type
+        _fa = Table("finaid_award")
         award_row = conn.execute(
-            "SELECT id, aid_type FROM finaid_award WHERE id=? AND company_id=?",
+            Q.from_(_fa).select(_fa.id, _fa.aid_type).where(_fa.id == P()).where(_fa.company_id == P()).get_sql(),
             (args.award_id, args.company_id),
         ).fetchone()
         if not award_row:
@@ -203,24 +203,18 @@ def update_loan(conn, args):
             ("loan_amount", lambda v: str(round_currency(to_decimal(v)))),
         ]
 
-        fields = []
-        values = []
+        data = {}
         for field, coerce in updatable:
             val = getattr(args, field, None)
             if val is not None:
-                fields.append(f"{field}=?")
-                values.append(coerce(val))
+                data[field] = coerce(val)
 
-        if not fields:
+        if not data:
             return err("No updatable fields provided")
 
-        fields.append("updated_at=?")
-        values.append(_now_iso())
-        values.append(loan_id)
-
-        conn.execute(
-            f"UPDATE finaid_loan SET {', '.join(fields)} WHERE id=?", values
-        )
+        data["updated_at"] = _now_iso()
+        sql, params = dynamic_update("finaid_loan", data=data, where={"id": loan_id})
+        conn.execute(sql, params)
         conn.commit()
         return ok({"id": loan_id, "updated": True})
 
@@ -257,42 +251,41 @@ def list_loans(conn, args):
         if not company_id:
             return err("Missing required field: company_id")
 
-        clauses = ["company_id=?"]
+        t = Table("finaid_loan")
+        q = Q.from_(t).select(t.star).where(t.company_id == P())
         params = [company_id]
 
         student_id = getattr(args, "student_id", None)
         if student_id:
-            clauses.append("student_id=?")
+            q = q.where(t.student_id == P())
             params.append(student_id)
 
         aid_year_id = getattr(args, "aid_year_id", None)
         if aid_year_id:
-            clauses.append("aid_year_id=?")
+            q = q.where(t.aid_year_id == P())
             params.append(aid_year_id)
 
         loan_type = getattr(args, "loan_type", None)
         if loan_type:
-            clauses.append("loan_type=?")
+            q = q.where(t.loan_type == P())
             params.append(loan_type)
 
         status = getattr(args, "status", None)
         if status:
-            clauses.append("status=?")
+            q = q.where(t.status == P())
             params.append(status)
 
         cod_origination_status = getattr(args, "cod_origination_status", None)
         if cod_origination_status:
-            clauses.append("cod_origination_status=?")
+            q = q.where(t.cod_origination_status == P())
             params.append(cod_origination_status)
 
         limit = getattr(args, "limit", 50) or 50
         offset = getattr(args, "offset", 0) or 0
 
-        where = " AND ".join(clauses)
-        rows = conn.execute(
-            f"SELECT * FROM finaid_loan WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            params + [limit, offset],
-        ).fetchall()
+        q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
+        params.extend([limit, offset])
+        rows = conn.execute(q.get_sql(), params).fetchall()
 
         return ok({"loans": [row_to_dict(r) for r in rows], "count": len(rows)})
 
@@ -319,10 +312,9 @@ def update_mpn_status(conn, args):
         award_id = row[1]
         now = _now_iso()
 
-        conn.execute(
-            "UPDATE finaid_loan SET mpn_signed=1, mpn_signed_date=?, updated_at=? WHERE id=?",
-            (mpn_signed_date, now, loan_id),
-        )
+        _fl = Table("finaid_loan")
+        sql = Q.update(_fl).set(_fl.mpn_signed, 1).set(_fl.mpn_signed_date, P()).set(_fl.updated_at, P()).where(_fl.id == P()).get_sql()
+        conn.execute(sql, (mpn_signed_date, now, loan_id))
 
         # Remove 'mpn_pending' from finaid_award.disbursement_holds
         holds = _load_holds(conn, award_id)
@@ -356,12 +348,9 @@ def update_entrance_counseling(conn, args):
         award_id = row[1]
         now = _now_iso()
 
-        conn.execute(
-            """UPDATE finaid_loan
-               SET entrance_counseling_complete=1, entrance_counseling_date=?, updated_at=?
-               WHERE id=?""",
-            (ec_date, now, loan_id),
-        )
+        _fl = Table("finaid_loan")
+        sql = Q.update(_fl).set(_fl.entrance_counseling_complete, 1).set(_fl.entrance_counseling_date, P()).set(_fl.updated_at, P()).where(_fl.id == P()).get_sql()
+        conn.execute(sql, (ec_date, now, loan_id))
 
         # Remove 'ec_pending' from finaid_award.disbursement_holds
         holds = _load_holds(conn, award_id)
@@ -396,12 +385,9 @@ def update_exit_counseling(conn, args):
         if not row:
             return err(f"Loan not found: {loan_id}")
 
-        conn.execute(
-            """UPDATE finaid_loan
-               SET exit_counseling_complete=1, exit_counseling_date=?, updated_at=?
-               WHERE id=?""",
-            (exit_date, _now_iso(), loan_id),
-        )
+        _fl = Table("finaid_loan")
+        sql = Q.update(_fl).set(_fl.exit_counseling_complete, 1).set(_fl.exit_counseling_date, P()).set(_fl.updated_at, P()).where(_fl.id == P()).get_sql()
+        conn.execute(sql, (exit_date, _now_iso(), loan_id))
         conn.commit()
         return ok({
             "id": loan_id,
@@ -430,9 +416,9 @@ def generate_cod_origination(conn, args):
         loan = row_to_dict(loan_row)
 
         # Fetch award info
+        _fa = Table("finaid_award")
         award_row = conn.execute(
-            "SELECT id, offered_amount, aid_type, aid_source, student_id, "
-            "aid_year_id, award_package_id FROM finaid_award WHERE id=?",
+            Q.from_(_fa).select(_fa.id, _fa.offered_amount, _fa.aid_type, _fa.aid_source, _fa.student_id, _fa.aid_year_id, _fa.award_package_id).where(_fa.id == P()).get_sql(),
             (loan["award_id"],),
         ).fetchone()
 
@@ -512,21 +498,13 @@ def update_cod_origination_status(conn, args):
         now = _now_iso()
 
         # If accepted, also flip loan.status to 'active'
+        _fl = Table("finaid_loan")
         if cod_status == "accepted":
-            conn.execute(
-                """UPDATE finaid_loan
-                   SET cod_origination_status=?, cod_origination_date=?,
-                       status='active', updated_at=?
-                   WHERE id=?""",
-                (cod_status, cod_date, now, loan_id),
-            )
+            sql = Q.update(_fl).set(_fl.cod_origination_status, P()).set(_fl.cod_origination_date, P()).set(_fl.status, "active").set(_fl.updated_at, P()).where(_fl.id == P()).get_sql()
+            conn.execute(sql, (cod_status, cod_date, now, loan_id))
         else:
-            conn.execute(
-                """UPDATE finaid_loan
-                   SET cod_origination_status=?, cod_origination_date=?, updated_at=?
-                   WHERE id=?""",
-                (cod_status, cod_date, now, loan_id),
-            )
+            sql = Q.update(_fl).set(_fl.cod_origination_status, P()).set(_fl.cod_origination_date, P()).set(_fl.updated_at, P()).where(_fl.id == P()).get_sql()
+            conn.execute(sql, (cod_status, cod_date, now, loan_id))
 
         conn.commit()
         return ok({
@@ -557,8 +535,9 @@ def get_loan_limits_status(conn, args):
             return err("Missing required field: company_id")
 
         # All loans for this student in this aid year (current year)
+        t = Table("finaid_loan")
         year_rows = conn.execute(
-            "SELECT * FROM finaid_loan WHERE student_id=? AND aid_year_id=? AND company_id=?",
+            Q.from_(t).select(t.star).where(t.student_id == P()).where(t.aid_year_id == P()).where(t.company_id == P()).get_sql(),
             (student_id, aid_year_id, company_id),
         ).fetchall()
 
@@ -573,7 +552,7 @@ def get_loan_limits_status(conn, args):
 
         # Aggregate across ALL aid years for this student
         all_rows = conn.execute(
-            "SELECT * FROM finaid_loan WHERE student_id=? AND company_id=?",
+            Q.from_(t).select(t.star).where(t.student_id == P()).where(t.company_id == P()).get_sql(),
             (student_id, company_id),
         ).fetchall()
 

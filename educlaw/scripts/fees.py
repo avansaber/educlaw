@@ -19,7 +19,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -103,22 +103,24 @@ def update_fee_category(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(category_id)
-    conn.execute(f"UPDATE educlaw_fee_category SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_fee_category SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
     ok({"id": category_id, "updated_fields": changed})
 
 
 def list_fee_categories(conn, args):
-    query = "SELECT * FROM educlaw_fee_category WHERE 1=1"
+    _fc = Table("educlaw_fee_category")
+    q = Q.from_(_fc).select(_fc.star)
     params = []
 
     if getattr(args, "is_active", None) is not None:
-        query += " AND is_active = ?"; params.append(int(args.is_active))
+        q = q.where(_fc.is_active == P()); params.append(int(args.is_active))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_fc.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY name"
-    rows = conn.execute(query, params).fetchall()
+    q = q.orderby(_fc.name)
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"fee_categories": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -230,16 +232,18 @@ def update_fee_structure(conn, args):
             err("--items must be valid JSON array")
 
         total = Decimal("0")
+        _fcat = Table("educlaw_fee_category")
         for item in items:
             if not isinstance(item, dict):
                 continue
-            if not conn.execute("SELECT id FROM educlaw_fee_category WHERE id = ?",
+            if not conn.execute(Q.from_(_fcat).select(_fcat.id).where(_fcat.id == P()).get_sql(),
                                 (item.get("fee_category_id"),)).fetchone():
                 err(f"Fee category {item.get('fee_category_id')} not found")
             total += _d(item.get("amount", "0"))
 
+        _fsi = Table("educlaw_fee_structure_item")
         conn.execute(
-            "DELETE FROM educlaw_fee_structure_item WHERE fee_structure_id = ?", (structure_id,)
+            Q.from_(_fsi).delete().where(_fsi.fee_structure_id == P()).get_sql(), (structure_id,)
         )
         now = _now_iso()
         for i, item in enumerate(items):
@@ -259,7 +263,8 @@ def update_fee_structure(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(structure_id)
-    conn.execute(f"UPDATE educlaw_fee_structure SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_fee_structure SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
     ok({"id": structure_id, "updated_fields": changed})
 
@@ -274,11 +279,14 @@ def get_fee_structure(conn, args):
         err(f"Fee structure {structure_id} not found")
 
     data = dict(row)
+    _fsi = Table("educlaw_fee_structure_item")
+    _fc = Table("educlaw_fee_category")
     items = conn.execute(
-        """SELECT fsi.*, fc.name as category_name
-           FROM educlaw_fee_structure_item fsi
-           JOIN educlaw_fee_category fc ON fc.id = fsi.fee_category_id
-           WHERE fsi.fee_structure_id = ? ORDER BY fsi.sort_order""",
+        Q.from_(_fsi).join(_fc).on(_fc.id == _fsi.fee_category_id)
+        .select(_fsi.star, _fc.name.as_("category_name"))
+        .where(_fsi.fee_structure_id == P())
+        .orderby(_fsi.sort_order)
+        .get_sql(),
         (structure_id,)
     ).fetchall()
     data["items"] = [dict(i) for i in items]
@@ -286,26 +294,27 @@ def get_fee_structure(conn, args):
 
 
 def list_fee_structures(conn, args):
-    query = "SELECT * FROM educlaw_fee_structure WHERE 1=1"
+    _fs = Table("educlaw_fee_structure")
+    q = Q.from_(_fs).select(_fs.star)
     params = []
 
     if getattr(args, "program_id", None):
-        query += " AND program_id = ?"; params.append(args.program_id)
+        q = q.where(_fs.program_id == P()); params.append(args.program_id)
     if getattr(args, "academic_term_id", None):
-        query += " AND academic_term_id = ?"; params.append(args.academic_term_id)
+        q = q.where(_fs.academic_term_id == P()); params.append(args.academic_term_id)
     if getattr(args, "grade_level", None):
-        query += " AND grade_level = ?"; params.append(args.grade_level)
+        q = q.where(_fs.grade_level == P()); params.append(args.grade_level)
     if getattr(args, "is_active", None) is not None:
-        query += " AND is_active = ?"; params.append(int(args.is_active))
+        q = q.where(_fs.is_active == P()); params.append(int(args.is_active))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_fs.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY name"
+    q = q.orderby(_fs.name)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"fee_structures": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -411,30 +420,32 @@ def update_scholarship(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(scholarship_id)
-    conn.execute(f"UPDATE educlaw_scholarship SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_scholarship SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
     ok({"id": scholarship_id, "updated_fields": changed})
 
 
 def list_scholarships(conn, args):
-    query = "SELECT * FROM educlaw_scholarship WHERE 1=1"
+    _sch = Table("educlaw_scholarship")
+    q = Q.from_(_sch).select(_sch.star)
     params = []
 
     if getattr(args, "student_id", None):
-        query += " AND student_id = ?"; params.append(args.student_id)
+        q = q.where(_sch.student_id == P()); params.append(args.student_id)
     if getattr(args, "academic_term_id", None):
-        query += " AND academic_term_id = ?"; params.append(args.academic_term_id)
+        q = q.where(_sch.academic_term_id == P()); params.append(args.academic_term_id)
     if getattr(args, "scholarship_status", None):
-        query += " AND scholarship_status = ?"; params.append(args.scholarship_status)
+        q = q.where(_sch.scholarship_status == P()); params.append(args.scholarship_status)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_sch.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY created_at DESC"
+    q = q.orderby(_sch.created_at, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"scholarships": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -461,19 +472,22 @@ def generate_fee_invoice(conn, args):
     student = dict(student_row)
 
     # Find applicable fee structure
+    _fs = Table("educlaw_fee_structure")
     fee_struct = None
     if program_id and academic_term_id:
         fee_struct = conn.execute(
-            """SELECT * FROM educlaw_fee_structure
-               WHERE company_id = ? AND program_id = ? AND academic_term_id = ? AND is_active = 1
-               LIMIT 1""",
+            Q.from_(_fs).select(_fs.star)
+            .where(_fs.company_id == P()).where(_fs.program_id == P())
+            .where(_fs.academic_term_id == P()).where(_fs.is_active == 1)
+            .limit(1).get_sql(),
             (company_id, program_id, academic_term_id)
         ).fetchone()
     if not fee_struct and academic_term_id and student.get("grade_level"):
         fee_struct = conn.execute(
-            """SELECT * FROM educlaw_fee_structure
-               WHERE company_id = ? AND grade_level = ? AND academic_term_id = ? AND is_active = 1
-               LIMIT 1""",
+            Q.from_(_fs).select(_fs.star)
+            .where(_fs.company_id == P()).where(_fs.grade_level == P())
+            .where(_fs.academic_term_id == P()).where(_fs.is_active == 1)
+            .limit(1).get_sql(),
             (company_id, student["grade_level"], academic_term_id)
         ).fetchone()
 
@@ -484,16 +498,20 @@ def generate_fee_invoice(conn, args):
     base_amount = _d(fs["total_amount"])
 
     # Get line items
+    _fsi = Table("educlaw_fee_structure_item")
+    _fc = Table("educlaw_fee_category")
     items = conn.execute(
-        """SELECT fsi.*, fc.name as category_name
-           FROM educlaw_fee_structure_item fsi
-           JOIN educlaw_fee_category fc ON fc.id = fsi.fee_category_id
-           WHERE fsi.fee_structure_id = ? ORDER BY fsi.sort_order""",
+        Q.from_(_fsi).join(_fc).on(_fc.id == _fsi.fee_category_id)
+        .select(_fsi.star, _fc.name.as_("category_name"))
+        .where(_fsi.fee_structure_id == P())
+        .orderby(_fsi.sort_order)
+        .get_sql(),
         (fs["id"],)
     ).fetchall()
 
     # Apply scholarships
-    scholarships = conn.execute(
+    _sch = Table("educlaw_scholarship")
+    scholarships = conn.execute(  # PyPika: skipped — IS NULL OR = ? not cleanly expressible
         """SELECT * FROM educlaw_scholarship
            WHERE student_id = ? AND scholarship_status = 'active'
            AND (academic_term_id IS NULL OR academic_term_id = ?)""",
@@ -565,8 +583,10 @@ def list_fee_invoices(conn, args):
         customer_id = dict(student_row).get("customer_id")
         if customer_id:
             try:
+                _si = Table("sales_invoice")
                 invoices = conn.execute(
-                    "SELECT * FROM sales_invoice WHERE customer_id = ? ORDER BY posting_date DESC",
+                    Q.from_(_si).select(_si.star).where(_si.customer_id == P())
+                    .orderby(_si.posting_date, order=Order.desc).get_sql(),
                     (customer_id,)
                 ).fetchall()
                 ok({"student_id": student_id, "invoices": [dict(i) for i in invoices],
@@ -598,9 +618,12 @@ def get_student_account(conn, args):
 
     if customer_id:
         try:
+            _si = Table("sales_invoice")
             inv_rows = conn.execute(
-                """SELECT id, name, posting_date, grand_total, status, outstanding_amount
-                   FROM sales_invoice WHERE customer_id = ? ORDER BY posting_date DESC""",
+                Q.from_(_si).select(_si.id, _si.name, _si.posting_date, _si.grand_total,
+                                    _si.status, _si.outstanding_amount)
+                .where(_si.customer_id == P())
+                .orderby(_si.posting_date, order=Order.desc).get_sql(),
                 (customer_id,)
             ).fetchall()
             invoices = [dict(r) for r in inv_rows]
@@ -609,8 +632,11 @@ def get_student_account(conn, args):
         except Exception:
             pass
 
+    _sch = Table("educlaw_scholarship")
     scholarships = conn.execute(
-        "SELECT * FROM educlaw_scholarship WHERE student_id = ? AND scholarship_status = 'active'",
+        Q.from_(_sch).select(_sch.star)
+        .where(_sch.student_id == P()).where(_sch.scholarship_status == 'active')
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
@@ -631,8 +657,11 @@ def get_outstanding_fees(conn, args):
         err("--company-id is required")
 
     today = date.today().isoformat()
+    _st = Table("educlaw_student")
     students = conn.execute(
-        "SELECT id, naming_series, full_name, customer_id, email FROM educlaw_student WHERE company_id = ? AND status = 'active'",
+        Q.from_(_st).select(_st.id, _st.naming_series, _st.full_name, _st.customer_id, _st.email)
+        .where(_st.company_id == P()).where(_st.status == 'active')
+        .get_sql(),
         (company_id,)
     ).fetchall()
 
@@ -642,11 +671,15 @@ def get_outstanding_fees(conn, args):
         if not s.get("customer_id"):
             continue
         try:
+            _si = Table("sales_invoice")
             overdue = conn.execute(
-                """SELECT id, posting_date, due_date, grand_total, outstanding_amount, status
-                   FROM sales_invoice
-                   WHERE customer_id = ? AND status IN ('unpaid', 'overdue')
-                   AND due_date < ? AND outstanding_amount > 0""",
+                Q.from_(_si).select(_si.id, _si.posting_date, _si.due_date,
+                                    _si.grand_total, _si.outstanding_amount, _si.status)
+                .where(_si.customer_id == P())
+                .where(_si.status.isin(['unpaid', 'overdue']))
+                .where(_si.due_date < P())
+                .where(_si.outstanding_amount > 0)
+                .get_sql(),
                 (s["customer_id"], today)
             ).fetchall()
             if overdue:

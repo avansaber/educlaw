@@ -20,7 +20,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
 except ImportError:
     pass
 
@@ -94,8 +94,12 @@ def add_academic_year(conn, args):
         err(f"Company {company_id} not found")
 
     # Check date overlap with existing years
+    _ay = Table("educlaw_academic_year")
     existing = conn.execute(
-        "SELECT id, name FROM educlaw_academic_year WHERE company_id = ? AND NOT (end_date <= ? OR start_date >= ?)",
+        Q.from_(_ay).select(_ay.id, _ay.name)
+        .where(_ay.company_id == P())
+        .where(LiteralValue('NOT ("end_date"<=? OR "start_date">=?)'))
+        .get_sql(),
         (company_id, start_date, end_date)
     ).fetchone()
     if existing:
@@ -152,7 +156,8 @@ def update_academic_year(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(year_id)
-    conn.execute(f"UPDATE educlaw_academic_year SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_academic_year SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-academic-year", "educlaw_academic_year", year_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -169,8 +174,10 @@ def get_academic_year(conn, args):
         err(f"Academic year {year_id} not found")
 
     data = dict(row)
+    _at = Table("educlaw_academic_term")
     terms = conn.execute(
-        "SELECT * FROM educlaw_academic_term WHERE academic_year_id = ? ORDER BY start_date",
+        Q.from_(_at).select(_at.star).where(_at.academic_year_id == P())
+        .orderby(_at.start_date).get_sql(),
         (year_id,)
     ).fetchall()
     data["terms"] = [dict(t) for t in terms]
@@ -178,23 +185,24 @@ def get_academic_year(conn, args):
 
 
 def list_academic_years(conn, args):
-    query = "SELECT * FROM educlaw_academic_year WHERE 1=1"
+    _ay = Table("educlaw_academic_year")
+    q = Q.from_(_ay).select(_ay.star)
     params = []
 
     company_id = getattr(args, "company_id", None)
     if company_id:
-        query += " AND company_id = ?"; params.append(company_id)
+        q = q.where(_ay.company_id == P()); params.append(company_id)
 
     is_active = getattr(args, "is_active", None)
     if is_active is not None:
-        query += " AND is_active = ?"; params.append(int(is_active))
+        q = q.where(_ay.is_active == P()); params.append(int(is_active))
 
-    query += " ORDER BY start_date DESC"
+    q = q.orderby(_ay.start_date, order=Order.desc)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"academic_years": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -309,7 +317,8 @@ def update_academic_term(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(term_id)
-    conn.execute(f"UPDATE educlaw_academic_term SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_academic_term SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-academic-term", "educlaw_academic_term", term_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -326,8 +335,11 @@ def get_academic_term(conn, args):
         err(f"Academic term {term_id} not found")
 
     data = dict(row)
+    _sec = Table("educlaw_section")
     section_count = conn.execute(
-        "SELECT COUNT(*) FROM educlaw_section WHERE academic_term_id = ? AND status != 'cancelled'",
+        Q.from_(_sec).select(fn.Count(_sec.star))
+        .where(_sec.academic_term_id == P()).where(_sec.status != 'cancelled')
+        .get_sql(),
         (term_id,)
     ).fetchone()[0]
     data["section_count"] = section_count
@@ -335,22 +347,23 @@ def get_academic_term(conn, args):
 
 
 def list_academic_terms(conn, args):
-    query = "SELECT * FROM educlaw_academic_term WHERE 1=1"
+    _at = Table("educlaw_academic_term")
+    q = Q.from_(_at).select(_at.star)
     params = []
 
     if getattr(args, "academic_year_id", None):
-        query += " AND academic_year_id = ?"; params.append(args.academic_year_id)
+        q = q.where(_at.academic_year_id == P()); params.append(args.academic_year_id)
     if getattr(args, "term_status", None):
-        query += " AND status = ?"; params.append(args.term_status)
+        q = q.where(_at.status == P()); params.append(args.term_status)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_at.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY start_date"
+    q = q.orderby(_at.start_date)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"academic_terms": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -439,31 +452,33 @@ def update_room(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(room_id)
-    conn.execute(f"UPDATE educlaw_room SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_room SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-room", "educlaw_room", room_id, new_values={"updated_fields": changed})
     conn.commit()
     ok({"id": room_id, "updated_fields": changed})
 
 
 def list_rooms(conn, args):
-    query = "SELECT * FROM educlaw_room WHERE 1=1"
+    _rm = Table("educlaw_room")
+    q = Q.from_(_rm).select(_rm.star)
     params = []
 
     if getattr(args, "room_type", None):
-        query += " AND room_type = ?"; params.append(args.room_type)
+        q = q.where(_rm.room_type == P()); params.append(args.room_type)
     if getattr(args, "building", None):
-        query += " AND building = ?"; params.append(args.building)
+        q = q.where(_rm.building == P()); params.append(args.building)
     if getattr(args, "is_active", None) is not None:
-        query += " AND is_active = ?"; params.append(int(args.is_active))
+        q = q.where(_rm.is_active == P()); params.append(int(args.is_active))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_rm.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY building, room_number"
+    q = q.orderby(_rm.building).orderby(_rm.room_number)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     result = []
     for r in rows:
         d = dict(r)
@@ -560,7 +575,8 @@ def update_program(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(program_id)
-    conn.execute(f"UPDATE educlaw_program SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_program SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-program", "educlaw_program", program_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -578,11 +594,13 @@ def get_program(conn, args):
 
     data = dict(row)
     # Requirements with course info
+    _pr = Table("educlaw_program_requirement")
+    _c = Table("educlaw_course")
     reqs = conn.execute(
-        """SELECT pr.*, c.course_code, c.name as course_name, c.credit_hours
-           FROM educlaw_program_requirement pr
-           JOIN educlaw_course c ON c.id = pr.course_id
-           WHERE pr.program_id = ?""",
+        Q.from_(_pr).join(_c).on(_c.id == _pr.course_id)
+        .select(_pr.star, _c.course_code, _c.name.as_("course_name"), _c.credit_hours)
+        .where(_pr.program_id == P())
+        .get_sql(),
         (program_id,)
     ).fetchall()
     data["requirements"] = [dict(r) for r in reqs]
@@ -590,24 +608,25 @@ def get_program(conn, args):
 
 
 def list_programs(conn, args):
-    query = "SELECT * FROM educlaw_program WHERE 1=1"
+    _p = Table("educlaw_program")
+    q = Q.from_(_p).select(_p.star)
     params = []
 
     if getattr(args, "program_type", None):
-        query += " AND program_type = ?"; params.append(args.program_type)
+        q = q.where(_p.program_type == P()); params.append(args.program_type)
     if getattr(args, "department_id", None):
-        query += " AND department_id = ?"; params.append(args.department_id)
+        q = q.where(_p.department_id == P()); params.append(args.department_id)
     if getattr(args, "is_active", None) is not None:
-        query += " AND is_active = ?"; params.append(int(args.is_active))
+        q = q.where(_p.is_active == P()); params.append(int(args.is_active))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_p.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY name"
+    q = q.orderby(_p.name)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"programs": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -671,7 +690,7 @@ def add_course(conn, args):
                 if not conn.execute(Q.from_(Table("educlaw_course")).select(Field("id")).where(Field("id") == P()).get_sql(), (prereq_course_id,)).fetchone():
                     err(f"Prerequisite course {prereq_course_id} not found")
                 prereq_id = str(uuid.uuid4())
-                conn.execute(
+                conn.execute(  # PyPika: skipped — INSERT OR IGNORE not supported by PyPika
                     """INSERT OR IGNORE INTO educlaw_course_prerequisite
                        (id, course_id, prerequisite_course_id, min_grade, is_corequisite, created_at, created_by)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -725,7 +744,8 @@ def update_course(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(course_id)
-    conn.execute(f"UPDATE educlaw_course SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_course SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-course", "educlaw_course", course_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -743,21 +763,25 @@ def get_course(conn, args):
 
     data = dict(row)
 
+    _cp = Table("educlaw_course_prerequisite")
+    _c2 = Table("educlaw_course")
     prereqs = conn.execute(
-        """SELECT cp.*, c.course_code, c.name as prereq_name
-           FROM educlaw_course_prerequisite cp
-           JOIN educlaw_course c ON c.id = cp.prerequisite_course_id
-           WHERE cp.course_id = ?""",
+        Q.from_(_cp).join(_c2).on(_c2.id == _cp.prerequisite_course_id)
+        .select(_cp.star, _c2.course_code, _c2.name.as_("prereq_name"))
+        .where(_cp.course_id == P())
+        .get_sql(),
         (course_id,)
     ).fetchall()
     data["prerequisites"] = [dict(p) for p in prereqs]
 
+    _sec = Table("educlaw_section")
+    _at = Table("educlaw_academic_term")
     sections = conn.execute(
-        """SELECT s.*, at.name as term_name
-           FROM educlaw_section s
-           JOIN educlaw_academic_term at ON at.id = s.academic_term_id
-           WHERE s.course_id = ? AND s.status != 'cancelled'
-           ORDER BY at.start_date DESC""",
+        Q.from_(_sec).join(_at).on(_at.id == _sec.academic_term_id)
+        .select(_sec.star, _at.name.as_("term_name"))
+        .where(_sec.course_id == P()).where(_sec.status != 'cancelled')
+        .orderby(_at.start_date, order=Order.desc)
+        .get_sql(),
         (course_id,)
     ).fetchall()
     data["sections"] = [dict(s) for s in sections]
@@ -765,26 +789,27 @@ def get_course(conn, args):
 
 
 def list_courses(conn, args):
-    query = "SELECT * FROM educlaw_course WHERE 1=1"
+    _c = Table("educlaw_course")
+    q = Q.from_(_c).select(_c.star)
     params = []
 
     if getattr(args, "department_id", None):
-        query += " AND department_id = ?"; params.append(args.department_id)
+        q = q.where(_c.department_id == P()); params.append(args.department_id)
     if getattr(args, "grade_level", None):
-        query += " AND grade_level = ?"; params.append(args.grade_level)
+        q = q.where(_c.grade_level == P()); params.append(args.grade_level)
     if getattr(args, "course_type", None):
-        query += " AND course_type = ?"; params.append(args.course_type)
+        q = q.where(_c.course_type == P()); params.append(args.course_type)
     if getattr(args, "is_active", None) is not None:
-        query += " AND is_active = ?"; params.append(int(args.is_active))
+        q = q.where(_c.is_active == P()); params.append(int(args.is_active))
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_c.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY course_code"
+    q = q.orderby(_c.course_code)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"courses": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -799,15 +824,17 @@ def _check_section_conflicts(conn, academic_term_id, instructor_id, room_id,
         return None
 
     # Get all sections in same term with schedule info
-    q = """SELECT id, instructor_id, room_id, days_of_week, start_time, end_time
-           FROM educlaw_section
-           WHERE academic_term_id = ? AND status != 'cancelled'"""
+    _sec = Table("educlaw_section")
+    _q = Q.from_(_sec).select(
+        _sec.id, _sec.instructor_id, _sec.room_id, _sec.days_of_week,
+        _sec.start_time, _sec.end_time
+    ).where(_sec.academic_term_id == P()).where(_sec.status != 'cancelled')
     params = [academic_term_id]
     if exclude_section_id:
-        q += " AND id != ?"
+        _q = _q.where(_sec.id != P())
         params.append(exclude_section_id)
 
-    existing = conn.execute(q, params).fetchall()
+    existing = conn.execute(_q.get_sql(), params).fetchall()
     for s in existing:
         s = dict(s)
         if not _times_overlap(start_time, end_time, s["start_time"], s["end_time"]):
@@ -963,7 +990,8 @@ def update_section(conn, args):
 
     updates.append("updated_at = datetime('now')")
     params.append(section_id)
-    conn.execute(f"UPDATE educlaw_section SET {', '.join(updates)} WHERE id = ?", params)
+    conn.execute(  # PyPika: skipped — dynamic column set built conditionally
+        f"UPDATE educlaw_section SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, SKILL, "edu-update-section", "educlaw_section", section_id,
           new_values={"updated_fields": changed})
     conn.commit()
@@ -985,46 +1013,51 @@ def get_section(conn, args):
     except Exception:
         data["days_of_week"] = []
 
+    _ce = Table("educlaw_course_enrollment")
+    _st = Table("educlaw_student")
     enrollments = conn.execute(
-        """SELECT ce.*, s.naming_series, s.first_name, s.last_name
-           FROM educlaw_course_enrollment ce
-           JOIN educlaw_student s ON s.id = ce.student_id
-           WHERE ce.section_id = ? AND ce.enrollment_status IN ('enrolled','waitlisted')
-           ORDER BY s.last_name, s.first_name""",
+        Q.from_(_ce).join(_st).on(_st.id == _ce.student_id)
+        .select(_ce.star, _st.naming_series, _st.first_name, _st.last_name)
+        .where(_ce.section_id == P())
+        .where(_ce.enrollment_status.isin(['enrolled', 'waitlisted']))
+        .orderby(_st.last_name).orderby(_st.first_name)
+        .get_sql(),
         (section_id,)
     ).fetchall()
     data["enrolled_students"] = [dict(e) for e in enrollments]
     data["enrollment_count"] = len([e for e in data["enrolled_students"]
                                     if dict(e)["enrollment_status"] == "enrolled"])
 
+    _ap = Table("educlaw_assessment_plan")
     plan = conn.execute(
-        "SELECT * FROM educlaw_assessment_plan WHERE section_id = ?", (section_id,)
+        Q.from_(_ap).select(_ap.star).where(_ap.section_id == P()).get_sql(), (section_id,)
     ).fetchone()
     data["assessment_plan"] = dict(plan) if plan else None
     ok(data)
 
 
 def list_sections(conn, args):
-    query = "SELECT * FROM educlaw_section WHERE 1=1"
+    _sec = Table("educlaw_section")
+    q = Q.from_(_sec).select(_sec.star)
     params = []
 
     if getattr(args, "academic_term_id", None):
-        query += " AND academic_term_id = ?"; params.append(args.academic_term_id)
+        q = q.where(_sec.academic_term_id == P()); params.append(args.academic_term_id)
     if getattr(args, "course_id", None):
-        query += " AND course_id = ?"; params.append(args.course_id)
+        q = q.where(_sec.course_id == P()); params.append(args.course_id)
     if getattr(args, "instructor_id", None):
-        query += " AND instructor_id = ?"; params.append(args.instructor_id)
+        q = q.where(_sec.instructor_id == P()); params.append(args.instructor_id)
     if getattr(args, "section_status", None):
-        query += " AND status = ?"; params.append(args.section_status)
+        q = q.where(_sec.status == P()); params.append(args.section_status)
     if getattr(args, "company_id", None):
-        query += " AND company_id = ?"; params.append(args.company_id)
+        q = q.where(_sec.company_id == P()); params.append(args.company_id)
 
-    query += " ORDER BY naming_series"
+    q = q.orderby(_sec.naming_series)
     limit = int(getattr(args, "limit", None) or 50)
     offset = int(getattr(args, "offset", None) or 0)
-    query += f" LIMIT {limit} OFFSET {offset}"
+    q = q.limit(limit).offset(offset)
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"sections": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1052,8 +1085,13 @@ def open_section(conn, args):
         err("Room must be assigned before opening section")
 
     new_status = "open"
+    _sec2 = Table("educlaw_section")
     conn.execute(
-        "UPDATE educlaw_section SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sec2)
+        .set(_sec2.status, P())
+        .set(_sec2.updated_at, LiteralValue("datetime('now')"))
+        .where(_sec2.id == P())
+        .get_sql(),
         (new_status, section_id)
     )
     audit(conn, SKILL, "edu-open-section", "educlaw_section", section_id,
@@ -1076,9 +1114,11 @@ def cancel_section(conn, args):
         err("Section is already cancelled")
 
     # Drop all enrolled students
+    _ce = Table("educlaw_course_enrollment")
     enrolled = conn.execute(
-        """SELECT id, student_id FROM educlaw_course_enrollment
-           WHERE section_id = ? AND enrollment_status = 'enrolled'""",
+        Q.from_(_ce).select(_ce.id, _ce.student_id)
+        .where(_ce.section_id == P()).where(_ce.enrollment_status == 'enrolled')
+        .get_sql(),
         (section_id,)
     ).fetchall()
 
@@ -1086,11 +1126,15 @@ def cancel_section(conn, args):
     dropped_count = 0
     for enr in enrolled:
         enr = dict(enr)
+        _ce2 = Table("educlaw_course_enrollment")
         conn.execute(
-            """UPDATE educlaw_course_enrollment
-               SET enrollment_status = 'dropped', drop_date = ?, drop_reason = 'Section cancelled',
-                   updated_at = datetime('now')
-               WHERE id = ?""",
+            Q.update(_ce2)
+            .set(_ce2.enrollment_status, 'dropped')
+            .set(_ce2.drop_date, P())
+            .set(_ce2.drop_reason, 'Section cancelled')
+            .set(_ce2.updated_at, LiteralValue("datetime('now')"))
+            .where(_ce2.id == P())
+            .get_sql(),
             (now[:10], enr["id"])
         )
         # Create notification for each dropped student
@@ -1107,14 +1151,24 @@ def cancel_section(conn, args):
         dropped_count += 1
 
     # Cancel waitlisted entries
+    _wl = Table("educlaw_waitlist")
     conn.execute(
-        """UPDATE educlaw_waitlist SET waitlist_status = 'cancelled', updated_at = datetime('now')
-           WHERE section_id = ? AND waitlist_status = 'waiting'""",
+        Q.update(_wl)
+        .set(_wl.waitlist_status, 'cancelled')
+        .set(_wl.updated_at, LiteralValue("datetime('now')"))
+        .where(_wl.section_id == P()).where(_wl.waitlist_status == 'waiting')
+        .get_sql(),
         (section_id,)
     )
 
+    _sec3 = Table("educlaw_section")
     conn.execute(
-        "UPDATE educlaw_section SET status = 'cancelled', current_enrollment = 0, updated_at = datetime('now') WHERE id = ?",
+        Q.update(_sec3)
+        .set(_sec3.status, 'cancelled')
+        .set(_sec3.current_enrollment, 0)
+        .set(_sec3.updated_at, LiteralValue("datetime('now')"))
+        .where(_sec3.id == P())
+        .get_sql(),
         (section_id,)
     )
     audit(conn, SKILL, "edu-cancel-section", "educlaw_section", section_id,

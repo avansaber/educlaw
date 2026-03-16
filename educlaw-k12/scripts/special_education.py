@@ -24,7 +24,7 @@ from erpclaw_lib.naming import get_next_name
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
-from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -39,13 +39,14 @@ def _log_ferpa(conn, user_id, student_id, data_category, company_id,
                access_type="view", access_reason=""):
     """Insert FERPA data access log (silently ignores failures)."""
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, 0, '', ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {
+            "id": P(), "user_id": P(), "student_id": P(), "data_category": P(),
+            "access_type": P(), "access_reason": P(), "is_emergency_access": P(),
+            "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P(),
+        })
+        conn.execute(sql,
             (str(uuid.uuid4()), user_id or "", student_id, data_category,
-             access_type, access_reason, company_id, _now_iso(), user_id or "")
+             access_type, access_reason, 0, "", company_id, _now_iso(), user_id or "")
         )
     except Exception:
         pass
@@ -172,11 +173,8 @@ def update_sped_referral(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_sped_referral SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [referral_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_sped_referral", data=updates, where={"id": referral_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-sped-referral", "educlaw_k12_sped_referral", referral_id)
     return ok({"id": referral_id, "message": "SPED referral updated",
@@ -203,8 +201,10 @@ def get_sped_referral(conn, args):
     data = row_to_dict(row)
     data["areas_of_concern"] = _parse_json(data.get("areas_of_concern"), [])
 
+    ev_t = Table("educlaw_k12_sped_evaluation")
     evaluations = conn.execute(
-        "SELECT * FROM educlaw_k12_sped_evaluation WHERE referral_id = ? ORDER BY evaluation_date",
+        Q.from_(ev_t).select(ev_t.star).where(ev_t.referral_id == P())
+        .orderby(ev_t.evaluation_date).get_sql(),
         (referral_id,)
     ).fetchall()
     eval_list = rows_to_list(evaluations)
@@ -309,8 +309,10 @@ def list_sped_evaluations(conn, args):
     if not referral_id:
         return err("--referral-id is required")
 
+    ev_t = Table("educlaw_k12_sped_evaluation")
     rows = conn.execute(
-        "SELECT * FROM educlaw_k12_sped_evaluation WHERE referral_id = ? ORDER BY evaluation_date",
+        Q.from_(ev_t).select(ev_t.star).where(ev_t.referral_id == P())
+        .orderby(ev_t.evaluation_date).get_sql(),
         (referral_id,)
     ).fetchall()
     result = rows_to_list(rows)
@@ -347,8 +349,10 @@ def record_sped_eligibility(conn, args):
         return err(f"Student {student_id} not found")
 
     # Check uniqueness: one eligibility per referral
+    elig_t = Table("educlaw_k12_sped_eligibility")
     existing = conn.execute(
-        "SELECT id FROM educlaw_k12_sped_eligibility WHERE referral_id = ?", (referral_id,)
+        Q.from_(elig_t).select(elig_t.id).where(elig_t.referral_id == P()).get_sql(),
+        (referral_id,)
     ).fetchone()
     if existing:
         return err(f"Eligibility determination already exists for referral {referral_id}")
@@ -385,9 +389,10 @@ def record_sped_eligibility(conn, args):
 
     # Update referral status to evaluation_complete
     conn.execute(
-        "UPDATE educlaw_k12_sped_referral SET referral_status = 'evaluation_complete', "
-        "updated_at = ? WHERE id = ?",
-        (now, referral_id)
+        update_row("educlaw_k12_sped_referral",
+                   data={"referral_status": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("evaluation_complete", now, referral_id)
     )
 
     _log_ferpa(conn, user_id, student_id, "special_education", company_id,
@@ -586,11 +591,8 @@ def update_iep(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_iep SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [iep_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_iep", data=updates, where={"id": iep_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-iep", "educlaw_k12_iep", iep_id)
     return ok({"id": iep_id, "message": "IEP updated"})
@@ -619,6 +621,7 @@ def activate_iep(conn, args):
     now = _now_iso()
     student_id = iep["student_id"]
 
+    # PyPika: skipped — multi-condition WHERE with != operator
     # Set any existing active IEP for this student to superseded
     conn.execute(
         """UPDATE educlaw_k12_iep SET iep_status = 'superseded', updated_at = ?
@@ -628,10 +631,10 @@ def activate_iep(conn, args):
 
     # Activate this IEP
     conn.execute(
-        """UPDATE educlaw_k12_iep
-           SET iep_status = 'active', parent_consent_date = ?, updated_at = ?
-           WHERE id = ?""",
-        (parent_consent_date, now, iep_id)
+        update_row("educlaw_k12_iep",
+                   data={"iep_status": P(), "parent_consent_date": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("active", parent_consent_date, now, iep_id)
     )
     conn.commit()
     audit(conn, SKILL, "k12-activate-iep", "educlaw_k12_iep", iep_id, description="IEP activated")
@@ -701,8 +704,10 @@ def amend_iep(conn, args):
 
     # Mark prior IEP as amended
     conn.execute(
-        "UPDATE educlaw_k12_iep SET iep_status = 'amended', updated_at = ? WHERE id = ?",
-        (now, iep_id)
+        update_row("educlaw_k12_iep",
+                   data={"iep_status": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("amended", now, iep_id)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-iep-amendment", "educlaw_k12_iep",
@@ -1049,6 +1054,7 @@ def log_iep_service_session(conn, args):
          missed_reason, now, created_by)
     )
 
+    # PyPika: skipped — SQL expression total_minutes_delivered + ?
     # Business rule: increment total_minutes_delivered when session was delivered
     if not was_session_missed and minutes_delivered > 0:
         conn.execute(
@@ -1423,11 +1429,8 @@ def update_504_plan(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_504_plan SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [plan_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_504_plan", data=updates, where={"id": plan_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-504-plan", "educlaw_k12_504_plan", plan_id)
     return ok({"id": plan_id, "message": "504 plan updated"})

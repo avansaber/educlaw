@@ -23,7 +23,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 except ImportError:
     pass
 
@@ -105,22 +105,24 @@ def add_scholarship_program(conn, args):
     program_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO finaid_scholarship_program
-               (id, name, code, description, scholarship_type, funding_source,
-                award_method, award_amount_type, award_amount, min_award, max_award,
-                annual_budget, budget_remaining, max_recipients, renewal_eligible,
-                renewal_gpa_minimum, renewal_credits_minimum, eligibility_criteria,
-                application_deadline, award_period, applies_to_aid_type,
-                gl_account_id, is_active, company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1,
-                       ?, ?, ?, ?)""",
+        sql, _ = insert_row("finaid_scholarship_program", {
+            "id": P(), "name": P(), "code": P(), "description": P(),
+            "scholarship_type": P(), "funding_source": P(), "award_method": P(),
+            "award_amount_type": P(), "award_amount": P(), "min_award": P(),
+            "max_award": P(), "annual_budget": P(), "budget_remaining": P(),
+            "max_recipients": P(), "renewal_eligible": P(), "renewal_gpa_minimum": P(),
+            "renewal_credits_minimum": P(), "eligibility_criteria": P(),
+            "application_deadline": P(), "award_period": P(), "applies_to_aid_type": P(),
+            "gl_account_id": P(), "is_active": P(), "company_id": P(),
+            "created_at": P(), "updated_at": P(), "created_by": P(),
+        })
+        conn.execute(sql,
             (program_id, name, code, description, scholarship_type, funding_source,
              award_method, award_amount_type, award_amount, min_award, max_award,
              annual_budget, budget_remaining, max_recipients, renewal_eligible,
              renewal_gpa_minimum, renewal_credits_min, eligibility_criteria_raw,
              application_deadline, award_period, applies_to_aid_type,
-             gl_account_id, company_id, now, now, created_by)
+             gl_account_id, 1, company_id, now, now, created_by)
         )
     except sqlite3.IntegrityError as exc:
         if "UNIQUE" in str(exc).upper():
@@ -216,12 +218,9 @@ def update_scholarship_program(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
     try:
-        conn.execute(
-            f"UPDATE finaid_scholarship_program SET {set_clause} WHERE id = ?",
-            list(updates.values()) + [program_id]
-        )
+        sql, params = dynamic_update("finaid_scholarship_program", data=updates, where={"id": program_id})
+        conn.execute(sql, params)
     except sqlite3.IntegrityError as exc:
         return err(f"Duplicate: {exc}")
 
@@ -269,23 +268,24 @@ def list_scholarship_programs(conn, args):
     if not company_id:
         return err("--company-id is required")
 
-    query  = "SELECT * FROM finaid_scholarship_program WHERE company_id = ?"
+    t = Table("finaid_scholarship_program")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
 
     if scholarship_type:
-        query += " AND scholarship_type = ?"
+        q = q.where(t.scholarship_type == P())
         params.append(scholarship_type)
     if is_active is not None:
-        query += " AND is_active = ?"
+        q = q.where(t.is_active == P())
         params.append(int(bool(is_active)))
     if funding_source:
-        query += " AND funding_source = ?"
+        q = q.where(t.funding_source == P())
         params.append(funding_source)
 
-    query += " ORDER BY name ASC LIMIT ? OFFSET ?"
+    q = q.orderby(t.name, order=Order.asc).limit(P()).offset(P())
     params.extend([limit, offset])
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     return ok({"programs": rows_to_list(rows), "count": len(rows)})
 
 
@@ -306,10 +306,9 @@ def deactivate_scholarship_program(conn, args):
     if not row:
         return err(f"Scholarship program {program_id} not found")
 
-    conn.execute(
-        "UPDATE finaid_scholarship_program SET is_active = 0, updated_at = ? WHERE id = ?",
-        (_now_iso(), program_id)
-    )
+    t = Table("finaid_scholarship_program")
+    sql = Q.update(t).set(t.is_active, 0).set(t.updated_at, P()).where(t.id == P()).get_sql()
+    conn.execute(sql, (_now_iso(), program_id))
     conn.commit()
     audit(conn, SKILL, "finaid-deactivate-scholarship-program", "finaid_scholarship_program",
           program_id, description="Program deactivated")
@@ -344,20 +343,19 @@ def auto_match_scholarships(conn, args):
         return err(f"Aid year {aid_year_id} not found")
 
     # Find all auto_match programs that are active
+    _sp = Table("finaid_scholarship_program")
     programs = conn.execute(
-        """SELECT * FROM finaid_scholarship_program
-           WHERE company_id = ? AND award_method = 'auto_match' AND is_active = 1""",
-        (company_id,)
+        Q.from_(_sp).select(_sp.star).where(_sp.company_id == P()).where(_sp.award_method == P()).where(_sp.is_active == 1).get_sql(),
+        (company_id, "auto_match")
     ).fetchall()
 
     if not programs:
         return ok({"matches_created": 0, "message": "No active auto-match programs found"})
 
     # Find all students who have an award package for this aid year
+    _ap = Table("finaid_award_package")
     packages = conn.execute(
-        """SELECT id AS award_package_id, student_id, academic_term_id
-           FROM finaid_award_package
-           WHERE company_id = ? AND aid_year_id = ?""",
+        Q.from_(_ap).select(_ap.id.as_("award_package_id"), _ap.student_id, _ap.academic_term_id).where(_ap.company_id == P()).where(_ap.aid_year_id == P()).get_sql(),
         (company_id, aid_year_id)
     ).fetchall()
 
@@ -381,9 +379,9 @@ def auto_match_scholarships(conn, args):
             term_id      = pkg_dict.get("academic_term_id", "")
 
             # Check if student already has an award from this program
+            _aw = Table("finaid_award")
             existing_award = conn.execute(
-                """SELECT id FROM finaid_award
-                   WHERE award_package_id = ? AND fund_source_id = ?""",
+                Q.from_(_aw).select(_aw.id).where(_aw.award_package_id == P()).where(_aw.fund_source_id == P()).get_sql(),
                 (package_id, program_id)
             ).fetchone()
             if existing_award:
@@ -392,18 +390,21 @@ def auto_match_scholarships(conn, args):
             # Create a finaid_award line
             award_id = str(uuid.uuid4())
             try:
-                conn.execute(
-                    """INSERT INTO finaid_award
-                       (id, award_package_id, student_id, aid_year_id, academic_term_id,
-                        aid_type, aid_source, fund_source_id, offered_amount, accepted_amount,
-                        disbursed_amount, acceptance_status, acceptance_date,
-                        disbursement_holds, is_locked, gl_account_id, notes,
-                        company_id, created_at, updated_at, created_by)
-                       VALUES (?, ?, ?, ?, ?, ?, 'institutional', ?, ?, '0', '0',
-                               'pending', '', '[]', 0, ?, '', ?, ?, ?, ?)""",
+                _asql, _ = insert_row("finaid_award", {
+                    "id": P(), "award_package_id": P(), "student_id": P(),
+                    "aid_year_id": P(), "academic_term_id": P(), "aid_type": P(),
+                    "aid_source": P(), "fund_source_id": P(), "offered_amount": P(),
+                    "accepted_amount": P(), "disbursed_amount": P(),
+                    "acceptance_status": P(), "acceptance_date": P(),
+                    "disbursement_holds": P(), "is_locked": P(), "gl_account_id": P(),
+                    "notes": P(), "company_id": P(), "created_at": P(),
+                    "updated_at": P(), "created_by": P(),
+                })
+                conn.execute(_asql,
                     (award_id, package_id, student_id, aid_year_id, term_id or "",
-                     applies_to_aid_type, program_id, award_amount,
-                     prog.get("gl_account_id", ""),
+                     applies_to_aid_type, "institutional", program_id, award_amount,
+                     "0", "0", "pending", "", "[]", 0,
+                     prog.get("gl_account_id", ""), "",
                      company_id, now, now, created_by)
                 )
                 matches_created += 1
@@ -480,16 +481,18 @@ def submit_scholarship_application(conn, args):
     application_id = str(uuid.uuid4())
 
     try:
-        conn.execute(
-            """INSERT INTO finaid_scholarship_application
-               (id, scholarship_program_id, student_id, aid_year_id, submission_date,
-                status, essay_response, gpa_at_application, reviewer_id, review_date,
-                review_notes, award_amount, award_term_id, denial_reason,
-                company_id, created_at, updated_at, created_by)
-               VALUES (?, ?, ?, ?, ?, 'submitted', ?, ?, '', '', '', '0', NULL, '',
-                       ?, ?, ?, ?)""",
+        _sa_sql, _ = insert_row("finaid_scholarship_application", {
+            "id": P(), "scholarship_program_id": P(), "student_id": P(),
+            "aid_year_id": P(), "submission_date": P(), "status": P(),
+            "essay_response": P(), "gpa_at_application": P(), "reviewer_id": P(),
+            "review_date": P(), "review_notes": P(), "award_amount": P(),
+            "award_term_id": P(), "denial_reason": P(), "company_id": P(),
+            "created_at": P(), "updated_at": P(), "created_by": P(),
+        })
+        conn.execute(_sa_sql,
             (application_id, scholarship_program_id, student_id, aid_year_id,
-             submission_date, essay_response, gpa_at_application,
+             submission_date, "submitted", essay_response, gpa_at_application,
+             "", "", "", "0", None, "",
              company_id, now, now, created_by)
         )
     except sqlite3.IntegrityError as exc:
@@ -548,11 +551,8 @@ def update_scholarship_application(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE finaid_scholarship_application SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [application_id]
-    )
+    sql, params = dynamic_update("finaid_scholarship_application", data=updates, where={"id": application_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "finaid-update-scholarship-application",
           "finaid_scholarship_application", application_id)
@@ -599,26 +599,27 @@ def list_scholarship_applications(conn, args):
     if not company_id:
         return err("--company-id is required")
 
-    query  = "SELECT * FROM finaid_scholarship_application WHERE company_id = ?"
+    t = Table("finaid_scholarship_application")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
 
     if scholarship_program_id:
-        query += " AND scholarship_program_id = ?"
+        q = q.where(t.scholarship_program_id == P())
         params.append(scholarship_program_id)
     if status:
-        query += " AND status = ?"
+        q = q.where(t.status == P())
         params.append(status)
     if aid_year_id:
-        query += " AND aid_year_id = ?"
+        q = q.where(t.aid_year_id == P())
         params.append(aid_year_id)
     if reviewer_id:
-        query += " AND reviewer_id = ?"
+        q = q.where(t.reviewer_id == P())
         params.append(reviewer_id)
 
-    query += " ORDER BY submission_date DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.submission_date, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     return ok({"applications": rows_to_list(rows), "count": len(rows)})
 
 
@@ -647,13 +648,15 @@ def review_scholarship_application(conn, args):
     review_date  = _today()
     now          = _now_iso()
 
-    conn.execute(
-        """UPDATE finaid_scholarship_application
-           SET status = 'under_review', reviewer_id = ?, review_date = ?,
-               review_notes = ?, updated_at = ?
-           WHERE id = ?""",
-        (reviewer_id, review_date, review_notes, now, application_id)
-    )
+    _sa = Table("finaid_scholarship_application")
+    sql = (Q.update(_sa)
+           .set(_sa.status, "under_review")
+           .set(_sa.reviewer_id, P())
+           .set(_sa.review_date, P())
+           .set(_sa.review_notes, P())
+           .set(_sa.updated_at, P())
+           .where(_sa.id == P()).get_sql())
+    conn.execute(sql, (reviewer_id, review_date, review_notes, now, application_id))
     conn.commit()
     audit(conn, SKILL, "finaid-review-scholarship-application",
           "finaid_scholarship_application", application_id,
@@ -698,26 +701,27 @@ def award_scholarship_application(conn, args):
     now = _now_iso()
 
     # Update the application
-    conn.execute(
-        """UPDATE finaid_scholarship_application
-           SET status = 'awarded', award_amount = ?, award_term_id = ?, updated_at = ?
-           WHERE id = ?""",
-        (str(award_amount), award_term_id, now, application_id)
-    )
+    _sa = Table("finaid_scholarship_application")
+    sql = (Q.update(_sa)
+           .set(_sa.status, "awarded")
+           .set(_sa.award_amount, P())
+           .set(_sa.award_term_id, P())
+           .set(_sa.updated_at, P())
+           .where(_sa.id == P()).get_sql())
+    conn.execute(sql, (str(award_amount), award_term_id, now, application_id))
 
     # Decrement budget_remaining on the scholarship program
+    _sp = Table("finaid_scholarship_program")
     prog_row = conn.execute(
-        "SELECT id, budget_remaining FROM finaid_scholarship_program WHERE id = ?",
+        Q.from_(_sp).select(_sp.id, _sp.budget_remaining).where(_sp.id == P()).get_sql(),
         (app["scholarship_program_id"],)
     ).fetchone()
     if prog_row:
         try:
             current_remaining = round_currency(to_decimal(prog_row["budget_remaining"] or "0"))
             new_remaining = current_remaining - award_amount
-            conn.execute(
-                "UPDATE finaid_scholarship_program SET budget_remaining = ?, updated_at = ? WHERE id = ?",
-                (str(new_remaining), now, prog_row["id"])
-            )
+            _upd_sql = Q.update(_sp).set(_sp.budget_remaining, P()).set(_sp.updated_at, P()).where(_sp.id == P()).get_sql()
+            conn.execute(_upd_sql, (str(new_remaining), now, prog_row["id"]))
         except Exception:
             # Non-fatal: budget tracking failure should not block award
             pass
@@ -754,12 +758,9 @@ def deny_scholarship_application(conn, args):
     denial_reason = getattr(args, "denial_reason", None) or ""
     now = _now_iso()
 
-    conn.execute(
-        """UPDATE finaid_scholarship_application
-           SET status = 'denied', denial_reason = ?, updated_at = ?
-           WHERE id = ?""",
-        (denial_reason, now, application_id)
-    )
+    _sa = Table("finaid_scholarship_application")
+    sql = Q.update(_sa).set(_sa.status, "denied").set(_sa.denial_reason, P()).set(_sa.updated_at, P()).where(_sa.id == P()).get_sql()
+    conn.execute(sql, (denial_reason, now, application_id))
     conn.commit()
     audit(conn, SKILL, "finaid-deny-scholarship-application",
           "finaid_scholarship_application", application_id,
@@ -913,26 +914,27 @@ def list_scholarship_renewals(conn, args):
     if not company_id:
         return err("--company-id is required")
 
-    query  = "SELECT * FROM finaid_scholarship_renewal WHERE company_id = ?"
+    t = Table("finaid_scholarship_renewal")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
 
     if scholarship_program_id:
-        query += " AND scholarship_program_id = ?"
+        q = q.where(t.scholarship_program_id == P())
         params.append(scholarship_program_id)
     if student_id:
-        query += " AND student_id = ?"
+        q = q.where(t.student_id == P())
         params.append(student_id)
     if academic_term_id:
-        query += " AND academic_term_id = ?"
+        q = q.where(t.academic_term_id == P())
         params.append(academic_term_id)
     if renewal_status:
-        query += " AND renewal_status = ?"
+        q = q.where(t.renewal_status == P())
         params.append(renewal_status)
 
-    query += " ORDER BY evaluation_date DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.evaluation_date, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
 
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     return ok({"renewals": rows_to_list(rows), "count": len(rows)})
 
 

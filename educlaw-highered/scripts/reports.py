@@ -40,12 +40,16 @@ def retention_report(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
+    t = Table("educlaw_student")
     total = conn.execute(
-        "SELECT COUNT(*) as cnt FROM educlaw_student WHERE company_id=?",
+        Q.from_(t).select(fn.Count(t.star).as_("cnt"))
+        .where(t.company_id == P()).get_sql(),
         (company_id,)
     ).fetchone()["cnt"]
     active = conn.execute(
-        "SELECT COUNT(*) as cnt FROM educlaw_student WHERE company_id=? AND academic_standing NOT IN ('suspension','dismissal')",
+        Q.from_(t).select(fn.Count(t.star).as_("cnt"))
+        .where(t.company_id == P())
+        .where(t.academic_standing.notin(["suspension", "dismissal"])).get_sql(),
         (company_id,)
     ).fetchone()["cnt"]
     retention_rate = round(active / total * 100, 1) if total > 0 else 0
@@ -79,14 +83,18 @@ def alumni_giving_summary(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
+    t_alum = Table("highered_alumnus")
     total_donors = conn.execute(
-        "SELECT COUNT(*) as cnt FROM highered_alumnus WHERE company_id=? AND is_donor=1",
+        Q.from_(t_alum).select(fn.Count(t_alum.star).as_("cnt"))
+        .where(t_alum.company_id == P()).where(t_alum.is_donor == 1).get_sql(),
         (company_id,)
     ).fetchone()["cnt"]
     total_alumni = conn.execute(
-        "SELECT COUNT(*) as cnt FROM highered_alumnus WHERE company_id=?",
+        Q.from_(t_alum).select(fn.Count(t_alum.star).as_("cnt"))
+        .where(t_alum.company_id == P()).get_sql(),
         (company_id,)
     ).fetchone()["cnt"]
+    # PyPika: skipped — COALESCE+SUM+CAST aggregate
     total_giving = conn.execute(
         "SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total FROM highered_giving_record WHERE company_id=?",
         (company_id,)

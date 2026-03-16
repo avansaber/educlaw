@@ -14,7 +14,8 @@ try:
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
+    from erpclaw_lib.vendor.pypika.terms import LiteralValue
 
     ENTITY_PREFIXES.setdefault("educlaw_student", "HSTU-")
 except ImportError:
@@ -59,21 +60,22 @@ def list_student_records(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM educlaw_student WHERE company_id=?"
+    t = Table("educlaw_student")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     program_id = getattr(args, "program_id", None)
     if program_id:
-        q += " AND program_id=?"
+        q = q.where(t.program_id == P())
         params.append(program_id)
     academic_standing = getattr(args, "academic_standing", None)
     if academic_standing:
-        q += " AND academic_standing=?"
+        q = q.where(t.academic_standing == P())
         params.append(academic_standing)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY name LIMIT ? OFFSET ?"
+    q = q.orderby(t.name).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"records": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -154,10 +156,10 @@ def calculate_gpa(conn, args):
         gpa = "0.00"
 
     now = _now_iso()
-    conn.execute(
-        "UPDATE educlaw_student SET gpa=?, total_credits=?, updated_at=? WHERE student_id=?",
-        (gpa, total_credits, now, student_id)
-    )
+    sql, upd_params = dynamic_update("educlaw_student",
+        {"gpa": gpa, "total_credits": total_credits, "updated_at": now},
+        {"student_id": student_id})
+    conn.execute(sql, upd_params)
     conn.commit()
     ok({"student_id": student_id, "gpa": gpa, "total_credits": total_credits})
 
@@ -224,10 +226,10 @@ def update_academic_standing(conn, args):
 
     old_standing = row["academic_standing"]
     now = _now_iso()
-    conn.execute(
-        "UPDATE educlaw_student SET academic_standing=?, updated_at=? WHERE student_id=?",
-        (academic_standing, now, student_id)
-    )
+    sql, upd_params = dynamic_update("educlaw_student",
+        {"academic_standing": academic_standing, "updated_at": now},
+        {"student_id": student_id})
+    conn.execute(sql, upd_params)
     audit(conn, SKILL, "highered-update-academic-standing", "educlaw_student", row["id"],
           old_values={"academic_standing": old_standing},
           new_values={"academic_standing": academic_standing})
@@ -255,13 +257,13 @@ def add_hold(conn, args):
 
     hold_id = str(uuid.uuid4())
     now = _now_iso()
-    conn.execute("""
-        INSERT INTO highered_hold
-        (id, student_id, hold_type, reason, placed_by, placed_date,
-         removed_date, hold_status, company_id, created_at)
-        VALUES (?,?,?,?,?,?,'','active',?,?)
-    """, (hold_id, student_id, hold_type, reason, placed_by, now,
-          company_id, now))
+    sql, _ = insert_row("highered_hold", {
+        "id": P(), "student_id": P(), "hold_type": P(), "reason": P(),
+        "placed_by": P(), "placed_date": P(), "removed_date": P(),
+        "hold_status": P(), "company_id": P(), "created_at": P(),
+    })
+    conn.execute(sql, (hold_id, student_id, hold_type, reason, placed_by, now,
+          "", "active", company_id, now))
     conn.commit()
     ok({"id": hold_id, "student_id": student_id,
         "hold_type": hold_type, "hold_status": "active"})
@@ -278,10 +280,9 @@ def remove_hold(conn, args):
         return err("Hold is already removed")
 
     now = _now_iso()
-    conn.execute(
-        "UPDATE highered_hold SET hold_status='removed', removed_date=? WHERE id=?",
-        (now, hold_id)
-    )
+    sql, upd_params = dynamic_update("highered_hold",
+        {"hold_status": "removed", "removed_date": now}, {"id": hold_id})
+    conn.execute(sql, upd_params)
     conn.commit()
     ok({"id": hold_id, "hold_status": "removed"})
 
@@ -290,21 +291,22 @@ def list_holds(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    q = "SELECT * FROM highered_hold WHERE company_id=?"
+    t = Table("highered_hold")
+    q = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     student_id = getattr(args, "student_id", None)
     if student_id:
-        q += " AND student_id=?"
+        q = q.where(t.student_id == P())
         params.append(student_id)
     hold_status = getattr(args, "hold_status", None)
     if hold_status:
-        q += " AND hold_status=?"
+        q = q.where(t.hold_status == P())
         params.append(hold_status)
     limit = int(getattr(args, "limit", 50) or 50)
     offset = int(getattr(args, "offset", 0) or 0)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    q = q.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(q.get_sql(), params).fetchall()
     ok({"holds": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -316,13 +318,13 @@ def academic_standing_report(conn, args):
     company_id = getattr(args, "company_id", None)
     if not company_id:
         return err("--company-id is required")
-    rows = conn.execute("""
-        SELECT academic_standing, COUNT(*) as count
-        FROM educlaw_student
-        WHERE company_id=?
-        GROUP BY academic_standing
-        ORDER BY count DESC
-    """, (company_id,)).fetchall()
+    t = Table("educlaw_student")
+    rows = conn.execute(
+        Q.from_(t).select(t.academic_standing, fn.Count(t.star).as_("count"))
+        .where(t.company_id == P()).groupby(t.academic_standing)
+        .orderby(Field("count"), order=Order.desc).get_sql(),
+        (company_id,)
+    ).fetchall()
     total = sum(r["count"] for r in rows)
     ok({"standings": [dict(r) for r in rows], "total_students": total})
 

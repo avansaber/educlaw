@@ -19,7 +19,7 @@ from erpclaw_lib.decimal_utils import to_decimal
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
-from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -71,9 +71,11 @@ def create_promotion_review(conn, args):
         return err(f"Academic year {academic_year_id} not found")
 
     # Check uniqueness: one review per student per year
+    pr_t = Table("educlaw_k12_promotion_review")
     existing = conn.execute(
-        """SELECT id FROM educlaw_k12_promotion_review
-           WHERE student_id = ? AND academic_year_id = ?""",
+        Q.from_(pr_t).select(pr_t.id)
+        .where(pr_t.student_id == P()).where(pr_t.academic_year_id == P())
+        .get_sql(),
         (student_id, academic_year_id)
     ).fetchone()
     if existing:
@@ -96,6 +98,14 @@ def create_promotion_review(conn, args):
         discipline_incident_count = int(discipline_count_arg)
     else:
         # Count discipline incidents where student is offender in this academic year
+        ds_t = Table("educlaw_k12_discipline_student")
+        di_t = Table("educlaw_k12_discipline_incident")
+        q = (Q.from_(ds_t).join(di_t).on(ds_t.incident_id == di_t.id)
+             .select(fn.Count("DISTINCT di.id").as_("cnt"))
+             .where(ds_t.student_id == P())
+             .where(di_t.academic_year_id == P())
+             .where(ds_t.role == "offender"))
+        # PyPika: skipped — COUNT(DISTINCT) not well-supported; using raw approach
         count_row = conn.execute(
             """SELECT COUNT(DISTINCT di.id) as cnt
                FROM educlaw_k12_discipline_student ds
@@ -108,8 +118,11 @@ def create_promotion_review(conn, args):
         discipline_incident_count = count_row["cnt"] if count_row else 0
 
     # Check if student has active IEP
+    iep_t = Table("educlaw_k12_iep")
     active_iep = conn.execute(
-        "SELECT id FROM educlaw_k12_iep WHERE student_id = ? AND iep_status = 'active'",
+        Q.from_(iep_t).select(iep_t.id)
+        .where(iep_t.student_id == P()).where(iep_t.iep_status == "active")
+        .get_sql(),
         (student_id,)
     ).fetchone()
     is_idea_eligible = 1 if active_iep else 0
@@ -123,19 +136,22 @@ def create_promotion_review(conn, args):
 
     now = _now_iso()
     review_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_promotion_review
-           (id, student_id, academic_year_id, grade_level, review_date,
-            gpa_ytd, attendance_rate_ytd, failing_subjects, discipline_incident_count,
-            teacher_recommendation, teacher_rationale, counselor_recommendation,
-            counselor_notes, is_idea_eligible, prior_retention_count,
-            interventions_tried, review_status, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_promotion_review", {
+        "id": P(), "student_id": P(), "academic_year_id": P(), "grade_level": P(),
+        "review_date": P(), "gpa_ytd": P(), "attendance_rate_ytd": P(),
+        "failing_subjects": P(), "discipline_incident_count": P(),
+        "teacher_recommendation": P(), "teacher_rationale": P(),
+        "counselor_recommendation": P(), "counselor_notes": P(),
+        "is_idea_eligible": P(), "prior_retention_count": P(),
+        "interventions_tried": P(), "review_status": P(),
+        "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (review_id, student_id, academic_year_id, grade_level, review_date,
          gpa_ytd, attendance_rate_ytd, failing_subjects, discipline_incident_count,
          teacher_recommendation, teacher_rationale, counselor_recommendation,
          counselor_notes, is_idea_eligible, prior_retention_count,
-         interventions_tried, company_id, now, now, created_by)
+         interventions_tried, "pending", company_id, now, now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-create-promotion-review", "educlaw_k12_promotion_review", review_id)
@@ -185,11 +201,8 @@ def update_promotion_review(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_promotion_review SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [review_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_promotion_review", data=updates, where={"id": review_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-promotion-review", "educlaw_k12_promotion_review", review_id)
     return ok({"id": review_id, "message": "Promotion review updated"})
@@ -256,8 +269,9 @@ def submit_promotion_decision(conn, args):
         return err(f"Promotion review {promotion_review_id} not found")
 
     # Check for existing decision (one per review)
+    pd_t = Table("educlaw_k12_promotion_decision")
     existing = conn.execute(
-        "SELECT id FROM educlaw_k12_promotion_decision WHERE promotion_review_id = ?",
+        Q.from_(pd_t).select(pd_t.id).where(pd_t.promotion_review_id == P()).get_sql(),
         (promotion_review_id,)
     ).fetchone()
     if existing:
@@ -282,27 +296,29 @@ def submit_promotion_decision(conn, args):
 
     now = _now_iso()
     decision_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_promotion_decision
-           (id, promotion_review_id, student_id, academic_year_id, decision,
-            decision_date, decided_by, rationale, team_members, conditions,
-            parent_notified_date, parent_notified_by, notification_method,
-            appeal_deadline, is_appealed, appeal_filed_date,
-            appeal_outcome, appeal_decision_date, next_grade_level,
-            company_id, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', 'not_applicable', '',
-                   ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_promotion_decision", {
+        "id": P(), "promotion_review_id": P(), "student_id": P(),
+        "academic_year_id": P(), "decision": P(), "decision_date": P(),
+        "decided_by": P(), "rationale": P(), "team_members": P(), "conditions": P(),
+        "parent_notified_date": P(), "parent_notified_by": P(),
+        "notification_method": P(), "appeal_deadline": P(), "is_appealed": P(),
+        "appeal_filed_date": P(), "appeal_outcome": P(), "appeal_decision_date": P(),
+        "next_grade_level": P(), "company_id": P(), "created_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (decision_id, promotion_review_id, student_id, academic_year_id, decision,
          decision_date, decided_by, rationale, team_members, conditions,
          parent_notified_date, parent_notified_by, notification_method,
-         appeal_deadline, next_grade_level, company_id, now, created_by)
+         appeal_deadline, 0, "", "not_applicable", "",
+         next_grade_level, company_id, now, created_by)
     )
 
     # Update review status to decided
     conn.execute(
-        "UPDATE educlaw_k12_promotion_review SET review_status = 'decided', updated_at = ? "
-        "WHERE id = ?",
-        (now, promotion_review_id)
+        update_row("educlaw_k12_promotion_review",
+                   data={"review_status": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("decided", now, promotion_review_id)
     )
     conn.commit()
     audit(conn, SKILL, "k12-submit-promotion-decision", "educlaw_k12_promotion_decision",
@@ -388,9 +404,11 @@ def notify_promotion_decision(conn, args):
     student_name = student["full_name"] if student else ""
 
     # Get guardians
+    sg_t = Table("educlaw_student_guardian")
     guardians = conn.execute(
-        """SELECT sg.guardian_id FROM educlaw_student_guardian sg
-           WHERE sg.student_id = ? AND sg.receives_communications = 1""",
+        Q.from_(sg_t).select(sg_t.guardian_id)
+        .where(sg_t.student_id == P()).where(sg_t.receives_communications == 1)
+        .get_sql(),
         (student_id,)
     ).fetchall()
 
@@ -413,15 +431,17 @@ def notify_promotion_decision(conn, args):
 
     for g_row in guardians:
         notif_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO educlaw_notification
-               (id, recipient_type, recipient_id, notification_type, title, message,
-                reference_type, reference_id, is_read, sent_via, sent_at,
-                company_id, created_at, created_by)
-               VALUES (?, 'guardian', ?, 'announcement', ?, ?,
-                       'promotion_decision', ?, 0, 'system', ?, ?, ?, ?)""",
-            (notif_id, g_row["guardian_id"], title, message_text,
-             decision_id, now, company_id, now, user_id)
+        nsql, _ = insert_row("educlaw_notification", {
+            "id": P(), "recipient_type": P(), "recipient_id": P(),
+            "notification_type": P(), "title": P(), "message": P(),
+            "reference_type": P(), "reference_id": P(), "is_read": P(),
+            "sent_via": P(), "sent_at": P(), "company_id": P(),
+            "created_at": P(), "created_by": P(),
+        })
+        conn.execute(nsql,
+            (notif_id, "guardian", g_row["guardian_id"], "announcement",
+             title, message_text, "promotion_decision",
+             decision_id, 0, "system", now, company_id, now, user_id)
         )
         notifications_created += 1
 
@@ -429,17 +449,18 @@ def notify_promotion_decision(conn, args):
     notified_date = getattr(args, "parent_notified_date", None) or today
     notified_by = getattr(args, "parent_notified_by", None) or user_id
     conn.execute(
-        """UPDATE educlaw_k12_promotion_decision
-           SET parent_notified_date = ?, parent_notified_by = ?
-           WHERE id = ?""",
+        update_row("educlaw_k12_promotion_decision",
+                   data={"parent_notified_date": P(), "parent_notified_by": P()},
+                   where={"id": P()}),
         (notified_date, notified_by, decision_id)
     )
 
     # Update review status to notified
     conn.execute(
-        "UPDATE educlaw_k12_promotion_review SET review_status = 'notified', updated_at = ? "
-        "WHERE id = ?",
-        (now, d["promotion_review_id"])
+        update_row("educlaw_k12_promotion_review",
+                   data={"review_status": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("notified", now, d["promotion_review_id"])
     )
 
     conn.commit()
@@ -505,10 +526,10 @@ def batch_promote_grade(conn, args):
                 continue
             if not dry_run:
                 conn.execute(
-                    """UPDATE educlaw_student
-                       SET status = 'graduated', grade_level = '12', updated_at = ?
-                       WHERE id = ?""",
-                    (now, student_id)
+                    update_row("educlaw_student",
+                               data={"status": P(), "grade_level": P(), "updated_at": P()},
+                               where={"id": P()}),
+                    ("graduated", "12", now, student_id)
                 )
             graduated_count += 1
             results.append({
@@ -544,7 +565,9 @@ def batch_promote_grade(conn, args):
 
             if not dry_run:
                 conn.execute(
-                    "UPDATE educlaw_student SET grade_level = ?, updated_at = ? WHERE id = ?",
+                    update_row("educlaw_student",
+                               data={"grade_level": P(), "updated_at": P()},
+                               where={"id": P()}),
                     (next_grade, now, student_id)
                 )
             promoted_count += 1
@@ -616,16 +639,18 @@ def create_intervention_plan(conn, args):
 
     now = _now_iso()
     plan_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_intervention_plan
-           (id, student_id, academic_year_id, promotion_review_id, trigger,
-            intervention_types, academic_targets, attendance_target, assigned_staff,
-            start_date, review_date, parent_notification_date, plan_status,
-            outcome_notes, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_intervention_plan", {
+        "id": P(), "student_id": P(), "academic_year_id": P(),
+        "promotion_review_id": P(), "trigger": P(), "intervention_types": P(),
+        "academic_targets": P(), "attendance_target": P(), "assigned_staff": P(),
+        "start_date": P(), "review_date": P(), "parent_notification_date": P(),
+        "plan_status": P(), "outcome_notes": P(), "company_id": P(),
+        "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (plan_id, student_id, academic_year_id, promotion_review_id, trigger,
          intervention_types, academic_targets, attendance_target, assigned_staff,
-         start_date, review_date, parent_notification_date, outcome_notes,
+         start_date, review_date, parent_notification_date, "active", outcome_notes,
          company_id, now, now, created_by)
     )
     conn.commit()
@@ -660,11 +685,8 @@ def update_intervention_plan(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_intervention_plan SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [plan_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_intervention_plan", data=updates, where={"id": plan_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-intervention-plan", "educlaw_k12_intervention_plan", plan_id)
     return ok({"id": plan_id, "message": "Intervention plan updated"})

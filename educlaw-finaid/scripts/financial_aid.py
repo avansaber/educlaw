@@ -13,7 +13,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row, LiteralValue
 except ImportError:
     pass
 
@@ -57,22 +57,19 @@ def update_aid_year(conn, args):
     row = conn.execute(Q.from_(Table("finaid_aid_year")).select(Table("finaid_aid_year").star).where(Field("id") == P()).get_sql(), (aid_year_id,)).fetchone()
     if not row:
         return err("Aid year not found")
-    fields, vals = [], []
+    data = {}
     for f in ['description', 'start_date', 'end_date', 'pell_max_award']:
         v = getattr(args, f.replace('-', '_'), None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(str(round_currency(to_decimal(v))) if f == 'pell_max_award' else v)
+            data[f] = str(round_currency(to_decimal(v))) if f == 'pell_max_award' else v
     is_active = getattr(args, 'is_active', None)
     if is_active is not None:
-        fields.append("is_active=?")
-        vals.append(int(is_active))
-    if not fields:
+        data["is_active"] = int(is_active)
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(aid_year_id)
-    conn.execute(f"UPDATE finaid_aid_year SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_aid_year", data=data, where={"id": aid_year_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": aid_year_id, "updated": True})
 
@@ -91,17 +88,18 @@ def list_aid_years(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_aid_year WHERE company_id=?"
+    t = Table("finaid_aid_year")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     is_active = getattr(args, 'is_active', None)
     if is_active is not None:
-        q += " AND is_active=?"
+        qb = qb.where(t.is_active == P())
         params.append(int(is_active))
     limit = int(getattr(args, 'limit', 50) or 50)
     offset = int(getattr(args, 'offset', 0) or 0)
-    q += " ORDER BY aid_year_code DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.aid_year_code, order=Order.desc).limit(P()).offset(P())
     params.extend([limit, offset])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"aid_years": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -113,8 +111,9 @@ def set_active_aid_year(conn, args):
     if not row:
         return err("Aid year not found")
     company_id = row['company_id']
-    conn.execute("UPDATE finaid_aid_year SET is_active=0, updated_at=? WHERE company_id=?", (_now_iso(), company_id))
-    conn.execute("UPDATE finaid_aid_year SET is_active=1, updated_at=? WHERE id=?", (_now_iso(), aid_year_id))
+    _ay = Table("finaid_aid_year")
+    conn.execute(Q.update(_ay).set(_ay.is_active, 0).set(_ay.updated_at, P()).where(_ay.company_id == P()).get_sql(), (_now_iso(), company_id))
+    conn.execute(Q.update(_ay).set(_ay.is_active, 1).set(_ay.updated_at, P()).where(_ay.id == P()).get_sql(), (_now_iso(), aid_year_id))
     conn.commit()
     return ok({"id": aid_year_id, "is_active": 1})
 
@@ -136,6 +135,7 @@ def import_pell_schedule(conn, args):
     inserted = 0
     for r in rows:
         rid = str(uuid.uuid4())
+        # PyPika: skipped — INSERT OR REPLACE not supported by PyPika
         conn.execute(
             "INSERT OR REPLACE INTO finaid_pell_schedule (id,aid_year_id,pell_index,full_time_annual,three_quarter_time,half_time,less_than_half_time,company_id) VALUES (?,?,?,?,?,?,?,?)",
             (rid, aid_year_id, int(r.get('pell_index', 0)),
@@ -154,15 +154,16 @@ def list_pell_schedule(conn, args):
     aid_year_id = getattr(args, 'aid_year_id', None)
     if not aid_year_id:
         return err("aid_year_id is required")
-    q = "SELECT * FROM finaid_pell_schedule WHERE aid_year_id=?"
+    t = Table("finaid_pell_schedule")
+    qb = Q.from_(t).select(t.star).where(t.aid_year_id == P())
     params = [aid_year_id]
     pell_index = getattr(args, 'pell_index', None)
     if pell_index is not None:
-        q += " AND pell_index=?"
+        qb = qb.where(t.pell_index == P())
         params.append(int(pell_index))
-    q += " ORDER BY pell_index LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.pell_index).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"schedule": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -205,25 +206,23 @@ def update_fund_allocation(conn, args):
     row = conn.execute(Q.from_(Table("finaid_fund_allocation")).select(Table("finaid_fund_allocation").star).where(Field("id") == P()).get_sql(), (alloc_id,)).fetchone()
     if not row:
         return err("Fund allocation not found")
-    fields, vals = [], []
+    data = {}
     for f in ['fund_name']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
+            data[f] = v
     total_allocation = getattr(args, 'total_allocation', None)
     if total_allocation is not None:
         new_total = str(round_currency(to_decimal(total_allocation)))
         committed = to_decimal(row['committed_amount'])
         new_available = str(round_currency(to_decimal(new_total) - committed))
-        fields.extend(["total_allocation=?", "available_amount=?"])
-        vals.extend([new_total, new_available])
-    if not fields:
+        data["total_allocation"] = new_total
+        data["available_amount"] = new_available
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(alloc_id)
-    conn.execute(f"UPDATE finaid_fund_allocation SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_fund_allocation", data=data, where={"id": alloc_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": alloc_id, "updated": True})
 
@@ -242,19 +241,20 @@ def list_fund_allocations(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_fund_allocation WHERE company_id=?"
+    t = Table("finaid_fund_allocation")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     aid_year_id = getattr(args, 'aid_year_id', None)
     if aid_year_id:
-        q += " AND aid_year_id=?"
+        qb = qb.where(t.aid_year_id == P())
         params.append(aid_year_id)
     fund_type = getattr(args, 'fund_type', None)
     if fund_type:
-        q += " AND fund_type=?"
+        qb = qb.where(t.fund_type == P())
         params.append(fund_type)
-    q += " LIMIT ? OFFSET ?"
+    qb = qb.limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"fund_allocations": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -311,25 +311,23 @@ def update_cost_of_attendance(conn, args):
         return err("COA not found")
     money_fields = ['tuition_fees', 'books_supplies', 'room_board', 'transportation', 'personal_expenses', 'loan_fees']
     current = dict(row)
-    fields, vals = [], []
+    data = {}
     for f in money_fields:
         v = getattr(args, f, None)
         if v is not None:
             new_val = str(round_currency(to_decimal(v)))
-            fields.append(f"{f}=?")
-            vals.append(new_val)
+            data[f] = new_val
             current[f] = new_val
     is_active = getattr(args, 'is_active', None)
     if is_active is not None:
-        fields.append("is_active=?")
-        vals.append(int(is_active))
-    if fields:
+        data["is_active"] = int(is_active)
+    if data:
         new_total = _calc_total_coa(current['tuition_fees'], current['books_supplies'], current['room_board'],
                                      current['transportation'], current['personal_expenses'], current['loan_fees'])
-        fields.extend(["total_coa=?", "updated_at=?"])
-        vals.extend([new_total, _now_iso()])
-        vals.append(coa_id)
-        conn.execute(f"UPDATE finaid_cost_of_attendance SET {','.join(fields)} WHERE id=?", vals)
+        data["total_coa"] = new_total
+        data["updated_at"] = _now_iso()
+        sql, vals = dynamic_update("finaid_cost_of_attendance", data=data, where={"id": coa_id})
+        conn.execute(sql, vals)
         conn.commit()
         return ok({"id": coa_id, "total_coa": new_total})
     return err("No fields to update")
@@ -349,16 +347,17 @@ def list_cost_of_attendance(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_cost_of_attendance WHERE company_id=?"
+    t = Table("finaid_cost_of_attendance")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['aid_year_id', 'enrollment_status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " LIMIT ? OFFSET ?"
+    qb = qb.limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"cost_of_attendance": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -366,10 +365,12 @@ def delete_cost_of_attendance(conn, args):
     coa_id = getattr(args, 'id', None)
     if not coa_id:
         return err("id is required")
-    ref = conn.execute("SELECT id FROM finaid_award_package WHERE cost_of_attendance_id=? LIMIT 1", (coa_id,)).fetchone()
+    _ap = Table("finaid_award_package")
+    ref = conn.execute(Q.from_(_ap).select(_ap.id).where(_ap.cost_of_attendance_id == P()).limit(1).get_sql(), (coa_id,)).fetchone()
     if ref:
         return err("Cannot delete COA referenced by award package(s)")
-    conn.execute("DELETE FROM finaid_cost_of_attendance WHERE id=?", (coa_id,))
+    _coa = Table("finaid_cost_of_attendance")
+    conn.execute(Q.from_(_coa).delete().where(_coa.id == P()).get_sql(), (coa_id,))
     conn.commit()
     return ok({"id": coa_id, "deleted": True})
 
@@ -436,6 +437,7 @@ def import_isir(conn, args):
         )
         for cflag_code, cflag_desc, blocks in cflags:
             cflag_id = str(uuid.uuid4())
+            # PyPika: skipped — INSERT OR IGNORE not supported by PyPika
             conn.execute(
                 "INSERT OR IGNORE INTO finaid_isir_cflag (id,isir_id,student_id,cflag_code,cflag_description,blocks_disbursement,resolution_status,company_id) VALUES (?,?,?,?,?,?,?,?)",
                 (cflag_id, isir_id, student_id, cflag_code, cflag_desc, blocks, 'pending', company_id)
@@ -453,26 +455,23 @@ def update_isir(conn, args):
     row = conn.execute(Q.from_(Table("finaid_isir")).select(Table("finaid_isir").star).where(Field("id") == P()).get_sql(), (isir_id,)).fetchone()
     if not row:
         return err("ISIR not found")
-    fields, vals = [], []
+    data = {}
     for f in ['sai', 'dependency_status', 'pell_index', 'verification_flag', 'verification_group', 'receipt_date', 'fafsa_submission_id']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
+            data[f] = v
     is_active_transaction = getattr(args, 'is_active_transaction', None)
     if is_active_transaction is not None:
-        fields.append("is_active_transaction=?")
-        vals.append(int(is_active_transaction))
+        data["is_active_transaction"] = int(is_active_transaction)
     # Recompute has_unresolved_cflags
+    _cf = Table("finaid_isir_cflag")
     pending_count = conn.execute(
-        "SELECT COUNT(*) FROM finaid_isir_cflag WHERE isir_id=? AND resolution_status='pending'", (isir_id,)
+        Q.from_(_cf).select(fn.Count("*")).where(_cf.isir_id == P()).where(_cf.resolution_status == P()).get_sql(), (isir_id, "pending")
     ).fetchone()[0]
-    fields.append("has_unresolved_cflags=?")
-    vals.append(1 if pending_count > 0 else 0)
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(isir_id)
-    conn.execute(f"UPDATE finaid_isir SET {','.join(fields)} WHERE id=?", vals)
+    data["has_unresolved_cflags"] = 1 if pending_count > 0 else 0
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_isir", data=data, where={"id": isir_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": isir_id, "updated": True})
 
@@ -484,7 +483,8 @@ def get_isir(conn, args):
     row = conn.execute(Q.from_(Table("finaid_isir")).select(Table("finaid_isir").star).where(Field("id") == P()).get_sql(), (isir_id,)).fetchone()
     if not row:
         return err("ISIR not found")
-    cflags = conn.execute("SELECT * FROM finaid_isir_cflag WHERE isir_id=?", (isir_id,)).fetchall()
+    _cf = Table("finaid_isir_cflag")
+    cflags = conn.execute(Q.from_(_cf).select(_cf.star).where(_cf.isir_id == P()).get_sql(), (isir_id,)).fetchall()
     result = dict(row)
     result['cflags'] = [dict(c) for c in cflags]
     return ok(result)
@@ -494,16 +494,17 @@ def list_isirs(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_isir WHERE company_id=?"
+    t = Table("finaid_isir")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['student_id', 'aid_year_id', 'status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"isirs": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -512,10 +513,9 @@ def review_isir(conn, args):
     reviewed_by = getattr(args, 'reviewed_by', '') or ''
     if not isir_id:
         return err("isir_id or id is required")
-    conn.execute(
-        "UPDATE finaid_isir SET status='reviewed', reviewed_by=?, reviewed_at=?, updated_at=? WHERE id=?",
-        (reviewed_by, _now_iso(), _now_iso(), isir_id)
-    )
+    _isir = Table("finaid_isir")
+    sql = Q.update(_isir).set(_isir.status, "reviewed").set(_isir.reviewed_by, P()).set(_isir.reviewed_at, P()).set(_isir.updated_at, P()).where(_isir.id == P()).get_sql()
+    conn.execute(sql, (reviewed_by, _now_iso(), _now_iso(), isir_id))
     conn.commit()
     return ok({"id": isir_id, "status": "reviewed"})
 
@@ -543,7 +543,8 @@ def add_isir_cflag(conn, args):
         conn.execute(sql,
             (cflag_id, isir_id, student_id, cflag_code, cflag_description, blocks_disbursement, 'pending', company_id)
         )
-        conn.execute("UPDATE finaid_isir SET has_unresolved_cflags=1, updated_at=? WHERE id=?", (_now_iso(), isir_id))
+        _isir = Table("finaid_isir")
+        conn.execute(Q.update(_isir).set(_isir.has_unresolved_cflags, 1).set(_isir.updated_at, P()).where(_isir.id == P()).get_sql(), (_now_iso(), isir_id))
         conn.commit()
         return ok({"id": cflag_id, "isir_id": isir_id})
     except sqlite3.IntegrityError as e:
@@ -564,15 +565,17 @@ def resolve_isir_cflag(conn, args):
     resolution_date = getattr(args, 'resolution_date', _today()) or _today()
     resolved_by = getattr(args, 'resolved_by', '') or ''
     resolution_notes = getattr(args, 'resolution_notes', '') or ''
-    conn.execute(
-        "UPDATE finaid_isir_cflag SET resolution_status=?,resolution_date=?,resolved_by=?,resolution_notes=?,updated_at=? WHERE id=?",
-        (resolution_status, resolution_date, resolved_by, resolution_notes, _now_iso(), cflag_id)
-    )
+    _cf = Table("finaid_isir_cflag")
+    sql = (Q.update(_cf).set(_cf.resolution_status, P()).set(_cf.resolution_date, P())
+           .set(_cf.resolved_by, P()).set(_cf.resolution_notes, P()).set(_cf.updated_at, P())
+           .where(_cf.id == P()).get_sql())
+    conn.execute(sql, (resolution_status, resolution_date, resolved_by, resolution_notes, _now_iso(), cflag_id))
     pending_count = conn.execute(
-        "SELECT COUNT(*) FROM finaid_isir_cflag WHERE isir_id=? AND resolution_status='pending'", (isir_id,)
+        Q.from_(_cf).select(fn.Count("*")).where(_cf.isir_id == P()).where(_cf.resolution_status == P()).get_sql(), (isir_id, "pending")
     ).fetchone()[0]
+    _isir = Table("finaid_isir")
     conn.execute(
-        "UPDATE finaid_isir SET has_unresolved_cflags=?, updated_at=? WHERE id=?",
+        Q.update(_isir).set(_isir.has_unresolved_cflags, P()).set(_isir.updated_at, P()).where(_isir.id == P()).get_sql(),
         (1 if pending_count > 0 else 0, _now_iso(), isir_id)
     )
     conn.commit()
@@ -584,19 +587,20 @@ def list_isir_cflags(conn, args):
     student_id = getattr(args, 'student_id', None)
     if not isir_id and not student_id:
         return err("isir_id or student_id is required")
-    q = "SELECT * FROM finaid_isir_cflag WHERE 1=1"
+    t = Table("finaid_isir_cflag")
+    qb = Q.from_(t).select(t.star)
     params = []
     if isir_id:
-        q += " AND isir_id=?"
+        qb = qb.where(t.isir_id == P())
         params.append(isir_id)
     if student_id:
-        q += " AND student_id=?"
+        qb = qb.where(t.student_id == P())
         params.append(student_id)
     resolution_status = getattr(args, 'resolution_status', None)
     if resolution_status:
-        q += " AND resolution_status=?"
+        qb = qb.where(t.resolution_status == P())
         params.append(resolution_status)
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"cflags": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -663,22 +667,19 @@ def update_verification_request(conn, args):
     req_id = getattr(args, 'verification_request_id', None) or getattr(args, 'id', None)
     if not req_id:
         return err("verification_request_id or id is required")
-    fields, vals = [], []
+    data = {}
     for f in ['status', 'deadline_date', 'assigned_to', 'discrepancy_notes']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
+            data[f] = v
     discrepancy_found = getattr(args, 'discrepancy_found', None)
     if discrepancy_found is not None:
-        fields.append("discrepancy_found=?")
-        vals.append(int(discrepancy_found))
-    if not fields:
+        data["discrepancy_found"] = int(discrepancy_found)
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(req_id)
-    conn.execute(f"UPDATE finaid_verification_request SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_verification_request", data=data, where={"id": req_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": req_id, "updated": True})
 
@@ -690,7 +691,8 @@ def get_verification_request(conn, args):
     row = conn.execute(Q.from_(Table("finaid_verification_request")).select(Table("finaid_verification_request").star).where(Field("id") == P()).get_sql(), (req_id,)).fetchone()
     if not row:
         return err("Verification request not found")
-    docs = conn.execute("SELECT * FROM finaid_verification_document WHERE verification_request_id=?", (req_id,)).fetchall()
+    _vd = Table("finaid_verification_document")
+    docs = conn.execute(Q.from_(_vd).select(_vd.star).where(_vd.verification_request_id == P()).get_sql(), (req_id,)).fetchall()
     result = dict(row)
     result['documents'] = [dict(d) for d in docs]
     return ok(result)
@@ -700,16 +702,17 @@ def list_verification_requests(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_verification_request WHERE company_id=?"
+    t = Table("finaid_verification_request")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['status', 'assigned_to', 'student_id']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"verification_requests": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -739,18 +742,16 @@ def update_verification_document(conn, args):
     doc_id = getattr(args, 'id', None)
     if not doc_id:
         return err("id is required")
-    fields, vals = [], []
+    data = {}
     for f in ['submission_status', 'reviewed_by', 'reviewed_date', 'rejection_reason', 'document_reference', 'submitted_date']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
-    if not fields:
+            data[f] = v
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(doc_id)
-    conn.execute(f"UPDATE finaid_verification_document SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_verification_document", data=data, where={"id": doc_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": doc_id, "updated": True})
 
@@ -760,6 +761,7 @@ def complete_verification(conn, args):
     if not req_id:
         return err("verification_request_id or id is required")
     # Check all required docs are accepted or waived
+    # PyPika: skipped — NOT IN clause in WHERE
     pending = conn.execute(
         "SELECT COUNT(*) FROM finaid_verification_document WHERE verification_request_id=? AND is_required=1 AND submission_status NOT IN ('accepted','waived')",
         (req_id,)
@@ -767,8 +769,9 @@ def complete_verification(conn, args):
     if pending > 0:
         return err(f"{pending} required document(s) not yet accepted or waived")
     completed_date = getattr(args, 'completed_date', _today()) or _today()
+    _vr = Table("finaid_verification_request")
     conn.execute(
-        "UPDATE finaid_verification_request SET status='complete', completed_date=?, updated_at=? WHERE id=?",
+        Q.update(_vr).set(_vr.status, "complete").set(_vr.completed_date, P()).set(_vr.updated_at, P()).where(_vr.id == P()).get_sql(),
         (completed_date, _now_iso(), req_id)
     )
     conn.commit()
@@ -779,7 +782,8 @@ def list_verification_documents(conn, args):
     req_id = getattr(args, 'verification_request_id', None)
     if not req_id:
         return err("verification_request_id is required")
-    rows = conn.execute("SELECT * FROM finaid_verification_document WHERE verification_request_id=?", (req_id,)).fetchall()
+    _vd = Table("finaid_verification_document")
+    rows = conn.execute(Q.from_(_vd).select(_vd.star).where(_vd.verification_request_id == P()).get_sql(), (req_id,)).fetchall()
     return ok({"documents": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -788,8 +792,9 @@ def list_verification_documents(conn, args):
 # ---------------------------------------------------------------------------
 
 def _update_package_totals(conn, pkg_id):
+    _aw = Table("finaid_award")
     awards = conn.execute(
-        "SELECT aid_type, aid_source, offered_amount FROM finaid_award WHERE award_package_id=?",
+        Q.from_(_aw).select(_aw.aid_type, _aw.aid_source, _aw.offered_amount).where(_aw.award_package_id == P()).get_sql(),
         (pkg_id,)
     ).fetchall()
     total_grants = Decimal('0')
@@ -806,8 +811,12 @@ def _update_package_totals(conn, pkg_id):
         elif a['aid_type'] == 'fws':
             total_work_study += amt
     total_aid = total_grants + total_loans + total_work_study
-    conn.execute(
-        "UPDATE finaid_award_package SET total_grants=?,total_loans=?,total_work_study=?,total_aid=?,updated_at=? WHERE id=?",
+    _pkg = Table("finaid_award_package")
+    sql = (Q.update(_pkg)
+           .set(_pkg.total_grants, P()).set(_pkg.total_loans, P())
+           .set(_pkg.total_work_study, P()).set(_pkg.total_aid, P())
+           .set(_pkg.updated_at, P()).where(_pkg.id == P()).get_sql())
+    conn.execute(sql,
         (str(round_currency(total_grants)), str(round_currency(total_loans)),
          str(round_currency(total_work_study)), str(round_currency(total_aid)), _now_iso(), pkg_id)
     )
@@ -861,18 +870,16 @@ def update_award_package(conn, args):
     pkg_id = getattr(args, 'award_package_id', None) or getattr(args, 'id', None)
     if not pkg_id:
         return err("award_package_id or id is required")
-    fields, vals = [], []
+    data = {}
     for f in ['notes', 'enrollment_status', 'acceptance_deadline', 'approved_by', 'approved_at']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
-    if not fields:
+            data[f] = v
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(pkg_id)
-    conn.execute(f"UPDATE finaid_award_package SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_award_package", data=data, where={"id": pkg_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": pkg_id, "updated": True})
 
@@ -884,7 +891,8 @@ def get_award_package(conn, args):
     row = conn.execute(Q.from_(Table("finaid_award_package")).select(Table("finaid_award_package").star).where(Field("id") == P()).get_sql(), (pkg_id,)).fetchone()
     if not row:
         return err("Award package not found")
-    awards = conn.execute("SELECT * FROM finaid_award WHERE award_package_id=?", (pkg_id,)).fetchall()
+    _aw = Table("finaid_award")
+    awards = conn.execute(Q.from_(_aw).select(_aw.star).where(_aw.award_package_id == P()).get_sql(), (pkg_id,)).fetchall()
     result = dict(row)
     result['awards'] = [dict(a) for a in awards]
     return ok(result)
@@ -894,16 +902,17 @@ def list_award_packages(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_award_package WHERE company_id=?"
+    t = Table("finaid_award_package")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['status', 'aid_year_id', 'student_id', 'academic_term_id']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"award_packages": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -952,25 +961,23 @@ def update_award(conn, args):
     row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
-    pkg = conn.execute("SELECT status FROM finaid_award_package WHERE id=?", (row['award_package_id'],)).fetchone()
+    _ap = Table("finaid_award_package")
+    pkg = conn.execute(Q.from_(_ap).select(_ap.status).where(_ap.id == P()).get_sql(), (row['award_package_id'],)).fetchone()
     if pkg and pkg['status'] != 'draft':
         return err("Can only update awards in draft packages")
-    fields, vals = [], []
+    data = {}
     offered_amount = getattr(args, 'offered_amount', None)
     if offered_amount is not None:
-        fields.append("offered_amount=?")
-        vals.append(str(round_currency(to_decimal(offered_amount))))
+        data["offered_amount"] = str(round_currency(to_decimal(offered_amount)))
     for f in ['notes', 'gl_account_id']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
-    if not fields:
+            data[f] = v
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(award_id)
-    conn.execute(f"UPDATE finaid_award SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_award", data=data, where={"id": award_id})
+    conn.execute(sql, vals)
     _update_package_totals(conn, row['award_package_id'])
     conn.commit()
     return ok({"id": award_id, "updated": True})
@@ -992,23 +999,24 @@ def list_awards(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not award_package_id and not student_id and not company_id:
         return err("award_package_id, student_id, or company_id is required")
-    q = "SELECT * FROM finaid_award WHERE 1=1"
+    t = Table("finaid_award")
+    qb = Q.from_(t).select(t.star)
     params = []
     if award_package_id:
-        q += " AND award_package_id=?"
+        qb = qb.where(t.award_package_id == P())
         params.append(award_package_id)
     if student_id:
-        q += " AND student_id=?"
+        qb = qb.where(t.student_id == P())
         params.append(student_id)
     if company_id:
-        q += " AND company_id=?"
+        qb = qb.where(t.company_id == P())
         params.append(company_id)
     for f in ['aid_type', 'acceptance_status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"awards": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1019,10 +1027,12 @@ def delete_award(conn, args):
     row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
-    pkg = conn.execute("SELECT status FROM finaid_award_package WHERE id=?", (row['award_package_id'],)).fetchone()
+    _ap = Table("finaid_award_package")
+    pkg = conn.execute(Q.from_(_ap).select(_ap.status).where(_ap.id == P()).get_sql(), (row['award_package_id'],)).fetchone()
     if pkg and pkg['status'] != 'draft':
         return err("Can only delete awards from draft packages")
-    conn.execute("DELETE FROM finaid_award WHERE id=?", (award_id,))
+    _aw = Table("finaid_award")
+    conn.execute(Q.from_(_aw).delete().where(_aw.id == P()).get_sql(), (award_id,))
     _update_package_totals(conn, row['award_package_id'])
     conn.commit()
     return ok({"id": award_id, "deleted": True})
@@ -1039,10 +1049,11 @@ def offer_award_package(conn, args):
         return err("Package must be in draft status to offer")
     packaged_by = getattr(args, 'packaged_by', '') or ''
     offered_date = getattr(args, 'offered_date', _today()) or _today()
-    conn.execute(
-        "UPDATE finaid_award_package SET status='offered', offered_date=?, packaged_by=?, packaged_at=?, updated_at=? WHERE id=?",
-        (offered_date, packaged_by, _now_iso(), _now_iso(), pkg_id)
-    )
+    _pkg = Table("finaid_award_package")
+    sql = (Q.update(_pkg).set(_pkg.status, "offered").set(_pkg.offered_date, P())
+           .set(_pkg.packaged_by, P()).set(_pkg.packaged_at, P()).set(_pkg.updated_at, P())
+           .where(_pkg.id == P()).get_sql())
+    conn.execute(sql, (offered_date, packaged_by, _now_iso(), _now_iso(), pkg_id))
     conn.commit()
     return ok({"id": pkg_id, "status": "offered"})
 
@@ -1058,10 +1069,10 @@ def accept_award(conn, args):
     if accepted_amount is None:
         accepted_amount = row['offered_amount']
     acceptance_date = getattr(args, 'acceptance_date', _today()) or _today()
-    conn.execute(
-        "UPDATE finaid_award SET acceptance_status='accepted', accepted_amount=?, acceptance_date=?, updated_at=? WHERE id=?",
-        (str(round_currency(to_decimal(accepted_amount))), acceptance_date, _now_iso(), award_id)
-    )
+    _aw = Table("finaid_award")
+    sql = (Q.update(_aw).set(_aw.acceptance_status, "accepted").set(_aw.accepted_amount, P())
+           .set(_aw.acceptance_date, P()).set(_aw.updated_at, P()).where(_aw.id == P()).get_sql())
+    conn.execute(sql, (str(round_currency(to_decimal(accepted_amount))), acceptance_date, _now_iso(), award_id))
     conn.commit()
     return ok({"id": award_id, "acceptance_status": "accepted"})
 
@@ -1070,8 +1081,9 @@ def decline_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
+    _aw = Table("finaid_award")
     conn.execute(
-        "UPDATE finaid_award SET acceptance_status='declined', accepted_amount='0', updated_at=? WHERE id=?",
+        Q.update(_aw).set(_aw.acceptance_status, "declined").set(_aw.accepted_amount, "0").set(_aw.updated_at, P()).where(_aw.id == P()).get_sql(),
         (_now_iso(), award_id)
     )
     conn.commit()
@@ -1082,14 +1094,10 @@ def cancel_award_package(conn, args):
     pkg_id = getattr(args, 'award_package_id', None) or getattr(args, 'id', None)
     if not pkg_id:
         return err("award_package_id or id is required")
-    conn.execute(
-        "UPDATE finaid_award_package SET status='cancelled', updated_at=? WHERE id=?",
-        (_now_iso(), pkg_id)
-    )
-    conn.execute(
-        "UPDATE finaid_award SET acceptance_status='declined', accepted_amount='0', updated_at=? WHERE award_package_id=?",
-        (_now_iso(), pkg_id)
-    )
+    _pkg = Table("finaid_award_package")
+    conn.execute(Q.update(_pkg).set(_pkg.status, "cancelled").set(_pkg.updated_at, P()).where(_pkg.id == P()).get_sql(), (_now_iso(), pkg_id))
+    _aw = Table("finaid_award")
+    conn.execute(Q.update(_aw).set(_aw.acceptance_status, "declined").set(_aw.accepted_amount, "0").set(_aw.updated_at, P()).where(_aw.award_package_id == P()).get_sql(), (_now_iso(), pkg_id))
     conn.commit()
     return ok({"id": pkg_id, "status": "cancelled"})
 
@@ -1128,8 +1136,9 @@ def disburse_award(conn, args):
          str(amount_decimal), disbursement_date, disbursed_by, company_id, '')
     )
     new_disbursed = str(round_currency(to_decimal(award_row['disbursed_amount']) + amount_decimal))
+    _aw = Table("finaid_award")
     conn.execute(
-        "UPDATE finaid_award SET disbursed_amount=?, is_locked=1, updated_at=? WHERE id=?",
+        Q.update(_aw).set(_aw.disbursed_amount, P()).set(_aw.is_locked, 1).set(_aw.updated_at, P()).where(_aw.id == P()).get_sql(),
         (new_disbursed, _now_iso(), award_id)
     )
     conn.commit()
@@ -1155,7 +1164,8 @@ def reverse_disbursement(conn, args):
          'reversal', 1, str(amount_decimal), disbursement_date, company_id, '')
     )
     new_disbursed = str(round_currency(to_decimal(award_row['disbursed_amount']) - amount_decimal))
-    conn.execute("UPDATE finaid_award SET disbursed_amount=?, updated_at=? WHERE id=?", (new_disbursed, _now_iso(), award_id))
+    _aw = Table("finaid_award")
+    conn.execute(Q.update(_aw).set(_aw.disbursed_amount, P()).set(_aw.updated_at, P()).where(_aw.id == P()).get_sql(), (new_disbursed, _now_iso(), award_id))
     conn.commit()
     return ok({"id": disb_id, "type": "reversal", "amount": str(amount_decimal)})
 
@@ -1179,10 +1189,8 @@ def record_r2t4_return_disbursement(conn, args):
          'return', 1, str(round_currency(to_decimal(amount))), disbursement_date, company_id, '')
     )
     if r2t4_id:
-        conn.execute(
-            "UPDATE finaid_r2t4_calculation SET institution_return_date=?, updated_at=? WHERE id=?",
-            (disbursement_date, _now_iso(), r2t4_id)
-        )
+        _r2 = Table("finaid_r2t4_calculation")
+        conn.execute(Q.update(_r2).set(_r2.institution_return_date, P()).set(_r2.updated_at, P()).where(_r2.id == P()).get_sql(), (disbursement_date, _now_iso(), r2t4_id))
     conn.commit()
     return ok({"id": disb_id, "type": "return"})
 
@@ -1201,20 +1209,21 @@ def list_disbursements(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_disbursement WHERE company_id=?"
+    t = Table("finaid_disbursement")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['student_id', 'award_id', 'cod_status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
     is_credit_balance = getattr(args, 'is_credit_balance', None)
     if is_credit_balance is not None:
-        q += " AND is_credit_balance=?"
+        qb = qb.where(t.is_credit_balance == P())
         params.append(int(is_credit_balance))
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"disbursements": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1223,6 +1232,7 @@ def generate_cod_export(conn, args):
     aid_year_id = getattr(args, 'aid_year_id', None)
     if not company_id:
         return err("company_id is required")
+    # PyPika: skipped — JOIN with IN clause
     q = "SELECT d.*, a.aid_type FROM finaid_disbursement d JOIN finaid_award a ON d.award_id=a.id WHERE d.company_id=? AND d.cod_status IN ('pending','')"
     params = [company_id]
     if aid_year_id:
@@ -1238,10 +1248,8 @@ def update_cod_status(conn, args):
     if not disb_id or not cod_status:
         return err("id and cod_status are required")
     cod_response_date = getattr(args, 'cod_response_date', _today()) or _today()
-    conn.execute(
-        "UPDATE finaid_disbursement SET cod_status=?, cod_response_date=? WHERE id=?",
-        (cod_status, cod_response_date, disb_id)
-    )
+    _d = Table("finaid_disbursement")
+    conn.execute(Q.update(_d).set(_d.cod_status, P()).set(_d.cod_response_date, P()).where(_d.id == P()).get_sql(), (cod_status, cod_response_date, disb_id))
     conn.commit()
     return ok({"id": disb_id, "cod_status": cod_status})
 
@@ -1257,10 +1265,8 @@ def mark_credit_balance_returned(conn, args):
     if not row['is_credit_balance']:
         return err("This disbursement is not a credit balance")
     # Validate 14-day rule (lenient check)
-    conn.execute(
-        "UPDATE finaid_disbursement SET credit_balance_returned_date=? WHERE id=?",
-        (return_date, disb_id)
-    )
+    _d = Table("finaid_disbursement")
+    conn.execute(Q.update(_d).set(_d.credit_balance_returned_date, P()).where(_d.id == P()).get_sql(), (return_date, disb_id))
     conn.commit()
     return ok({"id": disb_id, "credit_balance_returned_date": return_date})
 
@@ -1313,13 +1319,15 @@ def run_sap_evaluation(conn, args):
         transfer_credits_attempted, transfer_credits_completed
     )
     # Check for prior SAP status
+    _se = Table("finaid_sap_evaluation")
     prior_row = conn.execute(
-        "SELECT sap_status FROM finaid_sap_evaluation WHERE student_id=? AND academic_term_id=?",
+        Q.from_(_se).select(_se.sap_status).where(_se.student_id == P()).where(_se.academic_term_id == P()).get_sql(),
         (student_id, academic_term_id)
     ).fetchone()
     prior_sap_status = prior_row['sap_status'] if prior_row else ''
     eval_id = str(uuid.uuid4())
     try:
+        # PyPika: skipped — INSERT OR REPLACE not supported by PyPika
         conn.execute(
             "INSERT OR REPLACE INTO finaid_sap_evaluation (id,student_id,academic_term_id,aid_year_id,evaluation_date,evaluation_type,gpa_earned,gpa_threshold,gpa_meets_standard,credits_attempted,credits_completed,completion_rate,completion_threshold,completion_meets_standard,max_timeframe_credits,projected_credits_remaining,max_timeframe_met,transfer_credits_attempted,transfer_credits_completed,sap_status,prior_sap_status,holds_placed,evaluated_by,notes,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (eval_id, student_id, academic_term_id, aid_year_id or '', evaluation_date, evaluation_type,
@@ -1345,6 +1353,7 @@ def run_sap_batch(conn, args):
     if not academic_term_id or not company_id:
         return err("academic_term_id and company_id are required")
     # Get all students with packages for this term
+    # PyPika: skipped — SELECT DISTINCT not easily composable
     packages = conn.execute(
         "SELECT DISTINCT student_id, aid_year_id FROM finaid_award_package WHERE academic_term_id=? AND company_id=?",
         (academic_term_id, company_id)
@@ -1353,6 +1362,7 @@ def run_sap_batch(conn, args):
     for pkg in packages:
         # Use default values for batch
         eval_id = str(uuid.uuid4())
+        # PyPika: skipped — INSERT OR IGNORE not supported by PyPika
         conn.execute(
             "INSERT OR IGNORE INTO finaid_sap_evaluation (id,student_id,academic_term_id,aid_year_id,evaluation_date,evaluation_type,sap_status,evaluated_by,company_id) VALUES (?,?,?,?,?,?,?,?,?)",
             (eval_id, pkg['student_id'], academic_term_id, pkg['aid_year_id'] or '',
@@ -1377,16 +1387,17 @@ def list_sap_evaluations(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_sap_evaluation WHERE company_id=?"
+    t = Table("finaid_sap_evaluation")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['student_id', 'academic_term_id', 'sap_status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"sap_evaluations": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1397,10 +1408,11 @@ def override_sap_status(conn, args):
     if not eval_id or not sap_status:
         return err("id and sap_status are required")
     notes = getattr(args, 'notes', '') or ''
-    conn.execute(
-        "UPDATE finaid_sap_evaluation SET sap_status=?,evaluation_type='manual',evaluated_by=?,notes=?,updated_at=? WHERE id=?",
-        (sap_status, evaluated_by or '', notes, _now_iso(), eval_id)
-    )
+    _se = Table("finaid_sap_evaluation")
+    sql = (Q.update(_se).set(_se.sap_status, P()).set(_se.evaluation_type, "manual")
+           .set(_se.evaluated_by, P()).set(_se.notes, P()).set(_se.updated_at, P())
+           .where(_se.id == P()).get_sql())
+    conn.execute(sql, (sap_status, evaluated_by or '', notes, _now_iso(), eval_id))
     conn.commit()
     return ok({"id": eval_id, "sap_status": sap_status})
 
@@ -1439,22 +1451,19 @@ def update_sap_appeal(conn, args):
     appeal_id = getattr(args, 'id', None)
     if not appeal_id:
         return err("id is required")
-    fields, vals = [], []
+    data = {}
     for f in ['status', 'reviewed_by', 'decision_rationale', 'probation_conditions']:
         v = getattr(args, f, None)
         if v is not None:
-            fields.append(f"{f}=?")
-            vals.append(v)
+            data[f] = v
     reviewed_date = getattr(args, 'reviewed_date_appeal', None) or getattr(args, 'reviewed_date', None)
     if reviewed_date:
-        fields.append("reviewed_date=?")
-        vals.append(reviewed_date)
-    if not fields:
+        data["reviewed_date"] = reviewed_date
+    if not data:
         return err("No fields to update")
-    fields.append("updated_at=?")
-    vals.append(_now_iso())
-    vals.append(appeal_id)
-    conn.execute(f"UPDATE finaid_sap_appeal SET {','.join(fields)} WHERE id=?", vals)
+    data["updated_at"] = _now_iso()
+    sql, vals = dynamic_update("finaid_sap_appeal", data=data, where={"id": appeal_id})
+    conn.execute(sql, vals)
     conn.commit()
     return ok({"id": appeal_id, "updated": True})
 
@@ -1473,16 +1482,17 @@ def list_sap_appeals(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_sap_appeal WHERE company_id=?"
+    t = Table("finaid_sap_appeal")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['student_id', 'status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"sap_appeals": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1499,22 +1509,17 @@ def decide_sap_appeal(conn, args):
     reviewed_by = getattr(args, 'reviewed_by', '') or ''
     decision_rationale = getattr(args, 'decision_rationale', '') or ''
     reviewed_date = _today()
-    conn.execute(
-        "UPDATE finaid_sap_appeal SET status=?,reviewed_by=?,reviewed_date=?,decision_rationale=?,updated_at=? WHERE id=?",
-        (decision, reviewed_by, reviewed_date, decision_rationale, _now_iso(), appeal_id)
-    )
+    _sa = Table("finaid_sap_appeal")
+    sql = (Q.update(_sa).set(_sa.status, P()).set(_sa.reviewed_by, P()).set(_sa.reviewed_date, P())
+           .set(_sa.decision_rationale, P()).set(_sa.updated_at, P()).where(_sa.id == P()).get_sql())
+    conn.execute(sql, (decision, reviewed_by, reviewed_date, decision_rationale, _now_iso(), appeal_id))
     if decision == 'granted':
         probation_term_id = getattr(args, 'probation_term_id', None)
         probation_conditions = getattr(args, 'probation_conditions', '') or ''
-        conn.execute(
-            "UPDATE finaid_sap_evaluation SET sap_status='FAP', updated_at=? WHERE id=?",
-            (_now_iso(), appeal_row['sap_evaluation_id'])
-        )
+        _se = Table("finaid_sap_evaluation")
+        conn.execute(Q.update(_se).set(_se.sap_status, "FAP").set(_se.updated_at, P()).where(_se.id == P()).get_sql(), (_now_iso(), appeal_row['sap_evaluation_id']))
         if probation_term_id:
-            conn.execute(
-                "UPDATE finaid_sap_appeal SET probation_term_id=?, probation_conditions=? WHERE id=?",
-                (probation_term_id, probation_conditions, appeal_id)
-            )
+            conn.execute(Q.update(_sa).set(_sa.probation_term_id, P()).set(_sa.probation_conditions, P()).where(_sa.id == P()).get_sql(), (probation_term_id, probation_conditions, appeal_id))
     conn.commit()
     return ok({"id": appeal_id, "status": decision})
 
@@ -1538,7 +1543,7 @@ def create_r2t4(conn, args):
     for name, val in [('student_id', student_id), ('academic_term_id', academic_term_id), ('company_id', company_id)]:
         if not val:
             return err(f"{name} is required")
-    # Compute due date
+    # Compute R2T4 return due date (45 days from determination)
     try:
         det_dt = datetime.strptime(determination_date, '%Y-%m-%d')
         due_date = (det_dt + timedelta(days=45)).strftime('%Y-%m-%d')
@@ -1583,6 +1588,7 @@ def calculate_r2t4(conn, args):
     earned_percent = Decimal('1') if percent_completed > Decimal('0.60') else percent_completed
     # Get disbursed amounts
     if r['award_package_id']:
+        # PyPika: skipped — SUM(CAST(... AS REAL)) aggregate
         disb_rows = conn.execute(
             "SELECT SUM(CAST(amount AS REAL)) as total FROM finaid_disbursement WHERE award_package_id=? AND disbursement_type='disbursement'",
             (r['award_package_id'],)
@@ -1595,8 +1601,13 @@ def calculate_r2t4(conn, args):
     # Institution pays 50% of unearned
     institution_return = round_currency(unearned_aid * Decimal('0.50'))
     student_return = round_currency(unearned_aid - institution_return)
-    conn.execute(
-        "UPDATE finaid_r2t4_calculation SET days_attended=?,percent_completed=?,earned_percent=?,total_aid_disbursed=?,earned_aid=?,unearned_aid=?,institution_return_amount=?,student_return_amount=?,updated_at=? WHERE id=?",
+    _r2 = Table("finaid_r2t4_calculation")
+    sql = (Q.update(_r2)
+           .set(_r2.days_attended, P()).set(_r2.percent_completed, P()).set(_r2.earned_percent, P())
+           .set(_r2.total_aid_disbursed, P()).set(_r2.earned_aid, P()).set(_r2.unearned_aid, P())
+           .set(_r2.institution_return_amount, P()).set(_r2.student_return_amount, P())
+           .set(_r2.updated_at, P()).where(_r2.id == P()).get_sql())
+    conn.execute(sql,
         (days_attended, str(round_currency(percent_completed)), str(earned_percent),
          str(total_aid_disbursed), str(earned_aid), str(unearned_aid),
          str(institution_return), str(student_return), _now_iso(), r2t4_id)
@@ -1618,10 +1629,8 @@ def approve_r2t4(conn, args):
     approved_by = getattr(args, 'approved_by', '') or ''
     if not r2t4_id:
         return err("id or r2t4_id is required")
-    conn.execute(
-        "UPDATE finaid_r2t4_calculation SET status='approved', approved_by=?, updated_at=? WHERE id=?",
-        (approved_by, _now_iso(), r2t4_id)
-    )
+    _r2 = Table("finaid_r2t4_calculation")
+    conn.execute(Q.update(_r2).set(_r2.status, "approved").set(_r2.approved_by, P()).set(_r2.updated_at, P()).where(_r2.id == P()).get_sql(), (approved_by, _now_iso(), r2t4_id))
     conn.commit()
     return ok({"id": r2t4_id, "status": "approved"})
 
@@ -1631,10 +1640,8 @@ def record_r2t4_return(conn, args):
     institution_return_date = getattr(args, 'institution_return_date', _today()) or _today()
     if not r2t4_id:
         return err("id or r2t4_id is required")
-    conn.execute(
-        "UPDATE finaid_r2t4_calculation SET institution_return_date=?, status='returned', updated_at=? WHERE id=?",
-        (institution_return_date, _now_iso(), r2t4_id)
-    )
+    _r2 = Table("finaid_r2t4_calculation")
+    conn.execute(Q.update(_r2).set(_r2.institution_return_date, P()).set(_r2.status, "returned").set(_r2.updated_at, P()).where(_r2.id == P()).get_sql(), (institution_return_date, _now_iso(), r2t4_id))
     conn.commit()
     return ok({"id": r2t4_id, "status": "returned", "institution_return_date": institution_return_date})
 
@@ -1653,16 +1660,17 @@ def list_r2t4s(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_r2t4_calculation WHERE company_id=?"
+    t = Table("finaid_r2t4_calculation")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['student_id', 'status']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"r2t4_calculations": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1717,16 +1725,17 @@ def list_professional_judgments(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not company_id:
         return err("company_id is required")
-    q = "SELECT * FROM finaid_professional_judgment WHERE company_id=?"
+    t = Table("finaid_professional_judgment")
+    qb = Q.from_(t).select(t.star).where(t.company_id == P())
     params = [company_id]
     for f in ['student_id', 'aid_year_id', 'pj_type']:
         v = getattr(args, f, None)
         if v:
-            q += f" AND {f}=?"
+            qb = qb.where(Field(f) == P())
             params.append(v)
-    q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    qb = qb.orderby(t.created_at, order=Order.desc).limit(P()).offset(P())
     params.extend([int(getattr(args, 'limit', 50) or 50), int(getattr(args, 'offset', 0) or 0)])
-    rows = conn.execute(q, params).fetchall()
+    rows = conn.execute(qb.get_sql(), params).fetchall()
     return ok({"professional_judgments": [dict(r) for r in rows], "count": len(rows)})
 
 
@@ -1737,10 +1746,8 @@ def approve_professional_judgment(conn, args):
         return err("id and supervisor_reviewed_by are required")
     supervisor_review_date = getattr(args, 'supervisor_review_date', _today()) or _today()
     # finaid_professional_judgment is append-only but we allow supervisor approval update
-    conn.execute(
-        "UPDATE finaid_professional_judgment SET supervisor_reviewed_by=?, supervisor_review_date=? WHERE id=?",
-        (supervisor_reviewed_by, supervisor_review_date, pj_id)
-    )
+    _pj = Table("finaid_professional_judgment")
+    conn.execute(Q.update(_pj).set(_pj.supervisor_reviewed_by, P()).set(_pj.supervisor_review_date, P()).where(_pj.id == P()).get_sql(), (supervisor_reviewed_by, supervisor_review_date, pj_id))
     conn.commit()
     return ok({"id": pj_id, "supervisor_reviewed_by": supervisor_reviewed_by})
 

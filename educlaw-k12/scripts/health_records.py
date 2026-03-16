@@ -22,7 +22,7 @@ from erpclaw_lib.decimal_utils import to_decimal
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
 from erpclaw_lib.query_helpers import resolve_company_id
-from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row
+from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 
 SKILL = "k12-educlaw-k12"
 
@@ -79,8 +79,9 @@ def add_health_profile(conn, args):
         return err(f"Student {student_id} not found")
 
     # Check for existing profile
+    hp = Table("educlaw_k12_health_profile")
     existing = conn.execute(
-        "SELECT id FROM educlaw_k12_health_profile WHERE student_id = ?", (student_id,)
+        Q.from_(hp).select(hp.id).where(hp.student_id == P()).get_sql(), (student_id,)
     ).fetchone()
     if existing:
         return err(f"Health profile already exists for student {student_id}")
@@ -112,23 +113,25 @@ def add_health_profile(conn, args):
 
     now = _now_iso()
     profile_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_health_profile
-           (id, student_id, allergies, chronic_conditions, physician_name, physician_phone,
-            physician_address, health_insurance_carrier, health_insurance_id, blood_type,
-            height_cm, weight_kg, vision_screening_date, hearing_screening_date,
-            dental_screening_date, activity_restriction, activity_restriction_notes,
-            is_provisional_immunization, provisional_enrollment_end_date, is_mckinney_vento,
-            emergency_instructions, profile_status, last_verified_date, last_verified_by,
-            company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   'incomplete', '', '', ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_health_profile", {
+        "id": P(), "student_id": P(), "allergies": P(), "chronic_conditions": P(),
+        "physician_name": P(), "physician_phone": P(), "physician_address": P(),
+        "health_insurance_carrier": P(), "health_insurance_id": P(), "blood_type": P(),
+        "height_cm": P(), "weight_kg": P(), "vision_screening_date": P(),
+        "hearing_screening_date": P(), "dental_screening_date": P(),
+        "activity_restriction": P(), "activity_restriction_notes": P(),
+        "is_provisional_immunization": P(), "provisional_enrollment_end_date": P(),
+        "is_mckinney_vento": P(), "emergency_instructions": P(),
+        "profile_status": P(), "last_verified_date": P(), "last_verified_by": P(),
+        "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (profile_id, student_id, allergies, chronic_conditions, physician_name,
          physician_phone, physician_address, health_insurance_carrier, health_insurance_id,
          blood_type, height_cm, weight_kg, vision_screening_date, hearing_screening_date,
          dental_screening_date, activity_restriction, activity_restriction_notes,
          is_provisional_immunization, provisional_enrollment_end_date, is_mckinney_vento,
-         emergency_instructions, company_id, now, now, created_by)
+         emergency_instructions, "incomplete", "", "", company_id, now, now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-health-profile", "educlaw_k12_health_profile", profile_id)
@@ -150,8 +153,9 @@ def update_health_profile(conn, args):
         return err("--student-id or --health-profile-id is required")
 
     if student_id:
+        hp_t = Table("educlaw_k12_health_profile")
         row = conn.execute(
-            "SELECT * FROM educlaw_k12_health_profile WHERE student_id = ?",
+            Q.from_(hp_t).select(hp_t.star).where(hp_t.student_id == P()).get_sql(),
             (student_id,)
         ).fetchone()
     else:
@@ -186,11 +190,8 @@ def update_health_profile(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_health_profile SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [profile_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_health_profile", data=updates, where={"id": profile_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-health-profile", "educlaw_k12_health_profile", profile_id)
     return ok({"id": profile_id, "message": "Health profile updated"})
@@ -209,8 +210,9 @@ def get_health_profile(conn, args):
     if not student_id:
         return err("--student-id is required")
 
+    hp_t = Table("educlaw_k12_health_profile")
     row = conn.execute(
-        "SELECT * FROM educlaw_k12_health_profile WHERE student_id = ?",
+        Q.from_(hp_t).select(hp_t.star).where(hp_t.student_id == P()).get_sql(),
         (student_id,)
     ).fetchone()
     if not row:
@@ -242,8 +244,9 @@ def verify_health_profile(conn, args):
     if not student_id:
         return err("--student-id is required")
 
+    hp_t = Table("educlaw_k12_health_profile")
     row = conn.execute(
-        "SELECT id FROM educlaw_k12_health_profile WHERE student_id = ?",
+        Q.from_(hp_t).select(hp_t.id).where(hp_t.student_id == P()).get_sql(),
         (student_id,)
     ).fetchone()
     if not row:
@@ -252,11 +255,11 @@ def verify_health_profile(conn, args):
     profile_id = row["id"]
     now = _now_iso()
     conn.execute(
-        """UPDATE educlaw_k12_health_profile
-           SET profile_status = 'active', last_verified_date = ?,
-               last_verified_by = ?, updated_at = ?
-           WHERE id = ?""",
-        (last_verified_date, last_verified_by, now, profile_id)
+        update_row("educlaw_k12_health_profile",
+                   data={"profile_status": P(), "last_verified_date": P(),
+                         "last_verified_by": P(), "updated_at": P()},
+                   where={"id": P()}),
+        ("active", last_verified_date, last_verified_by, now, profile_id)
     )
     conn.commit()
     audit(conn, SKILL, "k12-submit-health-profile-verification", "educlaw_k12_health_profile", profile_id)
@@ -510,19 +513,22 @@ def add_student_medication(conn, args):
 
     now = _now_iso()
     med_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_student_medication
-           (id, student_id, medication_name, dosage, route, frequency,
-            administration_times, prescribing_physician, physician_authorization_date,
-            start_date, end_date, supply_count, supply_low_threshold,
-            storage_instructions, administration_instructions, is_controlled_substance,
-            medication_status, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_student_medication", {
+        "id": P(), "student_id": P(), "medication_name": P(), "dosage": P(),
+        "route": P(), "frequency": P(), "administration_times": P(),
+        "prescribing_physician": P(), "physician_authorization_date": P(),
+        "start_date": P(), "end_date": P(), "supply_count": P(),
+        "supply_low_threshold": P(), "storage_instructions": P(),
+        "administration_instructions": P(), "is_controlled_substance": P(),
+        "medication_status": P(), "company_id": P(), "created_at": P(),
+        "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (med_id, student_id, medication_name, dosage, route, frequency,
          administration_times, prescribing_physician, physician_authorization_date,
          start_date, end_date, supply_count, supply_low_threshold,
          storage_instructions, administration_instructions, is_controlled_substance,
-         company_id, now, now, created_by)
+         "active", company_id, now, now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-student-medication", "educlaw_k12_student_medication", med_id)
@@ -563,11 +569,8 @@ def update_student_medication(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_student_medication SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [medication_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_student_medication", data=updates, where={"id": medication_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-student-medication", "educlaw_k12_student_medication", medication_id)
     return ok({"id": medication_id, "message": "Student medication updated"})
@@ -657,6 +660,7 @@ def log_medication_admin(conn, args):
 
     # Decrement supply count only if medication was actually given (not refused)
     if not is_refused:
+        # PyPika: skipped — SQL expression MAX(0, supply_count - 1)
         conn.execute(
             """UPDATE educlaw_k12_student_medication
                SET supply_count = MAX(0, supply_count - 1), updated_at = ?
@@ -797,14 +801,15 @@ def add_immunization_waiver(conn, args):
 
     now = _now_iso()
     waiver_id = str(uuid.uuid4())
-    conn.execute(
-        """INSERT INTO educlaw_k12_immunization_waiver
-           (id, student_id, vaccine_name, cvx_code, waiver_type, waiver_basis,
-            issuing_physician, issue_date, expiry_date, waiver_status,
-            company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)""",
+    sql, _ = insert_row("educlaw_k12_immunization_waiver", {
+        "id": P(), "student_id": P(), "vaccine_name": P(), "cvx_code": P(),
+        "waiver_type": P(), "waiver_basis": P(), "issuing_physician": P(),
+        "issue_date": P(), "expiry_date": P(), "waiver_status": P(),
+        "company_id": P(), "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql,
         (waiver_id, student_id, vaccine_name, cvx_code, waiver_type, waiver_basis,
-         issuing_physician, issue_date, expiry_date, company_id, now, now, created_by)
+         issuing_physician, issue_date, expiry_date, "active", company_id, now, now, created_by)
     )
     conn.commit()
     audit(conn, SKILL, "k12-add-immunization-waiver", "educlaw_k12_immunization_waiver", waiver_id)
@@ -836,11 +841,8 @@ def update_immunization_waiver(conn, args):
         return err("No fields provided to update")
 
     updates["updated_at"] = _now_iso()
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
-        f"UPDATE educlaw_k12_immunization_waiver SET {set_clause} WHERE id = ?",
-        list(updates.values()) + [waiver_id]
-    )
+    sql, params = dynamic_update("educlaw_k12_immunization_waiver", data=updates, where={"id": waiver_id})
+    conn.execute(sql, params)
     conn.commit()
     audit(conn, SKILL, "k12-update-immunization-waiver", "educlaw_k12_immunization_waiver", waiver_id)
     return ok({"id": waiver_id, "message": "Immunization waiver updated"})
