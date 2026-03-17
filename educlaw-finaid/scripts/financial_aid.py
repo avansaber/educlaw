@@ -13,7 +13,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row, LiteralValue
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 except ImportError:
     pass
 
@@ -134,17 +134,28 @@ def import_pell_schedule(conn, args):
         return err("rows must be valid JSON array")
     inserted = 0
     for r in rows:
-        rid = str(uuid.uuid4())
-        # PyPika: skipped — INSERT OR REPLACE not supported by PyPika
-        conn.execute(
-            "INSERT OR REPLACE INTO finaid_pell_schedule (id,aid_year_id,pell_index,full_time_annual,three_quarter_time,half_time,less_than_half_time,company_id) VALUES (?,?,?,?,?,?,?,?)",
-            (rid, aid_year_id, int(r.get('pell_index', 0)),
-             str(round_currency(to_decimal(r.get('full_time_annual', '0')))),
-             str(round_currency(to_decimal(r.get('three_quarter_time', '0')))),
-             str(round_currency(to_decimal(r.get('half_time', '0')))),
-             str(round_currency(to_decimal(r.get('less_than_half_time', '0')))),
-             company_id)
-        )
+        pell_idx = int(r.get('pell_index', 0))
+        ft = str(round_currency(to_decimal(r.get('full_time_annual', '0'))))
+        tq = str(round_currency(to_decimal(r.get('three_quarter_time', '0'))))
+        ht = str(round_currency(to_decimal(r.get('half_time', '0'))))
+        lt = str(round_currency(to_decimal(r.get('less_than_half_time', '0'))))
+        # Portable upsert: SELECT-first, then INSERT or UPDATE
+        existing = conn.execute(
+            "SELECT id FROM finaid_pell_schedule WHERE aid_year_id = ? AND pell_index = ? AND company_id = ?",
+            (aid_year_id, pell_idx, company_id)
+        ).fetchone()
+        if existing:
+            eid = existing["id"] if isinstance(existing, dict) else existing[0]
+            conn.execute(
+                "UPDATE finaid_pell_schedule SET full_time_annual=?,three_quarter_time=?,half_time=?,less_than_half_time=? WHERE id=?",
+                (ft, tq, ht, lt, eid)
+            )
+        else:
+            rid = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO finaid_pell_schedule (id,aid_year_id,pell_index,full_time_annual,three_quarter_time,half_time,less_than_half_time,company_id) VALUES (?,?,?,?,?,?,?,?)",
+                (rid, aid_year_id, pell_idx, ft, tq, ht, lt, company_id)
+            )
         inserted += 1
     conn.commit()
     return ok({"inserted": inserted, "aid_year_id": aid_year_id})
@@ -436,12 +447,17 @@ def import_isir(conn, args):
              household_size, 'received', raw_isir_data, company_id)
         )
         for cflag_code, cflag_desc, blocks in cflags:
-            cflag_id = str(uuid.uuid4())
-            # PyPika: skipped — INSERT OR IGNORE not supported by PyPika
-            conn.execute(
-                "INSERT OR IGNORE INTO finaid_isir_cflag (id,isir_id,student_id,cflag_code,cflag_description,blocks_disbursement,resolution_status,company_id) VALUES (?,?,?,?,?,?,?,?)",
-                (cflag_id, isir_id, student_id, cflag_code, cflag_desc, blocks, 'pending', company_id)
-            )
+            # Portable upsert: skip if cflag already exists for this ISIR
+            existing_cf = conn.execute(
+                "SELECT 1 FROM finaid_isir_cflag WHERE isir_id = ? AND cflag_code = ?",
+                (isir_id, cflag_code)
+            ).fetchone()
+            if not existing_cf:
+                cflag_id = str(uuid.uuid4())
+                conn.execute(
+                    "INSERT INTO finaid_isir_cflag (id,isir_id,student_id,cflag_code,cflag_description,blocks_disbursement,resolution_status,company_id) VALUES (?,?,?,?,?,?,?,?)",
+                    (cflag_id, isir_id, student_id, cflag_code, cflag_desc, blocks, 'pending', company_id)
+                )
         conn.commit()
         return ok({"id": isir_id, "has_unresolved_cflags": has_unresolved_cflags, "cflags_created": len(cflags)})
     except sqlite3.IntegrityError as e:
@@ -1327,20 +1343,42 @@ def run_sap_evaluation(conn, args):
     prior_sap_status = prior_row['sap_status'] if prior_row else ''
     eval_id = str(uuid.uuid4())
     try:
-        # PyPika: skipped — INSERT OR REPLACE not supported by PyPika
-        conn.execute(
-            "INSERT OR REPLACE INTO finaid_sap_evaluation (id,student_id,academic_term_id,aid_year_id,evaluation_date,evaluation_type,gpa_earned,gpa_threshold,gpa_meets_standard,credits_attempted,credits_completed,completion_rate,completion_threshold,completion_meets_standard,max_timeframe_credits,projected_credits_remaining,max_timeframe_met,transfer_credits_attempted,transfer_credits_completed,sap_status,prior_sap_status,holds_placed,evaluated_by,notes,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (eval_id, student_id, academic_term_id, aid_year_id or '', evaluation_date, evaluation_type,
-             str(round_currency(to_decimal(gpa_earned))), gpa_threshold, gpa_ok,
-             str(round_currency(to_decimal(credits_attempted))), str(round_currency(to_decimal(credits_completed))),
-             completion_rate, completion_threshold, pace_ok,
-             str(round_currency(to_decimal(max_timeframe_credits))),
-             str(round_currency(to_decimal(projected_credits_remaining))), max_ok,
-             str(round_currency(to_decimal(transfer_credits_attempted))),
-             str(round_currency(to_decimal(transfer_credits_completed))),
-             sap_status, prior_sap_status, 1 if sap_status in ('FSP', 'FAW') else 0,
-             evaluated_by, '', company_id)
-        )
+        # Portable upsert: check if evaluation exists for student+term, then INSERT or UPDATE
+        existing_eval = conn.execute(
+            "SELECT id FROM finaid_sap_evaluation WHERE student_id = ? AND academic_term_id = ?",
+            (student_id, academic_term_id)
+        ).fetchone()
+        gpa_earned_str = str(round_currency(to_decimal(gpa_earned)))
+        ca_str = str(round_currency(to_decimal(credits_attempted)))
+        cc_str = str(round_currency(to_decimal(credits_completed)))
+        mt_str = str(round_currency(to_decimal(max_timeframe_credits)))
+        pr_str = str(round_currency(to_decimal(projected_credits_remaining)))
+        ta_str = str(round_currency(to_decimal(transfer_credits_attempted)))
+        tc_str = str(round_currency(to_decimal(transfer_credits_completed)))
+        holds = 1 if sap_status in ('FSP', 'FAW') else 0
+        if existing_eval:
+            eid = existing_eval["id"] if isinstance(existing_eval, dict) else existing_eval[0]
+            conn.execute(
+                """UPDATE finaid_sap_evaluation SET aid_year_id=?,evaluation_date=?,evaluation_type=?,
+                   gpa_earned=?,gpa_threshold=?,gpa_meets_standard=?,credits_attempted=?,credits_completed=?,
+                   completion_rate=?,completion_threshold=?,completion_meets_standard=?,max_timeframe_credits=?,
+                   projected_credits_remaining=?,max_timeframe_met=?,transfer_credits_attempted=?,
+                   transfer_credits_completed=?,sap_status=?,prior_sap_status=?,holds_placed=?,
+                   evaluated_by=?,notes=?,company_id=? WHERE id=?""",
+                (aid_year_id or '', evaluation_date, evaluation_type,
+                 gpa_earned_str, gpa_threshold, gpa_ok, ca_str, cc_str,
+                 completion_rate, completion_threshold, pace_ok, mt_str, pr_str, max_ok,
+                 ta_str, tc_str, sap_status, prior_sap_status, holds, evaluated_by, '', company_id, eid)
+            )
+            eval_id = eid
+        else:
+            conn.execute(
+                "INSERT INTO finaid_sap_evaluation (id,student_id,academic_term_id,aid_year_id,evaluation_date,evaluation_type,gpa_earned,gpa_threshold,gpa_meets_standard,credits_attempted,credits_completed,completion_rate,completion_threshold,completion_meets_standard,max_timeframe_credits,projected_credits_remaining,max_timeframe_met,transfer_credits_attempted,transfer_credits_completed,sap_status,prior_sap_status,holds_placed,evaluated_by,notes,company_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (eval_id, student_id, academic_term_id, aid_year_id or '', evaluation_date, evaluation_type,
+                 gpa_earned_str, gpa_threshold, gpa_ok, ca_str, cc_str,
+                 completion_rate, completion_threshold, pace_ok, mt_str, pr_str, max_ok,
+                 ta_str, tc_str, sap_status, prior_sap_status, holds, evaluated_by, '', company_id)
+            )
         conn.commit()
         return ok({"id": eval_id, "sap_status": sap_status, "completion_rate": completion_rate})
     except sqlite3.IntegrityError as e:
@@ -1360,14 +1398,18 @@ def run_sap_batch(conn, args):
     ).fetchall()
     results = []
     for pkg in packages:
-        # Use default values for batch
-        eval_id = str(uuid.uuid4())
-        # PyPika: skipped — INSERT OR IGNORE not supported by PyPika
-        conn.execute(
-            "INSERT OR IGNORE INTO finaid_sap_evaluation (id,student_id,academic_term_id,aid_year_id,evaluation_date,evaluation_type,sap_status,evaluated_by,company_id) VALUES (?,?,?,?,?,?,?,?,?)",
-            (eval_id, pkg['student_id'], academic_term_id, pkg['aid_year_id'] or '',
-             _today(), 'automatic', 'SAT', 'system', company_id)
-        )
+        # Portable upsert: skip if evaluation already exists for student+term
+        existing_batch = conn.execute(
+            "SELECT 1 FROM finaid_sap_evaluation WHERE student_id = ? AND academic_term_id = ?",
+            (pkg['student_id'], academic_term_id)
+        ).fetchone()
+        if not existing_batch:
+            eval_id = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO finaid_sap_evaluation (id,student_id,academic_term_id,aid_year_id,evaluation_date,evaluation_type,sap_status,evaluated_by,company_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                (eval_id, pkg['student_id'], academic_term_id, pkg['aid_year_id'] or '',
+                 _today(), 'automatic', 'SAT', 'system', company_id)
+            )
         results.append(pkg['student_id'])
     conn.commit()
     return ok({"evaluated": len(results), "academic_term_id": academic_term_id})
@@ -1588,9 +1630,9 @@ def calculate_r2t4(conn, args):
     earned_percent = Decimal('1') if percent_completed > Decimal('0.60') else percent_completed
     # Get disbursed amounts
     if r['award_package_id']:
-        # PyPika: skipped — SUM(CAST(... AS REAL)) aggregate
+        # PyPika: skipped — SUM(CAST(... AS NUMERIC)) aggregate
         disb_rows = conn.execute(
-            "SELECT SUM(CAST(amount AS REAL)) as total FROM finaid_disbursement WHERE award_package_id=? AND disbursement_type='disbursement'",
+            "SELECT SUM(CAST(amount AS NUMERIC)) as total FROM finaid_disbursement WHERE award_package_id=? AND disbursement_type='disbursement'",
             (r['award_package_id'],)
         ).fetchone()
         total_aid_disbursed = Decimal(str(disb_rows['total'] or '0'))

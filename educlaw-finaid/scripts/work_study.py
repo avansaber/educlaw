@@ -21,7 +21,7 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row, LiteralValue
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, update_row
 except ImportError:
     pass
 
@@ -335,7 +335,7 @@ def get_work_study_assignment(conn, args):
     # Earnings summary: sum of approved timesheet earnings
     # PyPika: skipped — COALESCE(SUM(CAST(... AS REAL))) aggregate
     earnings_row = conn.execute(
-        """SELECT COALESCE(SUM(CAST(earnings AS REAL)), 0) as approved_earnings
+        """SELECT COALESCE(SUM(CAST(earnings AS NUMERIC)), 0) as approved_earnings
            FROM finaid_work_study_timesheet
            WHERE assignment_id = ? AND supervisor_approval_status = 'approved'""",
         (assignment_id,)
@@ -614,7 +614,7 @@ def approve_work_study_timesheet(conn, args):
     # PyPika: skipped — inline CAST(ROUND(CAST(...) + ?, 2) AS TEXT) expression
     conn.execute(
         """UPDATE finaid_work_study_assignment
-           SET earned_to_date = CAST(ROUND(CAST(earned_to_date AS REAL) + ?, 2) AS TEXT),
+           SET earned_to_date = CAST(ROUND(CAST(earned_to_date AS NUMERIC) + ?, 2) AS TEXT),
                updated_at = ?
            WHERE id = ?""",
         (float(earnings), now, ts["assignment_id"])
@@ -840,7 +840,7 @@ def get_work_study_earnings_summary(conn, args):
     # Sum of approved timesheet earnings for the student/aid_year
     # PyPika: skipped — COALESCE(SUM(CAST(... AS REAL))) with JOIN
     earned_row = conn.execute(
-        """SELECT COALESCE(SUM(CAST(t.earnings AS REAL)), 0) as total_earned
+        """SELECT COALESCE(SUM(CAST(t.earnings AS NUMERIC)), 0) as total_earned
            FROM finaid_work_study_timesheet t
            JOIN finaid_work_study_assignment a ON a.id = t.assignment_id
            WHERE a.student_id = ? AND a.aid_year_id = ? AND a.company_id = ?

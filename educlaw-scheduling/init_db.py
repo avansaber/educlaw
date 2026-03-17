@@ -27,7 +27,8 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 
 def create_educlaw_scheduling_tables(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     # Verify foundation exists
     tables = [r[0] for r in conn.execute(
@@ -68,8 +69,8 @@ def create_educlaw_scheduling_tables(db_path):
             approved_by TEXT NOT NULL DEFAULT '',
             approved_at TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_course_request_student_term_course UNIQUE (student_id, academic_term_id, course_id)
         );
@@ -85,8 +86,8 @@ def create_educlaw_scheduling_tables(db_path):
             notes TEXT NOT NULL DEFAULT '',
             is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -103,7 +104,7 @@ def create_educlaw_scheduling_tables(db_path):
             applies_to_day_types TEXT NOT NULL DEFAULT '[]',
             sort_order INTEGER NOT NULL DEFAULT 0,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_bell_period_pattern_number UNIQUE (schedule_pattern_id, period_number)
         );
@@ -116,7 +117,7 @@ def create_educlaw_scheduling_tables(db_path):
             name TEXT NOT NULL DEFAULT '',
             sort_order INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_day_type_pattern_code UNIQUE (schedule_pattern_id, code)
         );
@@ -134,8 +135,8 @@ def create_educlaw_scheduling_tables(db_path):
             priority TEXT NOT NULL DEFAULT 'preference' CHECK(priority IN ('hard','soft','preference')),
             is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -159,8 +160,8 @@ def create_educlaw_scheduling_tables(db_path):
             locked_by TEXT NOT NULL DEFAULT '',
             cloned_from_id TEXT REFERENCES educlaw_master_schedule(id) ON DELETE RESTRICT,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -178,8 +179,8 @@ def create_educlaw_scheduling_tables(db_path):
             is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
             notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_section_meeting_slot UNIQUE (section_id, day_type_id, bell_period_id)
         );
@@ -199,8 +200,8 @@ def create_educlaw_scheduling_tables(db_path):
             cancellation_reason TEXT NOT NULL DEFAULT '',
             accessibility_required INTEGER NOT NULL DEFAULT 0 CHECK(accessibility_required IN (0, 1)),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -221,8 +222,8 @@ def create_educlaw_scheduling_tables(db_path):
             resolved_by TEXT NOT NULL DEFAULT '',
             resolved_at TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 

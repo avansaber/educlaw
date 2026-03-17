@@ -313,7 +313,7 @@ def list_student_supplements(conn, args):
 
     search = getattr(args, "search", None)
     if search:
-        conditions.append("(s.first_name LIKE ? OR s.last_name LIKE ? OR ss.ssid LIKE ?)")
+        conditions.append("(LOWER(s.first_name) LIKE LOWER(?) OR LOWER(s.last_name) LIKE LOWER(?) OR LOWER(ss.ssid) LIKE LOWER(?))")
         params += [f"%{search}%", f"%{search}%", f"%{search}%"]
 
     where = " AND ".join(conditions)

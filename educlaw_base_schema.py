@@ -48,8 +48,8 @@ BASE_TABLES_DDL = """
         end_date TEXT NOT NULL DEFAULT '',
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(company_id, name),
         CHECK(start_date < end_date)
@@ -68,8 +68,8 @@ BASE_TABLES_DDL = """
         grade_submission_deadline TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'setup' CHECK(status IN ('setup','enrollment_open','active','grades_open','grades_finalized','closed')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         CHECK(start_date < end_date)
     );
@@ -87,8 +87,8 @@ BASE_TABLES_DDL = """
         announcement_status TEXT NOT NULL DEFAULT 'draft' CHECK(announcement_status IN ('draft','published','archived')),
         published_by TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -109,8 +109,8 @@ BASE_TABLES_DDL = """
         max_enrollment INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(company_id, course_code)
     );
@@ -122,7 +122,7 @@ BASE_TABLES_DDL = """
         prerequisite_course_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_course(id) ON DELETE RESTRICT,
         min_grade TEXT NOT NULL DEFAULT '',
         is_corequisite INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(course_id, prerequisite_course_id),
         CHECK(course_id != prerequisite_course_id)
@@ -136,8 +136,8 @@ BASE_TABLES_DDL = """
         revenue_account_id TEXT REFERENCES account(id) ON DELETE RESTRICT,
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -148,8 +148,8 @@ BASE_TABLES_DDL = """
         description TEXT NOT NULL DEFAULT '',
         is_default INTEGER NOT NULL DEFAULT 0,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(company_id, name)
     );
@@ -166,7 +166,7 @@ BASE_TABLES_DDL = """
         is_passing INTEGER NOT NULL DEFAULT 1,
         counts_in_gpa INTEGER NOT NULL DEFAULT 1,
         sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(grading_scale_id, letter_grade),
         CHECK(CAST(min_percentage AS REAL) <= CAST(max_percentage AS REAL))
@@ -187,8 +187,8 @@ BASE_TABLES_DDL = """
         employer TEXT NOT NULL DEFAULT '',
         customer_id TEXT REFERENCES customer(id) ON DELETE RESTRICT,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -211,8 +211,8 @@ BASE_TABLES_DDL = """
         hire_date TEXT NOT NULL DEFAULT '',
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -230,7 +230,7 @@ BASE_TABLES_DDL = """
         sent_via TEXT NOT NULL DEFAULT 'system' CHECK(sent_via IN ('system','email')),
         sent_at TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -246,8 +246,8 @@ BASE_TABLES_DDL = """
         duration_years INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(company_id, code)
     );
@@ -262,10 +262,10 @@ BASE_TABLES_DDL = """
         total_amount TEXT NOT NULL DEFAULT '0',
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
-        CHECK(CAST(total_amount AS REAL) >= 0)
+        CHECK(CAST(total_amount AS NUMERIC) >= 0)
     );
 
     -- educlaw_fee_structure_item
@@ -276,10 +276,10 @@ BASE_TABLES_DDL = """
         amount TEXT NOT NULL DEFAULT '0',
         description TEXT NOT NULL DEFAULT '',
         sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(fee_structure_id, fee_category_id),
-        CHECK(CAST(amount AS REAL) >= 0)
+        CHECK(CAST(amount AS NUMERIC) >= 0)
     );
 
     -- educlaw_program_requirement
@@ -290,7 +290,7 @@ BASE_TABLES_DDL = """
         requirement_type TEXT NOT NULL DEFAULT '' CHECK(requirement_type IN ('required','elective','core','major','general_education')),
         credit_category TEXT NOT NULL DEFAULT '',
         min_grade TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(program_id, course_id)
     );
@@ -305,8 +305,8 @@ BASE_TABLES_DDL = """
         facilities TEXT NOT NULL DEFAULT '[]',
         is_active INTEGER NOT NULL DEFAULT 1,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         UNIQUE(company_id, building, room_number),
         CHECK(capacity > 0)
@@ -338,8 +338,8 @@ BASE_TABLES_DDL = """
         status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','scheduled','open','closed','cancelled')),
         section_status TEXT NOT NULL DEFAULT '' CHECK(section_status IN ('','open','closed','cancelled')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT '',
         CHECK(max_enrollment >= 0),
         CHECK(current_enrollment >= 0)
@@ -351,8 +351,8 @@ BASE_TABLES_DDL = """
         section_id TEXT NOT NULL UNIQUE DEFAULT '' REFERENCES educlaw_section(id) ON DELETE RESTRICT,
         grading_scale_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_grading_scale(id) ON DELETE RESTRICT,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -363,7 +363,7 @@ BASE_TABLES_DDL = """
         name TEXT NOT NULL DEFAULT '',
         weight_percentage TEXT NOT NULL DEFAULT '0',
         sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -379,8 +379,8 @@ BASE_TABLES_DDL = """
         is_published INTEGER NOT NULL DEFAULT 0,
         allows_extra_credit INTEGER NOT NULL DEFAULT 0,
         sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -410,8 +410,8 @@ BASE_TABLES_DDL = """
         guardian_info TEXT NOT NULL DEFAULT '[]',
         documents TEXT NOT NULL DEFAULT '[]',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -454,8 +454,8 @@ BASE_TABLES_DDL = """
         enrollment_date TEXT NOT NULL DEFAULT '',
         graduation_date TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -473,8 +473,8 @@ BASE_TABLES_DDL = """
         third_party_name TEXT NOT NULL DEFAULT '',
         purpose TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -498,8 +498,8 @@ BASE_TABLES_DDL = """
         is_repeat INTEGER NOT NULL DEFAULT 0,
         grade_type TEXT NOT NULL DEFAULT 'letter' CHECK(grade_type IN ('letter','pass_fail','audit')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -515,8 +515,8 @@ BASE_TABLES_DDL = """
         comments TEXT NOT NULL DEFAULT '',
         graded_by TEXT NOT NULL DEFAULT '',
         graded_at TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -531,7 +531,7 @@ BASE_TABLES_DDL = """
         is_emergency_access INTEGER NOT NULL DEFAULT 0,
         ip_address TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -546,7 +546,7 @@ BASE_TABLES_DDL = """
         reason TEXT NOT NULL DEFAULT '',
         amended_by TEXT NOT NULL DEFAULT '',
         approved_by TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -561,8 +561,8 @@ BASE_TABLES_DDL = """
         enrollment_status TEXT NOT NULL DEFAULT 'active' CHECK(enrollment_status IN ('active','completed','withdrawn','suspended')),
         fee_invoice_id TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -593,8 +593,8 @@ BASE_TABLES_DDL = """
         total_aid TEXT NOT NULL DEFAULT '0',
         package_status TEXT NOT NULL DEFAULT '' CHECK(package_status IN ('','draft','offered','accepted','revised','cancelled')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -610,8 +610,8 @@ BASE_TABLES_DDL = """
         marked_by TEXT NOT NULL DEFAULT '',
         source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','biometric','app')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -626,7 +626,7 @@ BASE_TABLES_DDL = """
         receives_communications INTEGER NOT NULL DEFAULT 1,
         is_primary_contact INTEGER NOT NULL DEFAULT 0,
         is_emergency_contact INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 
@@ -640,8 +640,8 @@ BASE_TABLES_DDL = """
         waitlist_status TEXT NOT NULL DEFAULT 'waiting' CHECK(waitlist_status IN ('waiting','offered','accepted','expired','cancelled')),
         offer_expires_at TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT NOT NULL DEFAULT ''
     );
 

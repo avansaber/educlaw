@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, LiteralValue
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, dynamic_update, now
 except ImportError:
     pass
 
@@ -92,7 +92,7 @@ def add_schedule_pattern(conn, args):
     notes = getattr(args, "notes", None) or ""
     total_periods = int(getattr(args, "total_periods_per_cycle", None) or 0)
     is_active = int(getattr(args, "is_active", None) or 0)  # inactive until explicitly activated
-    now = _now_iso()
+    _ts = _now_iso()
     pattern_id = str(uuid.uuid4())
 
     try:
@@ -100,7 +100,7 @@ def add_schedule_pattern(conn, args):
 
         conn.execute(sql,
             (pattern_id, name, description, pattern_type, cycle_days, total_periods,
-             notes, is_active, company_id, now, now,
+             notes, is_active, company_id, _ts, _ts,
              getattr(args, "user_id", None) or "")
         )
     except sqlite3.IntegrityError as e:
@@ -139,7 +139,7 @@ def update_schedule_pattern(conn, args):
     if not changed:
         err("No fields to update")
 
-    data["updated_at"] = LiteralValue("datetime('now')")
+    data["updated_at"] = now()
     sql, params = dynamic_update("educlaw_schedule_pattern", data=data, where={"id": pattern_id})
     conn.execute(sql, params)
     audit(conn, SKILL, "schedule-update-schedule-pattern", "educlaw_schedule_pattern", pattern_id,
@@ -204,7 +204,7 @@ def list_schedule_patterns(conn, args):
 
     search = getattr(args, "search", None)
     if search:
-        query += " AND (name LIKE ? OR description LIKE ?)"
+        query += " AND (LOWER(name) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))"
         params.extend([f"%{search}%", f"%{search}%"])
 
     query += " ORDER BY name LIMIT ? OFFSET ?"
@@ -238,14 +238,14 @@ def add_day_type(conn, args):
 
     sort_order = int(getattr(args, "sort_order", None) or 0)
     company_id = getattr(args, "company_id", None) or ""
-    now = _now_iso()
+    _ts = _now_iso()
     day_type_id = str(uuid.uuid4())
 
     try:
         sql, _ = insert_row("educlaw_day_type", {"id": P(), "schedule_pattern_id": P(), "code": P(), "name": P(), "sort_order": P(), "company_id": P(), "created_at": P(), "created_by": P()})
 
         conn.execute(sql,
-            (day_type_id, schedule_pattern_id, code, name, sort_order, company_id, now,
+            (day_type_id, schedule_pattern_id, code, name, sort_order, company_id, _ts,
              getattr(args, "user_id", None) or "")
         )
     except sqlite3.IntegrityError as e:
@@ -301,7 +301,7 @@ def add_bell_period(conn, args):
 
     sort_order = int(getattr(args, "sort_order", None) or 0)
     company_id = getattr(args, "company_id", None) or ""
-    now = _now_iso()
+    _ts = _now_iso()
     period_id = str(uuid.uuid4())
 
     try:
@@ -309,7 +309,7 @@ def add_bell_period(conn, args):
 
         conn.execute(sql,
             (period_id, schedule_pattern_id, period_number, period_name, start_time, end_time,
-             duration_minutes, period_type, applies_to_str, sort_order, company_id, now,
+             duration_minutes, period_type, applies_to_str, sort_order, company_id, _ts,
              getattr(args, "user_id", None) or "")
         )
     except sqlite3.IntegrityError as e:
@@ -352,7 +352,7 @@ def activate_schedule_pattern(conn, args):
 
     _sp = Table("educlaw_schedule_pattern")
     conn.execute(
-        Q.update(_sp).set(_sp.is_active, 1).set(_sp.updated_at, LiteralValue("datetime('now')")).where(_sp.id == P()).get_sql(),
+        Q.update(_sp).set(_sp.is_active, 1).set(_sp.updated_at, now()).where(_sp.id == P()).get_sql(),
         (pattern_id,)
     )
     audit(conn, SKILL, "schedule-activate-schedule-pattern", "educlaw_schedule_pattern", pattern_id,

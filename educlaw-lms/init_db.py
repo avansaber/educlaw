@@ -34,7 +34,8 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 
 def create_educlaw_lms_tables(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     # Verify foundation exists
     tables = [r[0] for r in conn.execute(
@@ -81,8 +82,8 @@ def create_educlaw_lms_tables(db_path):
             allowed_data_fields TEXT NOT NULL DEFAULT '[]',
             status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','inactive','error')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -99,7 +100,7 @@ def create_educlaw_lms_tables(db_path):
             sync_status TEXT NOT NULL DEFAULT 'synced' CHECK(sync_status IN ('synced','pending','error')),
             last_synced_at TEXT NOT NULL DEFAULT '',
             sync_error TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             UNIQUE(lms_connection_id, assessment_id),
             UNIQUE(lms_assignment_id, lms_connection_id)
@@ -116,7 +117,7 @@ def create_educlaw_lms_tables(db_path):
             sync_status TEXT NOT NULL DEFAULT 'pending' CHECK(sync_status IN ('pending','synced','error','closed')),
             last_synced_at TEXT NOT NULL DEFAULT '',
             sync_error TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             UNIQUE(lms_connection_id, section_id),
             UNIQUE(lms_course_id, lms_connection_id)
@@ -142,8 +143,8 @@ def create_educlaw_lms_tables(db_path):
             sort_order INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -168,7 +169,7 @@ def create_educlaw_lms_tables(db_path):
             completed_at TEXT NOT NULL DEFAULT '',
             duration_seconds INTEGER NOT NULL DEFAULT 0,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -196,7 +197,7 @@ def create_educlaw_lms_tables(db_path):
             resolved_by TEXT NOT NULL DEFAULT '',
             resolved_at TEXT NOT NULL DEFAULT '',
             resolution TEXT NOT NULL DEFAULT '' CHECK(resolution IN ('','lms_wins','sis_wins','manual')),
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -214,7 +215,7 @@ def create_educlaw_lms_tables(db_path):
             sync_status TEXT NOT NULL DEFAULT 'synced' CHECK(sync_status IN ('synced','pending','error','invited')),
             last_synced_at TEXT NOT NULL DEFAULT '',
             sync_error TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             UNIQUE(lms_connection_id, sis_user_type, sis_user_id),
             UNIQUE(lms_user_id, lms_connection_id)

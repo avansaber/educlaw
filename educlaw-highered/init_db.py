@@ -26,7 +26,8 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 
 def create_educlaw_highered_tables(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     tables = [r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
@@ -49,8 +50,8 @@ def create_educlaw_highered_tables(db_path):
         credits_required INTEGER NOT NULL DEFAULT 0,
         program_status TEXT NOT NULL DEFAULT 'active' CHECK(program_status IN ('active','inactive','phasing_out')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hdp_company ON highered_degree_program(company_id);
     CREATE INDEX IF NOT EXISTS idx_hdp_dept ON highered_degree_program(department);
@@ -69,7 +70,7 @@ def create_educlaw_highered_tables(db_path):
         removed_date TEXT NOT NULL DEFAULT '',
         hold_status TEXT NOT NULL DEFAULT 'active' CHECK(hold_status IN ('active','removed')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hh_student ON highered_hold(student_id);
     CREATE INDEX IF NOT EXISTS idx_hh_status ON highered_hold(hold_status);
@@ -86,7 +87,7 @@ def create_educlaw_highered_tables(db_path):
         term TEXT NOT NULL DEFAULT '',
         year INTEGER NOT NULL DEFAULT 0,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_ht_student ON highered_transcript(student_id);
     CREATE INDEX IF NOT EXISTS idx_ht_company ON highered_transcript(company_id);
@@ -102,7 +103,7 @@ def create_educlaw_highered_tables(db_path):
         standing TEXT NOT NULL DEFAULT 'good' CHECK(standing IN ('good','probation','suspension','dismissal','dean_list')),
         notes TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_has_student ON highered_academic_standing(student_id);
     CREATE INDEX IF NOT EXISTS idx_has_company ON highered_academic_standing(company_id);
@@ -121,7 +122,7 @@ def create_educlaw_highered_tables(db_path):
         fund_source TEXT NOT NULL DEFAULT '',
         disbursement_status TEXT NOT NULL DEFAULT 'pending' CHECK(disbursement_status IN ('pending','disbursed','returned')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hd_package ON highered_disbursement(aid_package_id);
     CREATE INDEX IF NOT EXISTS idx_hd_company ON highered_disbursement(company_id);
@@ -143,8 +144,8 @@ def create_educlaw_highered_tables(db_path):
         total_giving TEXT NOT NULL DEFAULT '0',
         engagement_level TEXT NOT NULL DEFAULT 'inactive' CHECK(engagement_level IN ('inactive','low','medium','high','champion')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_ha_company ON highered_alumnus(company_id);
 
@@ -155,7 +156,7 @@ def create_educlaw_highered_tables(db_path):
         event_type TEXT NOT NULL DEFAULT 'other' CHECK(event_type IN ('reunion','networking','fundraiser','career_fair','other')),
         attendees INTEGER NOT NULL DEFAULT 0,
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hae_company ON highered_alumni_event(company_id);
 
@@ -167,7 +168,7 @@ def create_educlaw_highered_tables(db_path):
         campaign TEXT NOT NULL DEFAULT '',
         gift_type TEXT NOT NULL DEFAULT 'cash' CHECK(gift_type IN ('cash','stock','planned','in_kind')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hgr_alumnus ON highered_giving_record(alumnus_id);
     CREATE INDEX IF NOT EXISTS idx_hgr_company ON highered_giving_record(company_id);
@@ -183,7 +184,7 @@ def create_educlaw_highered_tables(db_path):
         section_id TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'primary' CHECK(role IN ('primary','secondary','ta')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hca_faculty ON highered_course_assignment(faculty_id);
     CREATE INDEX IF NOT EXISTS idx_hca_section ON highered_course_assignment(section_id);
@@ -199,7 +200,7 @@ def create_educlaw_highered_tables(db_path):
         end_date TEXT NOT NULL DEFAULT '',
         grant_status TEXT NOT NULL DEFAULT 'active' CHECK(grant_status IN ('proposed','active','completed','expired')),
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_hrg_faculty ON highered_research_grant(faculty_id);
     CREATE INDEX IF NOT EXISTS idx_hrg_company ON highered_research_grant(company_id);
@@ -225,8 +226,8 @@ def create_educlaw_highered_tables(db_path):
             CHECK(application_status IN ('submitted','under_review','accepted','rejected','waitlisted','withdrawn')),
         notes TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_happ_company ON highered_application(company_id);
     CREATE INDEX IF NOT EXISTS idx_happ_program ON highered_application(program_id);
@@ -242,8 +243,8 @@ def create_educlaw_highered_tables(db_path):
         scholarship_offered TEXT NOT NULL DEFAULT '0.00',
         notes TEXT NOT NULL DEFAULT '',
         company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_had_app ON highered_admission_decision(application_id);
     CREATE INDEX IF NOT EXISTS idx_had_company ON highered_admission_decision(company_id);

@@ -15,7 +15,6 @@ try:
     from erpclaw_lib.audit import audit
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
-    from erpclaw_lib.vendor.pypika.terms import LiteralValue
 
     ENTITY_PREFIXES.setdefault("highered_alumnus", "HALM-")
 except ImportError:
@@ -234,7 +233,7 @@ def alumni_giving_report(conn, args):
         return err("--company-id is required")
     rows = conn.execute("""
         SELECT gift_type, COUNT(*) as count,
-               SUM(CAST(amount AS REAL)) as total_amount
+               SUM(CAST(amount AS NUMERIC)) as total_amount
         FROM highered_giving_record
         WHERE company_id=?
         GROUP BY gift_type

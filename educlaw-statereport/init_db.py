@@ -20,7 +20,8 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 
 def create_educlaw_statereport_tables(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     # Verify foundation exists
     tables = [r[0] for r in conn.execute(
@@ -60,8 +61,8 @@ def create_educlaw_statereport_tables(db_path):
             last_tested_at TEXT NOT NULL DEFAULT '',
             last_token_at TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_sr_edfi_config_company_state_year UNIQUE (company_id, state_code, school_year)
         );
@@ -83,8 +84,8 @@ def create_educlaw_statereport_tables(db_path):
             is_federal_required INTEGER NOT NULL DEFAULT 0,
             edfi_config_id TEXT REFERENCES sr_edfi_config(id) ON DELETE RESTRICT,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_sr_collection_window_company_state_type_year UNIQUE (company_id, state_code, window_type, school_year)
         );
@@ -99,7 +100,7 @@ def create_educlaw_statereport_tables(db_path):
             description TEXT NOT NULL DEFAULT '',
             is_active INTEGER NOT NULL DEFAULT 1,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_sr_descriptor_config_type_code UNIQUE (config_id, descriptor_type, internal_code)
         );
@@ -120,7 +121,7 @@ def create_educlaw_statereport_tables(db_path):
             retry_count INTEGER NOT NULL DEFAULT 0,
             synced_at TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
         -- sr_el_program (owned by demographics)
@@ -138,8 +139,8 @@ def create_educlaw_statereport_tables(db_path):
             is_parent_waived INTEGER NOT NULL DEFAULT 0,
             waiver_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -157,8 +158,8 @@ def create_educlaw_statereport_tables(db_path):
             crdc_school_id TEXT NOT NULL DEFAULT '',
             is_title_i_school INTEGER NOT NULL DEFAULT 0,
             title_i_status TEXT NOT NULL DEFAULT '' CHECK(title_i_status IN ('targeted_assistance','schoolwide','not_title_i','')),
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_sr_org_mapping_company_state_school UNIQUE (company_id, state_code, nces_school_id)
         );
@@ -184,8 +185,8 @@ def create_educlaw_statereport_tables(db_path):
             certified_at TEXT NOT NULL DEFAULT '',
             certification_notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -198,7 +199,7 @@ def create_educlaw_statereport_tables(db_path):
             data_json TEXT NOT NULL DEFAULT '{}',
             school_year INTEGER NOT NULL DEFAULT 0,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
         -- sr_sped_placement (owned by demographics)
@@ -219,8 +220,8 @@ def create_educlaw_statereport_tables(db_path):
             is_early_childhood INTEGER NOT NULL DEFAULT 0,
             early_childhood_environment TEXT NOT NULL DEFAULT '' CHECK(early_childhood_environment IN ('early_childhood_program','home','part_time_ec_part_time_home','')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT '',
             CONSTRAINT uq_sr_sped_placement_student_year UNIQUE (student_id, school_year)
         );
@@ -236,7 +237,7 @@ def create_educlaw_statereport_tables(db_path):
             start_date TEXT NOT NULL DEFAULT '',
             end_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -272,8 +273,8 @@ def create_educlaw_statereport_tables(db_path):
             is_military_connected INTEGER NOT NULL DEFAULT 0,
             military_connection_type TEXT NOT NULL DEFAULT '' CHECK(military_connection_type IN ('active_duty','veteran','national_guard','')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -296,8 +297,8 @@ def create_educlaw_statereport_tables(db_path):
             amendment_reason TEXT NOT NULL DEFAULT '',
             linked_submission_id TEXT REFERENCES sr_submission(id) ON DELETE RESTRICT,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -326,8 +327,8 @@ def create_educlaw_statereport_tables(db_path):
             assigned_at TEXT NOT NULL DEFAULT '',
             state_ticket_id TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -345,8 +346,8 @@ def create_educlaw_statereport_tables(db_path):
             sql_query TEXT NOT NULL DEFAULT '',
             error_message_template TEXT NOT NULL DEFAULT '',
             is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -363,7 +364,7 @@ def create_educlaw_statereport_tables(db_path):
             is_resolved INTEGER NOT NULL DEFAULT 0,
             resolved_at TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
         -- ==========================================================

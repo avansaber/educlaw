@@ -28,7 +28,8 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 
 def create_educlaw_finaid_tables(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     # Verify foundation exists
     tables = [r[0] for r in conn.execute(
@@ -59,8 +60,8 @@ def create_educlaw_finaid_tables(db_path):
             pell_max_award TEXT NOT NULL DEFAULT '0',
             is_active INTEGER NOT NULL DEFAULT 0,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -80,8 +81,8 @@ def create_educlaw_finaid_tables(db_path):
             total_coa TEXT NOT NULL DEFAULT '0',
             is_active INTEGER NOT NULL DEFAULT 1,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -96,8 +97,8 @@ def create_educlaw_finaid_tables(db_path):
             disbursed_amount TEXT NOT NULL DEFAULT '0',
             available_amount TEXT NOT NULL DEFAULT '0',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -134,8 +135,8 @@ def create_educlaw_finaid_tables(db_path):
             reviewed_at TEXT NOT NULL DEFAULT '',
             raw_isir_data TEXT NOT NULL DEFAULT '{}',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -165,8 +166,8 @@ def create_educlaw_finaid_tables(db_path):
             approved_at TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -190,8 +191,8 @@ def create_educlaw_finaid_tables(db_path):
             gl_account_id TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -217,7 +218,7 @@ def create_educlaw_finaid_tables(db_path):
             credit_balance_returned_date TEXT NOT NULL DEFAULT '',
             disbursed_by TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -234,8 +235,8 @@ def create_educlaw_finaid_tables(db_path):
             resolved_by TEXT NOT NULL DEFAULT '',
             resolution_notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -269,8 +270,8 @@ def create_educlaw_finaid_tables(db_path):
             borrower_type TEXT NOT NULL DEFAULT 'student' CHECK(borrower_type IN ('student','parent')),
             status TEXT NOT NULL DEFAULT 'originated' CHECK(status IN ('originated','active','repayment','deferred','defaulted','paid_off','cancelled')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -284,8 +285,8 @@ def create_educlaw_finaid_tables(db_path):
             half_time TEXT NOT NULL DEFAULT '0',
             less_than_half_time TEXT NOT NULL DEFAULT '0',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -309,7 +310,7 @@ def create_educlaw_finaid_tables(db_path):
             supervisor_reviewed_by TEXT NOT NULL DEFAULT '',
             supervisor_review_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -347,8 +348,8 @@ def create_educlaw_finaid_tables(db_path):
             approved_by TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -379,8 +380,8 @@ def create_educlaw_finaid_tables(db_path):
             evaluated_by TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -401,8 +402,8 @@ def create_educlaw_finaid_tables(db_path):
             probation_term_id TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
             probation_conditions TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -432,8 +433,8 @@ def create_educlaw_finaid_tables(db_path):
             gl_account_id TEXT NOT NULL DEFAULT '',
             is_active INTEGER NOT NULL DEFAULT 1,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -454,8 +455,8 @@ def create_educlaw_finaid_tables(db_path):
             award_term_id TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
             denial_reason TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -474,8 +475,8 @@ def create_educlaw_finaid_tables(db_path):
             evaluated_by TEXT NOT NULL DEFAULT '',
             evaluation_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -493,8 +494,8 @@ def create_educlaw_finaid_tables(db_path):
             discrepancy_notes TEXT NOT NULL DEFAULT '',
             assigned_to TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -513,8 +514,8 @@ def create_educlaw_finaid_tables(db_path):
             rejection_reason TEXT NOT NULL DEFAULT '',
             document_reference TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -533,8 +534,8 @@ def create_educlaw_finaid_tables(db_path):
             aid_year_id TEXT NOT NULL DEFAULT '' REFERENCES finaid_aid_year(id) ON DELETE RESTRICT,
             status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','filled','closed')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -552,8 +553,8 @@ def create_educlaw_finaid_tables(db_path):
             earned_to_date TEXT NOT NULL DEFAULT '0',
             status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','terminated')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -575,8 +576,8 @@ def create_educlaw_finaid_tables(db_path):
             payroll_exported INTEGER NOT NULL DEFAULT 0,
             payroll_export_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 

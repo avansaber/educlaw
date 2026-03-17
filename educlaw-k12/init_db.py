@@ -20,7 +20,8 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.openclaw/erpclaw/data.sqlite")
 
 def create_educlaw_k12_tables(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     # Verify foundation exists
     tables = [r[0] for r in conn.execute(
@@ -57,8 +58,8 @@ def create_educlaw_k12_tables(db_path):
             parent_consent_date TEXT NOT NULL DEFAULT '',
             plan_status TEXT NOT NULL DEFAULT 'active' CHECK(plan_status IN ('active','expired','revised','discontinued')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -84,8 +85,8 @@ def create_educlaw_k12_tables(db_path):
             academic_year_id TEXT NOT NULL DEFAULT '' REFERENCES educlaw_academic_year(id) ON DELETE RESTRICT,
             academic_term_id TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -99,7 +100,7 @@ def create_educlaw_k12_tables(db_path):
             cumulative_suspension_days_ytd TEXT NOT NULL DEFAULT '0',
             mdr_required INTEGER NOT NULL DEFAULT 0,
             notes TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -113,8 +114,8 @@ def create_educlaw_k12_tables(db_path):
             duration_days TEXT NOT NULL DEFAULT '0',
             administered_by TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -145,8 +146,8 @@ def create_educlaw_k12_tables(db_path):
             last_verified_date TEXT NOT NULL DEFAULT '',
             last_verified_by TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -169,7 +170,7 @@ def create_educlaw_k12_tables(db_path):
             is_emergency INTEGER NOT NULL DEFAULT 0,
             academic_term_id TEXT REFERENCES educlaw_academic_term(id) ON DELETE RESTRICT,
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -189,7 +190,7 @@ def create_educlaw_k12_tables(db_path):
             iis_record_id TEXT NOT NULL DEFAULT '',
             corrects_record_id TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -206,8 +207,8 @@ def create_educlaw_k12_tables(db_path):
             expiry_date TEXT NOT NULL DEFAULT '',
             waiver_status TEXT NOT NULL DEFAULT 'active' CHECK(waiver_status IN ('active','expired','revoked')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -231,8 +232,8 @@ def create_educlaw_k12_tables(db_path):
             interventions_tried TEXT NOT NULL DEFAULT '[]',
             review_status TEXT NOT NULL DEFAULT 'pending' CHECK(review_status IN ('pending','in_review','decided','notified','appealed')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -253,8 +254,8 @@ def create_educlaw_k12_tables(db_path):
             plan_status TEXT NOT NULL DEFAULT 'active' CHECK(plan_status IN ('active','completed','abandoned')),
             outcome_notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -280,7 +281,7 @@ def create_educlaw_k12_tables(db_path):
             appeal_decision_date TEXT NOT NULL DEFAULT '',
             next_grade_level TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -300,8 +301,8 @@ def create_educlaw_k12_tables(db_path):
             consent_denied_date TEXT NOT NULL DEFAULT '',
             evaluation_deadline TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -321,7 +322,7 @@ def create_educlaw_k12_tables(db_path):
             team_members_present TEXT NOT NULL DEFAULT '[]',
             parent_consent_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -355,8 +356,8 @@ def create_educlaw_k12_tables(db_path):
             iep_status TEXT NOT NULL DEFAULT 'draft' CHECK(iep_status IN ('draft','active','amended','expired','superseded')),
             parent_consent_date TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -374,7 +375,7 @@ def create_educlaw_k12_tables(db_path):
             responsible_provider TEXT NOT NULL DEFAULT '',
             sort_order INTEGER NOT NULL DEFAULT 0,
             is_met INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -390,7 +391,7 @@ def create_educlaw_k12_tables(db_path):
             evidence TEXT NOT NULL DEFAULT '',
             notes_for_parents TEXT NOT NULL DEFAULT '',
             documented_by TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -407,7 +408,7 @@ def create_educlaw_k12_tables(db_path):
             start_date TEXT NOT NULL DEFAULT '',
             end_date TEXT NOT NULL DEFAULT '',
             total_minutes_delivered INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -423,7 +424,7 @@ def create_educlaw_k12_tables(db_path):
             is_makeup_session INTEGER NOT NULL DEFAULT 0,
             was_session_missed INTEGER NOT NULL DEFAULT 0,
             missed_reason TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -440,7 +441,7 @@ def create_educlaw_k12_tables(db_path):
             excused_absence INTEGER NOT NULL DEFAULT 0,
             excusal_notes TEXT NOT NULL DEFAULT '',
             signature_date TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -462,8 +463,8 @@ def create_educlaw_k12_tables(db_path):
             procedural_safeguards_sent INTEGER NOT NULL DEFAULT 0,
             notes TEXT NOT NULL DEFAULT '',
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -479,7 +480,7 @@ def create_educlaw_k12_tables(db_path):
             instrument_used TEXT NOT NULL DEFAULT '',
             findings_summary TEXT NOT NULL DEFAULT '',
             scores TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -503,8 +504,8 @@ def create_educlaw_k12_tables(db_path):
             is_controlled_substance INTEGER NOT NULL DEFAULT 0,
             medication_status TEXT NOT NULL DEFAULT 'active' CHECK(medication_status IN ('active','expired','discontinued')),
             company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 
@@ -521,7 +522,7 @@ def create_educlaw_k12_tables(db_path):
             is_refused INTEGER NOT NULL DEFAULT 0,
             refusal_reason TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT NOT NULL DEFAULT ''
         );
 

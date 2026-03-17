@@ -22,7 +22,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case, dynamic_update, now
 except ImportError:
     pass
 
@@ -73,7 +73,7 @@ def _create_room_booking(conn, room_id, master_id, meeting_id, day_type_id, bell
                          company_id, user_id=""):
     """Insert a room booking record and return its ID."""
     booking_id = str(uuid.uuid4())
-    now = _now_iso()
+    _ts = _now_iso()
     conn.execute(
         """INSERT INTO educlaw_room_booking
            (id, room_id, master_schedule_id, section_meeting_id, day_type_id, bell_period_id,
@@ -82,7 +82,7 @@ def _create_room_booking(conn, room_id, master_id, meeting_id, day_type_id, bell
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', '', ?, ?, ?, ?, ?)""",
         (booking_id, room_id, master_id, meeting_id, day_type_id, bell_period_id,
          booking_type, booking_title, booked_by, accessibility_required,
-         company_id, now, now, user_id)
+         company_id, _ts, _ts, user_id)
     )
     return booking_id
 
@@ -94,11 +94,10 @@ def _refresh_sections_with_room(conn, master_id):
         "WHERE master_schedule_id = ? AND is_active = 1 AND room_id IS NOT NULL",
         (master_id,)
     ).fetchone()[0]
-    conn.execute(
-        "UPDATE educlaw_master_schedule SET sections_with_room = ?, "
-        "updated_at = datetime('now') WHERE id = ?",
-        (count, master_id)
-    )
+    sql, params_u = dynamic_update("educlaw_master_schedule",
+        {"sections_with_room": count, "updated_at": now()},
+        where={"id": master_id})
+    conn.execute(sql, params_u)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -152,11 +151,11 @@ def assign_room(conn, args):
         (meeting_id,)
     ).fetchone()
     if old_booking:
-        conn.execute(
-            "UPDATE educlaw_room_booking SET booking_status = 'cancelled', "
-            "cancellation_reason = 'Room reassigned', updated_at = datetime('now') WHERE id = ?",
-            (old_booking["id"],)
-        )
+        sql, params_u = dynamic_update("educlaw_room_booking",
+            {"booking_status": "cancelled", "cancellation_reason": "Room reassigned",
+             "updated_at": now()},
+            where={"id": old_booking["id"]})
+        conn.execute(sql, params_u)
 
     booking_id = _create_room_booking(
         conn, room_id, master_id, meeting_id,
@@ -166,10 +165,10 @@ def assign_room(conn, args):
     )
 
     # Update meeting's room_id
-    conn.execute(
-        "UPDATE educlaw_section_meeting SET room_id = ?, updated_at = datetime('now') WHERE id = ?",
-        (room_id, meeting_id)
-    )
+    sql, params_u = dynamic_update("educlaw_section_meeting",
+        {"room_id": room_id, "updated_at": now()},
+        where={"id": meeting_id})
+    conn.execute(sql, params_u)
 
     _refresh_sections_with_room(conn, master_id)
 
@@ -306,7 +305,7 @@ def bulk_assign_rooms(conn, args):
 
     assigned_count = 0
     failed_count = 0
-    now = _now_iso()
+    _ts = _now_iso()
 
     for meeting in unassigned:
         m = dict(meeting)
@@ -348,11 +347,10 @@ def bulk_assign_rooms(conn, args):
                     (booking_id, rid, master_id, m["id"], m["day_type_id"],
                      m["bell_period_id"], title, user_id, company_id, now, now, user_id)
                 )
-                conn.execute(
-                    "UPDATE educlaw_section_meeting SET room_id = ?, updated_at = datetime('now') "
-                    "WHERE id = ?",
-                    (rid, m["id"])
-                )
+                sql, params_u = dynamic_update("educlaw_section_meeting",
+                    {"room_id": rid, "updated_at": now()},
+                    where={"id": m["id"]})
+                conn.execute(sql, params_u)
                 assigned = True
                 assigned_count += 1
                 break
@@ -391,20 +389,20 @@ def unassign_room(conn, args):
         master_id = meeting["master_schedule_id"]
 
         # Cancel booking
+        _now_str = _now_iso()
         conn.execute(
             """UPDATE educlaw_room_booking
                SET booking_status = 'cancelled', cancellation_reason = 'Room unassigned',
-                   updated_at = datetime('now')
+                   updated_at = ?
                WHERE section_meeting_id = ? AND booking_status != 'cancelled'""",
-            (meeting_id,)
+            (_now_str, meeting_id)
         )
 
         old_room = meeting["room_id"]
-        conn.execute(
-            "UPDATE educlaw_section_meeting SET room_id = NULL, updated_at = datetime('now') "
-            "WHERE id = ?",
-            (meeting_id,)
-        )
+        sql, params_u = dynamic_update("educlaw_section_meeting",
+            {"room_id": None, "updated_at": now()},
+            where={"id": meeting_id})
+        conn.execute(sql, params_u)
         _refresh_sections_with_room(conn, master_id)
 
         audit(conn, SKILL, "schedule-delete-room-assignment", "educlaw_section_meeting", meeting_id,
@@ -419,19 +417,16 @@ def unassign_room(conn, args):
             err(f"Booking {booking_id} not found")
         booking = dict(booking)
 
-        conn.execute(
-            """UPDATE educlaw_room_booking
-               SET booking_status = 'cancelled', cancellation_reason = 'Manually unassigned',
-                   updated_at = datetime('now')
-               WHERE id = ?""",
-            (booking_id,)
-        )
+        sql, params_u = dynamic_update("educlaw_room_booking",
+            {"booking_status": "cancelled", "cancellation_reason": "Manually unassigned",
+             "updated_at": now()},
+            where={"id": booking_id})
+        conn.execute(sql, params_u)
         if booking.get("section_meeting_id"):
-            conn.execute(
-                "UPDATE educlaw_section_meeting SET room_id = NULL, "
-                "updated_at = datetime('now') WHERE id = ?",
-                (booking["section_meeting_id"],)
-            )
+            sql, params_u = dynamic_update("educlaw_section_meeting",
+                {"room_id": None, "updated_at": now()},
+                where={"id": booking["section_meeting_id"]})
+            conn.execute(sql, params_u)
             if booking.get("master_schedule_id"):
                 _refresh_sections_with_room(conn, booking["master_schedule_id"])
 
@@ -479,7 +474,7 @@ def block_room(conn, args):
     company_id = getattr(args, "company_id", None) or ""
 
     booking_id = str(uuid.uuid4())
-    now = _now_iso()
+    _ts = _now_iso()
 
     conn.execute(
         """INSERT INTO educlaw_room_booking
@@ -490,7 +485,7 @@ def block_room(conn, args):
            VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 'confirmed', '', ?, ?, ?, ?, ?)""",
         (booking_id, room_id, master_id, day_type_id, bell_period_id,
          booking_type, booking_title, booked_by, accessibility,
-         company_id, now, now, getattr(args, "user_id", None) or "")
+         company_id, _ts, _ts, getattr(args, "user_id", None) or "")
     )
 
     audit(conn, SKILL, "schedule-add-room-block", "educlaw_room_booking", booking_id,
@@ -532,23 +527,23 @@ def swap_rooms(conn, args):
     master_id = meeting_a["master_schedule_id"]
     company_id = meeting_a.get("company_id", "")
     user_id = getattr(args, "user_id", None) or ""
-    now = _now_iso()
+    _ts_now = _now_iso()
 
     # Cancel existing bookings for both
     conn.execute(
         """UPDATE educlaw_room_booking
            SET booking_status = 'cancelled', cancellation_reason = 'Room swap',
-               updated_at = datetime('now')
+               updated_at = ?
            WHERE section_meeting_id IN (?, ?) AND booking_status != 'cancelled'""",
-        (meeting_id_a, meeting_id_b)
+        (_ts_now, meeting_id_a, meeting_id_b)
     )
 
     # Assign room_b to meeting_a and room_a to meeting_b
     if room_b:
-        conn.execute(
-            "UPDATE educlaw_section_meeting SET room_id = ?, updated_at = datetime('now') WHERE id = ?",
-            (room_b, meeting_id_a)
-        )
+        sql, params_u = dynamic_update("educlaw_section_meeting",
+            {"room_id": room_b, "updated_at": now()},
+            where={"id": meeting_id_a})
+        conn.execute(sql, params_u)
         sec = conn.execute("SELECT section_number FROM educlaw_section WHERE id = ?",
                            (meeting_a["section_id"],)).fetchone()
         title_a = f"Class: {sec['section_number'] if sec else meeting_a['section_id']}"
@@ -561,19 +556,19 @@ def swap_rooms(conn, args):
                VALUES (?, ?, ?, ?, ?, ?, 'class', ?, ?, 'confirmed', '', 0, ?, ?, ?, ?)""",
             (str(uuid.uuid4()), room_b, master_id, meeting_id_a,
              meeting_a["day_type_id"], meeting_a["bell_period_id"],
-             title_a, user_id, company_id, now, now, user_id)
+             title_a, user_id, company_id, _ts_now, _ts_now, user_id)
         )
     else:
-        conn.execute(
-            "UPDATE educlaw_section_meeting SET room_id = NULL, updated_at = datetime('now') WHERE id = ?",
-            (meeting_id_a,)
-        )
+        sql, params_u = dynamic_update("educlaw_section_meeting",
+            {"room_id": None, "updated_at": now()},
+            where={"id": meeting_id_a})
+        conn.execute(sql, params_u)
 
     if room_a:
-        conn.execute(
-            "UPDATE educlaw_section_meeting SET room_id = ?, updated_at = datetime('now') WHERE id = ?",
-            (room_a, meeting_id_b)
-        )
+        sql, params_u = dynamic_update("educlaw_section_meeting",
+            {"room_id": room_a, "updated_at": now()},
+            where={"id": meeting_id_b})
+        conn.execute(sql, params_u)
         sec = conn.execute("SELECT section_number FROM educlaw_section WHERE id = ?",
                            (meeting_b["section_id"],)).fetchone()
         title_b = f"Class: {sec['section_number'] if sec else meeting_b['section_id']}"
@@ -586,13 +581,13 @@ def swap_rooms(conn, args):
                VALUES (?, ?, ?, ?, ?, ?, 'class', ?, ?, 'confirmed', '', 0, ?, ?, ?, ?)""",
             (str(uuid.uuid4()), room_a, master_id, meeting_id_b,
              meeting_b["day_type_id"], meeting_b["bell_period_id"],
-             title_b, user_id, company_id, now, now, user_id)
+             title_b, user_id, company_id, _ts_now, _ts_now, user_id)
         )
     else:
-        conn.execute(
-            "UPDATE educlaw_section_meeting SET room_id = NULL, updated_at = datetime('now') WHERE id = ?",
-            (meeting_id_b,)
-        )
+        sql, params_u = dynamic_update("educlaw_section_meeting",
+            {"room_id": None, "updated_at": now()},
+            where={"id": meeting_id_b})
+        conn.execute(sql, params_u)
 
     _refresh_sections_with_room(conn, master_id)
 
@@ -764,7 +759,7 @@ def search_rooms_by_features(conn, args):
 
     building = getattr(args, "building", None)
     if building:
-        query += " AND building LIKE ?"; params.append(f"%{building}%")
+        query += " AND LOWER(building) LIKE LOWER(?)"; params.append(f"%{building}%")
 
     query += " ORDER BY building, room_number"
     limit = int(getattr(args, "limit", None) or 50)
@@ -838,21 +833,19 @@ def emergency_reassign_room(conn, args):
     if conflicts:
         err(f"Cannot reassign: target room has conflicts:\n" + "\n".join(conflicts))
 
-    now = _now_iso()
+    _ts_now = _now_iso()
     user_id = getattr(args, "user_id", None) or ""
     moved = 0
 
     for bk in source_bookings:
         bk_d = dict(bk)
         # Cancel old booking
-        conn.execute(
-            """UPDATE educlaw_room_booking
-               SET booking_status = 'cancelled',
-                   cancellation_reason = 'Emergency room reassignment',
-                   updated_at = datetime('now')
-               WHERE id = ?""",
-            (bk_d["id"],)
-        )
+        sql, params_u = dynamic_update("educlaw_room_booking",
+            {"booking_status": "cancelled",
+             "cancellation_reason": "Emergency room reassignment",
+             "updated_at": now()},
+            where={"id": bk_d["id"]})
+        conn.execute(sql, params_u)
         # Create new booking in target room
         new_booking_id = str(uuid.uuid4())
         conn.execute(
@@ -866,15 +859,14 @@ def emergency_reassign_room(conn, args):
              bk_d["day_type_id"], bk_d["bell_period_id"],
              bk_d["booking_type"], bk_d["booking_title"],
              user_id, bk_d["accessibility_required"],
-             bk_d["company_id"], now, now, user_id)
+             bk_d["company_id"], _ts_now, _ts_now, user_id)
         )
         # Update section_meeting.room_id
         if bk_d.get("section_meeting_id"):
-            conn.execute(
-                "UPDATE educlaw_section_meeting SET room_id = ?, updated_at = datetime('now') "
-                "WHERE id = ?",
-                (target_room_id, bk_d["section_meeting_id"])
-            )
+            sql, params_u = dynamic_update("educlaw_section_meeting",
+                {"room_id": target_room_id, "updated_at": now()},
+                where={"id": bk_d["section_meeting_id"]})
+            conn.execute(sql, params_u)
         moved += 1
 
     audit(conn, SKILL, "schedule-assign-room-emergency", "educlaw_room_booking", master_id,
@@ -932,7 +924,7 @@ def add_instructor_constraint(conn, args):
     company_id = company_id or conn.execute(Q.from_(Table("educlaw_instructor")).select(Field("company_id")).where(Field("id") == P()).get_sql(), (instructor_id,)).fetchone()["company_id"]
 
     is_active = int(getattr(args, "is_active", None) or 1)
-    now = _now_iso()
+    _ts = _now_iso()
     constraint_id = str(uuid.uuid4())
 
     try:
@@ -941,7 +933,7 @@ def add_instructor_constraint(conn, args):
         conn.execute(sql,
             (constraint_id, instructor_id, academic_term_id, constraint_type,
              day_type_id, bell_period_id, constraint_value, constraint_notes,
-             priority, is_active, company_id, now, now,
+             priority, is_active, company_id, _ts, _ts,
              getattr(args, "user_id", None) or "")
         )
     except sqlite3.IntegrityError as e:
@@ -985,7 +977,8 @@ def update_instructor_constraint(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append("updated_at = ?")
+    params.append(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'))
     params.append(constraint_id)
     conn.execute(
         f"UPDATE educlaw_instructor_constraint SET {', '.join(updates)} WHERE id = ?", params

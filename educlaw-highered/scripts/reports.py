@@ -96,7 +96,7 @@ def alumni_giving_summary(conn, args):
     ).fetchone()["cnt"]
     # PyPika: skipped — COALESCE+SUM+CAST aggregate
     total_giving = conn.execute(
-        "SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total FROM highered_giving_record WHERE company_id=?",
+        "SELECT COALESCE(SUM(CAST(amount AS NUMERIC)), 0) as total FROM highered_giving_record WHERE company_id=?",
         (company_id,)
     ).fetchone()["total"]
     participation = round(total_donors / total_alumni * 100, 1) if total_alumni > 0 else 0
