@@ -696,12 +696,117 @@ def create_educlaw_tables(db_path):
         CREATE INDEX IF NOT EXISTS idx_waitlist_section_position ON educlaw_waitlist(section_id, position);
         CREATE INDEX IF NOT EXISTS idx_waitlist_student_section ON educlaw_waitlist(student_id, section_id);
         CREATE INDEX IF NOT EXISTS idx_waitlist_status ON educlaw_waitlist(company_id, waitlist_status);
+
+        -- ==========================================================
+        -- DOMAIN: CAFETERIA / MEAL MANAGEMENT (NSLP)
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_meal_plan (
+            id              TEXT PRIMARY KEY,
+            school_id       TEXT NOT NULL,
+            academic_year   TEXT NOT NULL,
+            plan_type       TEXT NOT NULL CHECK (plan_type IN ('free','reduced','paid')),
+            daily_rate      TEXT NOT NULL DEFAULT '0',
+            description     TEXT,
+            status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+            created_at      TEXT DEFAULT (datetime('now')),
+            updated_at      TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_meal_plan_school ON educlaw_meal_plan(school_id);
+
+        CREATE TABLE IF NOT EXISTS educlaw_daily_meal_count (
+            id              TEXT PRIMARY KEY,
+            school_id       TEXT NOT NULL,
+            count_date      TEXT NOT NULL,
+            free_breakfast   INTEGER DEFAULT 0,
+            reduced_breakfast INTEGER DEFAULT 0,
+            regular_breakfast   INTEGER DEFAULT 0,
+            free_lunch       INTEGER DEFAULT 0,
+            reduced_lunch    INTEGER DEFAULT 0,
+            regular_lunch       INTEGER DEFAULT 0,
+            adult_meals      INTEGER DEFAULT 0,
+            snack_count      INTEGER DEFAULT 0,
+            counted_by       TEXT,
+            notes            TEXT,
+            created_at       TEXT DEFAULT (datetime('now')),
+            UNIQUE(school_id, count_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_meal_count_date ON educlaw_daily_meal_count(count_date);
+
+        CREATE TABLE IF NOT EXISTS educlaw_student_meal_record (
+            id              TEXT PRIMARY KEY,
+            student_id      TEXT NOT NULL,
+            meal_date       TEXT NOT NULL,
+            meal_type       TEXT NOT NULL CHECK (meal_type IN ('breakfast','lunch','snack')),
+            eligibility     TEXT NOT NULL CHECK (eligibility IN ('free','reduced','paid')),
+            allergen_alert  INTEGER DEFAULT 0,
+            served_by       TEXT,
+            created_at      TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (student_id) REFERENCES educlaw_student(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_meal_record_student ON educlaw_student_meal_record(student_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_meal_record_date ON educlaw_student_meal_record(meal_date);
+
+        -- ==========================================================
+        -- DOMAIN: TRANSPORTATION / BUS MANAGEMENT
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_bus_route (
+            id              TEXT PRIMARY KEY,
+            school_id       TEXT NOT NULL,
+            route_number    TEXT NOT NULL,
+            route_name      TEXT,
+            driver_name     TEXT,
+            driver_phone    TEXT,
+            vehicle_id      TEXT,
+            vehicle_number  TEXT,
+            capacity        INTEGER,
+            am_start_time   TEXT,
+            pm_start_time   TEXT,
+            status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive','suspended')),
+            notes           TEXT,
+            created_at      TEXT DEFAULT (datetime('now')),
+            updated_at      TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_bus_route_school ON educlaw_bus_route(school_id);
+
+        CREATE TABLE IF NOT EXISTS educlaw_bus_stop (
+            id              TEXT PRIMARY KEY,
+            route_id        TEXT NOT NULL,
+            stop_order      INTEGER NOT NULL,
+            stop_name       TEXT NOT NULL,
+            address         TEXT,
+            am_pickup_time  TEXT,
+            pm_dropoff_time TEXT,
+            created_at      TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (route_id) REFERENCES educlaw_bus_route(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_bus_stop_route ON educlaw_bus_stop(route_id);
+
+        CREATE TABLE IF NOT EXISTS educlaw_student_transport (
+            id              TEXT PRIMARY KEY,
+            student_id      TEXT NOT NULL,
+            route_id        TEXT NOT NULL,
+            bus_stop_id     TEXT,
+            transport_type  TEXT NOT NULL DEFAULT 'both' CHECK (transport_type IN ('both','am_only','pm_only','none')),
+            special_needs_notes TEXT,
+            effective_date  TEXT,
+            end_date        TEXT,
+            status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+            created_at      TEXT DEFAULT (datetime('now')),
+            updated_at      TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (student_id) REFERENCES educlaw_student(id),
+            FOREIGN KEY (route_id) REFERENCES educlaw_bus_route(id),
+            FOREIGN KEY (bus_stop_id) REFERENCES educlaw_bus_stop(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_transport_student ON educlaw_student_transport(student_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_transport_route ON educlaw_student_transport(route_id);
     """)
 
     conn.commit()
     conn.close()
 
-    print(f"EduClaw schema created: 32 tables")
+    print(f"EduClaw schema created: 38 tables")
     print(f"Database: {db_path}")
 
 

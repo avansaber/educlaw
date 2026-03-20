@@ -40,6 +40,9 @@ from attendance import ACTIONS as ATTENDANCE_ACTIONS
 from staff import ACTIONS as STAFF_ACTIONS
 from fees import ACTIONS as FEES_ACTIONS
 from communications import ACTIONS as COMMUNICATIONS_ACTIONS
+from portal import ACTIONS as PORTAL_ACTIONS
+from cafeteria import ACTIONS as CAFETERIA_ACTIONS
+from transport import ACTIONS as TRANSPORT_ACTIONS
 
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
@@ -56,12 +59,16 @@ ACTIONS.update(ATTENDANCE_ACTIONS)
 ACTIONS.update(STAFF_ACTIONS)
 ACTIONS.update(FEES_ACTIONS)
 ACTIONS.update(COMMUNICATIONS_ACTIONS)
+ACTIONS.update(PORTAL_ACTIONS)
+ACTIONS.update(CAFETERIA_ACTIONS)
+ACTIONS.update(TRANSPORT_ACTIONS)
 ACTIONS["status"] = lambda conn, args: ok({
     "skill": SKILL,
-    "version": "1.0.0",
+    "version": "1.1.0",
     "actions_available": len([k for k in ACTIONS if k != "status"]),
     "domains": ["students", "academics", "enrollment", "grading",
-                "attendance", "staff", "fees", "communications"],
+                "attendance", "staff", "fees", "communications",
+                "portal", "cafeteria", "transport"],
     "database": DEFAULT_DB_PATH,
 })
 
@@ -283,6 +290,52 @@ def main():
     parser.add_argument("--sent-by")
     parser.add_argument("--date-from")
     parser.add_argument("--date-to")
+
+    # ── Portal (guardian self-service) ────────────────────────────────────
+    parser.add_argument("--absence-date")
+
+    # ── Cafeteria / Meal Management (NSLP) ────────────────────────────────
+    parser.add_argument("--school-id")
+    parser.add_argument("--plan-type")
+    parser.add_argument("--daily-rate")
+    parser.add_argument("--academic-year")
+    parser.add_argument("--eligibility")
+    parser.add_argument("--count-date")
+    parser.add_argument("--free-breakfast", type=int)
+    parser.add_argument("--reduced-breakfast", type=int)
+    parser.add_argument("--paid-breakfast", type=int)
+    parser.add_argument("--free-lunch", type=int)
+    parser.add_argument("--reduced-lunch", type=int)
+    parser.add_argument("--paid-lunch", type=int)
+    parser.add_argument("--adult-meals", type=int)
+    parser.add_argument("--snack-count", type=int)
+    parser.add_argument("--counted-by")
+    parser.add_argument("--meal-date")
+    parser.add_argument("--meal-type")
+    parser.add_argument("--allergen-alert")
+    parser.add_argument("--served-by")
+    parser.add_argument("--month")
+
+    # ── Transportation / Bus Management ───────────────────────────────────
+    parser.add_argument("--route-id")
+    parser.add_argument("--route-number")
+    parser.add_argument("--route-name")
+    parser.add_argument("--driver-name")
+    parser.add_argument("--driver-phone")
+    parser.add_argument("--vehicle-number")
+    parser.add_argument("--am-start-time")
+    parser.add_argument("--pm-start-time")
+    parser.add_argument("--stop-order", type=int)
+    parser.add_argument("--stop-name")
+    parser.add_argument("--am-pickup-time")
+    parser.add_argument("--pm-dropoff-time")
+    parser.add_argument("--bus-stop-id")
+    parser.add_argument("--transport-type")
+    parser.add_argument("--special-needs-notes")
+    parser.add_argument("--effective-date")
+    parser.add_argument("--vehicle-id")
+    parser.add_argument("--notes")
+    parser.add_argument("--status")
 
     args, unknown = parser.parse_known_args()
     check_unknown_args(parser, unknown)
