@@ -43,6 +43,10 @@ from communications import ACTIONS as COMMUNICATIONS_ACTIONS
 from portal import ACTIONS as PORTAL_ACTIONS
 from cafeteria import ACTIONS as CAFETERIA_ACTIONS
 from transport import ACTIONS as TRANSPORT_ACTIONS
+from pd import ACTIONS as PD_ACTIONS
+from activities import ACTIONS as ACTIVITIES_ACTIONS
+from library import ACTIONS as LIBRARY_ACTIONS
+from housing import ACTIONS as HOUSING_ACTIONS
 
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
@@ -62,13 +66,18 @@ ACTIONS.update(COMMUNICATIONS_ACTIONS)
 ACTIONS.update(PORTAL_ACTIONS)
 ACTIONS.update(CAFETERIA_ACTIONS)
 ACTIONS.update(TRANSPORT_ACTIONS)
+ACTIONS.update(PD_ACTIONS)
+ACTIONS.update(ACTIVITIES_ACTIONS)
+ACTIONS.update(LIBRARY_ACTIONS)
+ACTIONS.update(HOUSING_ACTIONS)
 ACTIONS["status"] = lambda conn, args: ok({
     "skill": SKILL,
-    "version": "1.1.0",
+    "version": "1.2.0",
     "actions_available": len([k for k in ACTIONS if k != "status"]),
     "domains": ["students", "academics", "enrollment", "grading",
                 "attendance", "staff", "fees", "communications",
-                "portal", "cafeteria", "transport"],
+                "portal", "cafeteria", "transport",
+                "pd", "activities", "library", "housing"],
     "database": DEFAULT_DB_PATH,
 })
 
@@ -293,6 +302,34 @@ def main():
 
     # ── Portal (guardian self-service) ────────────────────────────────────
     parser.add_argument("--absence-date")
+
+    # ── Online Payment ────────────────────────────────────────────────────
+    parser.add_argument("--payment-method-type")
+    parser.add_argument("--last-four")
+    parser.add_argument("--autopay-enabled")
+    parser.add_argument("--external-token")
+
+    # ── Professional Development ──────────────────────────────────────────
+    parser.add_argument("--credit-type")
+    parser.add_argument("--completion-date")
+
+    # ── Student Activities ────────────────────────────────────────────────
+    parser.add_argument("--activity-id")
+    parser.add_argument("--activity-type")
+    parser.add_argument("--min-gpa")
+    parser.add_argument("--season")
+
+    # ── Library ───────────────────────────────────────────────────────────
+    parser.add_argument("--library-item-id")
+    parser.add_argument("--item-type")
+    parser.add_argument("--circulation-id")
+
+    # ── Housing / Dormitory ───────────────────────────────────────────────
+    parser.add_argument("--unit-type")
+    parser.add_argument("--floor")
+    parser.add_argument("--meal-plan")
+    parser.add_argument("--assignment-id")
+    parser.add_argument("--housing-unit-id")
 
     # ── Cafeteria / Meal Management (NSLP) ────────────────────────────────
     parser.add_argument("--school-id")

@@ -175,6 +175,9 @@ def main():
     parser.add_argument("--documents")
     parser.add_argument("--phone")
 
+    # -- Transfer/What-If Audit --
+    parser.add_argument("--transfer-courses")       # JSON
+
     # -- Pagination --
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)

@@ -210,7 +210,7 @@ def create_educlaw_tables(db_path):
             id TEXT PRIMARY KEY,
             recipient_type TEXT NOT NULL DEFAULT '' CHECK(recipient_type IN ('student','guardian','employee')),
             recipient_id TEXT NOT NULL DEFAULT '',
-            notification_type TEXT NOT NULL DEFAULT '' CHECK(notification_type IN ('grade_posted','fee_due','absence','announcement','progress_report','emergency','acceptance','enrollment_confirmed')),
+            notification_type TEXT NOT NULL DEFAULT '' CHECK(notification_type IN ('grade_posted','fee_due','absence','announcement','progress_report','emergency','acceptance','enrollment_confirmed','payment','housing_waitlist')),
             title TEXT NOT NULL DEFAULT '',
             message TEXT NOT NULL DEFAULT '',
             reference_type TEXT NOT NULL DEFAULT '',
@@ -801,12 +801,170 @@ def create_educlaw_tables(db_path):
         );
         CREATE INDEX IF NOT EXISTS idx_educlaw_transport_student ON educlaw_student_transport(student_id);
         CREATE INDEX IF NOT EXISTS idx_educlaw_transport_route ON educlaw_student_transport(route_id);
+
+        -- ==========================================================
+        -- DOMAIN: PROFESSIONAL DEVELOPMENT (PD Credits)
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_pd_credit (
+            id TEXT PRIMARY KEY,
+            teacher_id TEXT NOT NULL,
+            course_name TEXT NOT NULL,
+            provider TEXT,
+            credit_hours TEXT NOT NULL DEFAULT '0',
+            credit_type TEXT DEFAULT 'general' CHECK (credit_type IN ('general','content_area','leadership','technology','special_education')),
+            completion_date TEXT NOT NULL,
+            expiration_date TEXT,
+            certificate_number TEXT,
+            status TEXT DEFAULT 'approved' CHECK (status IN ('pending','approved','rejected')),
+            company_id TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (teacher_id) REFERENCES educlaw_instructor(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_pd_teacher ON educlaw_pd_credit(teacher_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_pd_company ON educlaw_pd_credit(company_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_pd_status ON educlaw_pd_credit(status);
+
+        -- ==========================================================
+        -- DOMAIN: ONLINE FEE PAYMENT (Payment Methods)
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_payment_method (
+            id TEXT PRIMARY KEY,
+            guardian_id TEXT NOT NULL,
+            method_type TEXT NOT NULL CHECK (method_type IN ('ach','credit_card','debit_card')),
+            last_four TEXT,
+            is_default INTEGER DEFAULT 0,
+            autopay_enabled INTEGER DEFAULT 0,
+            external_token TEXT,
+            status TEXT DEFAULT 'active' CHECK (status IN ('active','inactive')),
+            company_id TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (guardian_id) REFERENCES educlaw_guardian(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_payment_method_guardian ON educlaw_payment_method(guardian_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_payment_method_company ON educlaw_payment_method(company_id);
+
+        -- ==========================================================
+        -- DOMAIN: STUDENT ACTIVITIES (Clubs, Sports, etc.)
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_activity (
+            id TEXT PRIMARY KEY,
+            school_id TEXT,
+            name TEXT NOT NULL,
+            activity_type TEXT CHECK (activity_type IN ('club','sport','music','art','academic','volunteer','other')),
+            advisor_id TEXT,
+            description TEXT,
+            min_gpa TEXT,
+            max_enrollment INTEGER,
+            season TEXT,
+            status TEXT DEFAULT 'active' CHECK (status IN ('active','inactive')),
+            company_id TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_activity_company ON educlaw_activity(company_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_activity_type ON educlaw_activity(activity_type);
+
+        CREATE TABLE IF NOT EXISTS educlaw_activity_enrollment (
+            id TEXT PRIMARY KEY,
+            activity_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            enrollment_date TEXT NOT NULL,
+            status TEXT DEFAULT 'active' CHECK (status IN ('active','inactive','ineligible')),
+            eligibility_checked INTEGER DEFAULT 0,
+            gpa_at_enrollment TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (activity_id) REFERENCES educlaw_activity(id),
+            FOREIGN KEY (student_id) REFERENCES educlaw_student(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_activity_enroll_activity ON educlaw_activity_enrollment(activity_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_activity_enroll_student ON educlaw_activity_enrollment(student_id);
+
+        -- ==========================================================
+        -- DOMAIN: LIBRARY MANAGEMENT
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_library_item (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            author TEXT,
+            isbn TEXT,
+            item_type TEXT CHECK (item_type IN ('book','periodical','dvd','digital','equipment','other')),
+            category TEXT,
+            location TEXT,
+            copy_count INTEGER DEFAULT 1,
+            available_copies INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'available' CHECK (status IN ('available','checked_out','reserved','lost','damaged')),
+            company_id TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_library_item_company ON educlaw_library_item(company_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_library_item_isbn ON educlaw_library_item(isbn);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_library_item_status ON educlaw_library_item(status);
+
+        CREATE TABLE IF NOT EXISTS educlaw_circulation (
+            id TEXT PRIMARY KEY,
+            library_item_id TEXT NOT NULL,
+            student_id TEXT,
+            checkout_date TEXT NOT NULL,
+            due_date TEXT NOT NULL,
+            return_date TEXT,
+            renewed INTEGER DEFAULT 0,
+            fine_amount TEXT DEFAULT '0',
+            status TEXT DEFAULT 'checked_out' CHECK (status IN ('checked_out','returned','overdue','lost')),
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (library_item_id) REFERENCES educlaw_library_item(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_circulation_item ON educlaw_circulation(library_item_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_circulation_student ON educlaw_circulation(student_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_circulation_status ON educlaw_circulation(status);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_circulation_due ON educlaw_circulation(due_date);
+
+        -- ==========================================================
+        -- DOMAIN: DORMITORY / HOUSING
+        -- ==========================================================
+
+        CREATE TABLE IF NOT EXISTS educlaw_housing_unit (
+            id TEXT PRIMARY KEY,
+            building_name TEXT NOT NULL,
+            floor TEXT,
+            room_number TEXT NOT NULL,
+            capacity INTEGER DEFAULT 1,
+            unit_type TEXT CHECK (unit_type IN ('single','double','triple','suite','apartment')),
+            amenities TEXT,
+            monthly_rate TEXT DEFAULT '0',
+            status TEXT DEFAULT 'available' CHECK (status IN ('available','occupied','maintenance','closed')),
+            company_id TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_housing_unit_company ON educlaw_housing_unit(company_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_housing_unit_status ON educlaw_housing_unit(status);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_housing_unit_building ON educlaw_housing_unit(building_name);
+
+        CREATE TABLE IF NOT EXISTS educlaw_housing_assignment (
+            id TEXT PRIMARY KEY,
+            student_id TEXT NOT NULL,
+            housing_unit_id TEXT NOT NULL,
+            academic_year TEXT NOT NULL,
+            semester TEXT,
+            move_in_date TEXT,
+            move_out_date TEXT,
+            meal_plan TEXT,
+            status TEXT DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (student_id) REFERENCES educlaw_student(id),
+            FOREIGN KEY (housing_unit_id) REFERENCES educlaw_housing_unit(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_educlaw_housing_assign_student ON educlaw_housing_assignment(student_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_housing_assign_unit ON educlaw_housing_assignment(housing_unit_id);
+        CREATE INDEX IF NOT EXISTS idx_educlaw_housing_assign_year ON educlaw_housing_assignment(academic_year);
     """)
 
     conn.commit()
     conn.close()
 
-    print(f"EduClaw schema created: 38 tables")
+    print(f"EduClaw schema created: 46 tables")
     print(f"Database: {db_path}")
 
 

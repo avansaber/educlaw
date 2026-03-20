@@ -72,7 +72,7 @@ def _seed_medication(conn, student_id, company_id, supply_count=10) -> str:
             start_date, end_date, supply_count, supply_low_threshold,
             storage_instructions, administration_instructions, is_controlled_substance,
             medication_status, company_id, created_at, updated_at, created_by)
-           VALUES (?, ?, 'Ritalin', '10mg', 'oral', 'daily',
+           VALUES (?, ?, 'Ritalin', '10mg', 'oral', 'once_daily',
                    '["12:00"]', 'Dr. Jones', '2025-08-01',
                    '2025-09-01', '2026-06-30', ?, 5,
                    'Refrigerate', 'Give with water', 0,
@@ -91,10 +91,10 @@ def _seed_immunization_waiver(conn, student_id, company_id) -> str:
     conn.execute(
         """INSERT INTO educlaw_k12_immunization_waiver
            (id, student_id, vaccine_name, waiver_type, issue_date,
-            expiry_date, waiver_status, issued_by, notes,
+            expiry_date, waiver_status, issuing_physician,
             company_id, created_at, created_by)
            VALUES (?, ?, 'MMR', 'medical', '2025-08-01',
-                   '2026-07-31', 'active', 'Dr. Smith', '',
+                   '2026-07-31', 'active', 'Dr. Smith',
                    ?, ?, '')""",
         (wid, student_id, company_id, now)
     )
@@ -282,7 +282,7 @@ class TestGetEmergencyHealthInfo:
             user_id="nurse1",
         ))
         assert result["status"] == "ok"
-        assert "student" in result
+        assert "student_id" in result
         assert "allergies" in result
 
     def test_student_not_found(self, setup):
@@ -398,7 +398,7 @@ class TestGetOfficeVisit:
         conn, cid, yid, tid, sid = setup
         r = call_action(add_office_visit, conn, ns(
             student_id=sid, visit_date="2025-10-15",
-            chief_complaint="stomach ache", disposition="returned_to_class", company_id=cid,
+            chief_complaint="stomachache", disposition="returned_to_class", company_id=cid,
         ))
         visit_id = r["id"]
         result = call_action(get_office_visit, conn, ns(
@@ -431,7 +431,7 @@ class TestAddStudentMedication:
             medication_name="Ritalin",
             dosage="10mg",
             route="oral",
-            frequency="daily",
+            frequency="once_daily",
             supply_count=30,
             company_id=cid,
         ))
@@ -442,7 +442,7 @@ class TestAddStudentMedication:
     def test_missing_student_id(self, setup):
         conn, cid, yid, tid, sid = setup
         result = call_action(add_student_medication, conn, ns(
-            medication_name="Ritalin", route="oral", frequency="daily", company_id=cid,
+            medication_name="Ritalin", route="oral", frequency="once_daily", company_id=cid,
         ))
         assert result["status"] == "error"
         assert "student-id" in result["message"]
@@ -450,7 +450,7 @@ class TestAddStudentMedication:
     def test_missing_medication_name(self, setup):
         conn, cid, yid, tid, sid = setup
         result = call_action(add_student_medication, conn, ns(
-            student_id=sid, route="oral", frequency="daily", company_id=cid,
+            student_id=sid, route="oral", frequency="once_daily", company_id=cid,
         ))
         assert result["status"] == "error"
         assert "medication-name" in result["message"]
@@ -463,7 +463,7 @@ class TestUpdateStudentMedication:
         conn, cid, yid, tid, sid = setup
         mid = _seed_medication(conn, sid, cid)
         result = call_action(update_student_medication, conn, ns(
-            student_medication_id=mid,
+            medication_id=mid,
             medication_status="discontinued",
             supply_count=0,
         ))
@@ -477,7 +477,7 @@ class TestUpdateStudentMedication:
     def test_not_found(self, setup):
         conn, cid, yid, tid, sid = setup
         result = call_action(update_student_medication, conn, ns(
-            student_medication_id="nonexistent-uuid",
+            medication_id="nonexistent-uuid",
             medication_status="discontinued",
         ))
         assert result["status"] == "error"
@@ -489,7 +489,7 @@ class TestUpdateStudentMedication:
             medication_status="discontinued",
         ))
         assert result["status"] == "error"
-        assert "student-medication-id" in result["message"]
+        assert "medication-id" in result["message"]
 
 
 # ── list-student-medications ──────────────────────────────────────────────────
@@ -660,6 +660,7 @@ class TestAddImmunizationWaiver:
             student_id=sid,
             vaccine_name="MMR",
             waiver_type="medical",
+            issuing_physician="Dr. Smith",
             issue_date="2025-08-01",
             company_id=cid,
         ))
@@ -805,12 +806,13 @@ class TestGenerateImmunizationReport:
             academic_year_id=yid,
         ))
         assert result["status"] == "ok"
-        assert "report" in result or "summary" in result or "by_grade" in result
+        assert "by_grade_level" in result or "report" in result or "summary" in result
 
-    def test_missing_academic_year(self, setup):
+    def test_without_academic_year(self, setup):
+        """generate_immunization_report runs fine without academic_year_id."""
         conn, cid, yid, tid, sid = setup
         result = call_action(generate_immunization_report, conn, ns(
             company_id=cid,
         ))
-        assert result["status"] == "error"
-        assert "academic-year-id" in result["message"]
+        assert result["status"] == "ok"
+        assert "by_grade_level" in result

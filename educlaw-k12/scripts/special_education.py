@@ -1040,8 +1040,10 @@ def log_iep_service_session(conn, args):
 
     session_notes = getattr(args, "session_notes", None) or ""
     provider_name = getattr(args, "provider_name", None) or ""
-    is_makeup_session = int(bool(getattr(args, "is_makeup_session", None) or 0))
-    was_session_missed = int(bool(getattr(args, "was_session_missed", None) or 0))
+    _is_makeup = getattr(args, "is_makeup_session", None)
+    is_makeup_session = int(str(_is_makeup) not in ("", "0", "None", "False", "false")) if _is_makeup is not None else 0
+    _was_missed = getattr(args, "was_session_missed", None)
+    was_session_missed = int(str(_was_missed) not in ("", "0", "None", "False", "false")) if _was_missed is not None else 0
     missed_reason = getattr(args, "missed_reason", None) or ""
 
     now = _now_iso()

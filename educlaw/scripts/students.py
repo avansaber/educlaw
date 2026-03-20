@@ -902,6 +902,212 @@ def link_guardian_to_student(conn, args):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ONLINE ADMISSIONS PORTAL
+# ─────────────────────────────────────────────────────────────────────────────
+
+def portal_submit_application(conn, args):
+    """Self-service application submission with limited fields (no internal-only data)."""
+    first_name = getattr(args, "first_name", None)
+    last_name = getattr(args, "last_name", None)
+    email = getattr(args, "email", None)
+    company_id = getattr(args, "company_id", None)
+
+    if not first_name:
+        err("--first-name is required")
+    if not last_name:
+        err("--last-name is required")
+    if not email:
+        err("--email is required")
+    if not company_id:
+        err("--company-id is required")
+
+    if not conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone():
+        err(f"Company {company_id} not found")
+
+    from erpclaw_lib.naming import get_next_name
+    naming = get_next_name(conn, "educlaw_student_applicant", company_id=company_id)
+    applicant_id = str(uuid.uuid4())
+    now = _now_iso()
+    full_name = f"{first_name} {last_name}".strip()
+
+    applying_for_program_id = getattr(args, "applying_for_program_id", None) or None
+    applying_for_term_id = getattr(args, "applying_for_term_id", None) or None
+    application_date = getattr(args, "application_date", None) or date.today().isoformat()
+
+    sql, _ = insert_row("educlaw_student_applicant", {
+        "id": P(), "naming_series": P(), "first_name": P(), "last_name": P(),
+        "email": P(), "phone": P(), "date_of_birth": P(),
+        "gender": P(), "address": P(),
+        "applying_for_program_id": P(), "applying_for_term_id": P(),
+        "application_date": P(), "previous_school": P(),
+        "status": P(), "company_id": P(),
+        "created_at": P(), "updated_at": P(), "created_by": P(),
+    })
+    conn.execute(sql, (
+        applicant_id, naming, first_name, last_name,
+        email,
+        getattr(args, "phone", None) or "",
+        getattr(args, "date_of_birth", None) or "",
+        getattr(args, "gender", None) or "",
+        getattr(args, "address", None) or "{}",
+        applying_for_program_id, applying_for_term_id,
+        application_date,
+        getattr(args, "previous_school", None) or "",
+        "applied", company_id, now, now, "portal",
+    ))
+
+    audit(conn, SKILL, "edu-portal-submit-application", "educlaw_student_applicant",
+          applicant_id, new_values={"full_name": full_name, "source": "portal"})
+    conn.commit()
+    ok({
+        "id": applicant_id, "naming_series": naming, "full_name": full_name,
+        "application_status": "applied", "application_date": application_date,
+        "message": "Application submitted successfully. You will be notified of the decision.",
+    })
+
+
+def portal_check_application_status(conn, args):
+    """Check the status of a submitted application."""
+    applicant_id = getattr(args, "applicant_id", None)
+    email = getattr(args, "email", None)
+
+    if not applicant_id and not email:
+        err("--applicant-id or --email is required")
+
+    _app = Table("educlaw_student_applicant")
+
+    if applicant_id:
+        row = conn.execute(
+            Q.from_(_app).select(_app.id, _app.naming_series, _app.full_name,
+                                 _app.status, _app.application_date, _app.review_notes)
+            .where(_app.id == P()).get_sql(), (applicant_id,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            Q.from_(_app).select(_app.id, _app.naming_series, _app.full_name,
+                                 _app.status, _app.application_date, _app.review_notes)
+            .where(_app.email == P())
+            .orderby(_app.application_date, order=Order.desc)
+            .limit(1).get_sql(), (email,)
+        ).fetchone()
+
+    if not row:
+        err("Application not found")
+
+    data = dict(row)
+    # Map internal statuses to portal-friendly messages
+    status_messages = {
+        "applied": "Your application has been received and is being processed.",
+        "under_review": "Your application is currently under review.",
+        "accepted": "Congratulations! Your application has been accepted.",
+        "rejected": "We regret to inform you that your application was not accepted.",
+        "waitlisted": "Your application has been placed on the waitlist.",
+        "pending_info": "Additional information is required. Please check your email.",
+        "confirmed": "Your enrollment has been confirmed.",
+        "enrolled": "You are now enrolled.",
+    }
+    data["status_message"] = status_messages.get(data["status"], "Status unknown.")
+    # Don't expose internal review notes to portal users
+    data.pop("review_notes", None)
+    ok(data)
+
+
+def portal_upload_document(conn, args):
+    """Link a document reference to an application (document storage is external)."""
+    applicant_id = getattr(args, "applicant_id", None)
+    title = getattr(args, "title", None)
+    company_id = getattr(args, "company_id", None)
+
+    if not applicant_id:
+        err("--applicant-id is required")
+    if not title:
+        err("--title is required (document title/description)")
+    if not company_id:
+        err("--company-id is required")
+
+    _app = Table("educlaw_student_applicant")
+    app_row = conn.execute(
+        Q.from_(_app).select(_app.id, _app.documents)
+        .where(_app.id == P()).get_sql(), (applicant_id,)
+    ).fetchone()
+    if not app_row:
+        err(f"Applicant {applicant_id} not found")
+
+    app = dict(app_row)
+    existing_docs = []
+    if app.get("documents"):
+        try:
+            existing_docs = json.loads(app["documents"]) if isinstance(app["documents"], str) else app["documents"]
+        except Exception:
+            existing_docs = []
+
+    doc_entry = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "uploaded_at": _now_iso(),
+        "uploaded_by": "portal",
+    }
+    existing_docs.append(doc_entry)
+
+    conn.execute(
+        "UPDATE educlaw_student_applicant SET documents = ?, updated_at = datetime('now') WHERE id = ?",
+        (json.dumps(existing_docs), applicant_id)
+    )
+    conn.commit()
+
+    ok({
+        "applicant_id": applicant_id,
+        "document_id": doc_entry["id"],
+        "title": title,
+        "total_documents": len(existing_docs),
+    })
+
+
+def list_pending_applications(conn, args):
+    """Admin view: list all pending/in-review applications."""
+    company_id = getattr(args, "company_id", None)
+    if not company_id:
+        err("--company-id is required")
+
+    _app = Table("educlaw_student_applicant")
+    q = Q.from_(_app).select(_app.star).where(_app.company_id == P())
+    params = [company_id]
+
+    # Filter by status (default: applied + under_review)
+    status_filter = getattr(args, "applicant_status", None)
+    if status_filter:
+        q = q.where(_app.status == P())
+        params.append(status_filter)
+    else:
+        q = q.where(_app.status.isin(["applied", "under_review", "pending_info"]))
+
+    term_id = getattr(args, "applying_for_term_id", None)
+    if term_id:
+        q = q.where(_app.applying_for_term_id == P())
+        params.append(term_id)
+
+    q = q.orderby(_app.application_date)
+    limit = int(getattr(args, "limit", None) or 50)
+    offset = int(getattr(args, "offset", None) or 0)
+    q = q.limit(limit).offset(offset)
+
+    rows = conn.execute(q.get_sql(), params).fetchall()
+
+    # Summary counts
+    counts = conn.execute(
+        Q.from_(_app).select(_app.status, fn.Count(_app.star).as_("cnt"))
+        .where(_app.company_id == P())
+        .groupby(_app.status).get_sql(), (company_id,)
+    ).fetchall()
+
+    ok({
+        "applications": [dict(r) for r in rows],
+        "count": len(rows),
+        "status_summary": {c["status"]: c["cnt"] for c in counts},
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # FERPA COMPLIANCE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1124,4 +1330,8 @@ ACTIONS = {
     "edu-add-consent-record": add_consent_record,
     "edu-cancel-consent": revoke_consent,
     "edu-generate-student-record": export_student_record,
+    "edu-portal-submit-application": portal_submit_application,
+    "edu-portal-check-application-status": portal_check_application_status,
+    "edu-portal-upload-document": portal_upload_document,
+    "edu-list-pending-applications": list_pending_applications,
 }

@@ -701,7 +701,7 @@ class TestGenerateDisciplineReport:
             academic_year_id=yid,
         ))
         assert result["status"] == "ok"
-        assert "summary" in result
+        assert "total_incidents" in result
         assert "by_type" in result
         assert "by_severity" in result
 
@@ -712,7 +712,7 @@ class TestGenerateDisciplineReport:
             company_id=cid,
         ))
         assert result["status"] == "ok"
-        assert result["summary"]["total_incidents"] >= 1
+        assert result["total_incidents"] >= 1
 
 
 # ── generate-discipline-state-report ─────────────────────────────────────────

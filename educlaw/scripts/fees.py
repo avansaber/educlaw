@@ -745,6 +745,245 @@ def apply_late_fee(conn, args):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ONLINE PAYMENT METHODS
+# ─────────────────────────────────────────────────────────────────────────────
+
+VALID_PAYMENT_METHOD_TYPES = ("ach", "credit_card", "debit_card")
+
+
+def add_payment_method(conn, args):
+    """Register a payment method for a guardian (tokenized, no raw card data stored)."""
+    guardian_id = getattr(args, "guardian_id", None)
+    method_type = getattr(args, "payment_method_type", None) or getattr(args, "method_type", None)
+    company_id = getattr(args, "company_id", None)
+
+    if not guardian_id:
+        err("--guardian-id is required")
+    if not method_type:
+        err("--payment-method-type is required (ach, credit_card, debit_card)")
+    if method_type not in VALID_PAYMENT_METHOD_TYPES:
+        err(f"--payment-method-type must be one of: {', '.join(VALID_PAYMENT_METHOD_TYPES)}")
+    if not company_id:
+        err("--company-id is required")
+
+    # Verify guardian exists
+    _g = Table("educlaw_guardian")
+    if not conn.execute(Q.from_(_g).select(_g.id).where(_g.id == P()).get_sql(), (guardian_id,)).fetchone():
+        err(f"Guardian {guardian_id} not found")
+
+    pm_id = str(uuid.uuid4())
+    now = _now_iso()
+    is_default = int(getattr(args, "is_default", None) or 0)
+    autopay = int(getattr(args, "autopay_enabled", None) or 0)
+
+    # If this is the first payment method, make it default
+    existing = conn.execute(
+        Q.from_(Table("educlaw_payment_method")).select(fn.Count(Field("id")).as_("cnt"))
+        .where(Field("guardian_id") == P()).where(Field("status") == "active")
+        .get_sql(), (guardian_id,)
+    ).fetchone()
+    if existing and dict(existing)["cnt"] == 0:
+        is_default = 1
+
+    # If setting as default, unset other defaults
+    if is_default:
+        conn.execute(
+            "UPDATE educlaw_payment_method SET is_default = 0 WHERE guardian_id = ? AND status = 'active'",
+            (guardian_id,)
+        )
+
+    sql, _ = insert_row("educlaw_payment_method", {
+        "id": P(), "guardian_id": P(), "method_type": P(),
+        "last_four": P(), "is_default": P(), "autopay_enabled": P(),
+        "external_token": P(), "status": P(), "company_id": P(),
+        "created_at": P(),
+    })
+    conn.execute(sql, (
+        pm_id, guardian_id, method_type,
+        getattr(args, "last_four", None) or "",
+        is_default, autopay,
+        getattr(args, "external_token", None) or "",
+        "active", company_id, now,
+    ))
+    audit(conn, SKILL, "edu-add-payment-method", "educlaw_payment_method", pm_id,
+          new_values={"guardian_id": guardian_id, "method_type": method_type})
+    conn.commit()
+    ok({"id": pm_id, "guardian_id": guardian_id, "method_type": method_type,
+        "is_default": is_default, "status": "active"})
+
+
+def list_payment_methods(conn, args):
+    """List payment methods for a guardian."""
+    guardian_id = getattr(args, "guardian_id", None)
+    if not guardian_id:
+        err("--guardian-id is required")
+
+    _pm = Table("educlaw_payment_method")
+    q = Q.from_(_pm).select(_pm.star).where(_pm.guardian_id == P())
+    params = [guardian_id]
+
+    status = getattr(args, "status", None)
+    if status:
+        q = q.where(_pm.status == P())
+        params.append(status)
+    else:
+        q = q.where(_pm.status == "active")
+
+    q = q.orderby(_pm.is_default, order=Order.desc).orderby(_pm.created_at, order=Order.desc)
+    rows = conn.execute(q.get_sql(), params).fetchall()
+
+    # Mask tokens for security
+    result = []
+    for r in rows:
+        d = dict(r)
+        d.pop("external_token", None)
+        result.append(d)
+
+    ok({"guardian_id": guardian_id, "payment_methods": result, "count": len(result)})
+
+
+def portal_pay_fee(conn, args):
+    """Process a fee payment against outstanding fees using a stored payment method.
+
+    In production this would integrate with a payment gateway. For now it records
+    the payment intent and creates a notification.
+    """
+    guardian_id = getattr(args, "guardian_id", None)
+    student_id = getattr(args, "student_id", None)
+    amount = getattr(args, "amount", None)
+    company_id = getattr(args, "company_id", None)
+
+    if not guardian_id:
+        err("--guardian-id is required")
+    if not student_id:
+        err("--student-id is required")
+    if not amount:
+        err("--amount is required")
+    if not company_id:
+        err("--company-id is required")
+
+    pay_amount = _d(amount)
+    if pay_amount <= 0:
+        err("--amount must be greater than 0")
+
+    # Verify guardian-student link
+    _sg = Table("educlaw_student_guardian")
+    link = conn.execute(
+        Q.from_(_sg).select(Field("id"))
+        .where(_sg.guardian_id == P()).where(_sg.student_id == P())
+        .get_sql(), (guardian_id, student_id)
+    ).fetchone()
+    if not link:
+        err("Guardian is not linked to this student")
+
+    # Find default payment method
+    _pm = Table("educlaw_payment_method")
+    pm_row = conn.execute(
+        Q.from_(_pm).select(_pm.star)
+        .where(_pm.guardian_id == P()).where(_pm.status == "active")
+        .orderby(_pm.is_default, order=Order.desc)
+        .limit(1).get_sql(), (guardian_id,)
+    ).fetchone()
+    if not pm_row:
+        err("No active payment method found. Add a payment method first.")
+
+    pm = dict(pm_row)
+    now = _now_iso()
+    payment_ref = str(uuid.uuid4())
+
+    # Record notification
+    notif_id = str(uuid.uuid4())
+    sql, _ = insert_row("educlaw_notification", {
+        "id": P(), "recipient_type": P(), "recipient_id": P(),
+        "notification_type": P(), "title": P(), "message": P(),
+        "reference_type": P(), "reference_id": P(),
+        "company_id": P(), "created_at": P(), "created_by": P(),
+    })
+    conn.execute(sql, (
+        notif_id, "guardian", guardian_id, "payment",
+        "Payment Submitted",
+        f"Payment of ${pay_amount} submitted for student account via {pm['method_type']} ending in {pm['last_four']}.",
+        "educlaw_payment_method", pm["id"],
+        company_id, now, guardian_id,
+    ))
+    conn.commit()
+
+    ok({
+        "payment_reference": payment_ref,
+        "guardian_id": guardian_id,
+        "student_id": student_id,
+        "amount": str(pay_amount),
+        "payment_method_id": pm["id"],
+        "method_type": pm["method_type"],
+        "last_four": pm["last_four"],
+        "payment_status": "submitted",
+        "submitted_at": now,
+        "note": "Payment submitted. Integrate with payment gateway for live processing.",
+    })
+
+
+def payment_receipt(conn, args):
+    """Generate a payment receipt for a guardian's payment."""
+    guardian_id = getattr(args, "guardian_id", None)
+    student_id = getattr(args, "student_id", None)
+    amount = getattr(args, "amount", None)
+    company_id = getattr(args, "company_id", None)
+
+    if not guardian_id:
+        err("--guardian-id is required")
+    if not student_id:
+        err("--student-id is required")
+    if not amount:
+        err("--amount is required")
+    if not company_id:
+        err("--company-id is required")
+
+    # Get guardian info
+    _g = Table("educlaw_guardian")
+    g_row = conn.execute(
+        Q.from_(_g).select(_g.full_name, _g.email).where(_g.id == P()).get_sql(),
+        (guardian_id,)
+    ).fetchone()
+    if not g_row:
+        err(f"Guardian {guardian_id} not found")
+
+    # Get student info
+    _st = Table("educlaw_student")
+    st_row = conn.execute(
+        Q.from_(_st).select(_st.full_name, _st.naming_series).where(_st.id == P()).get_sql(),
+        (student_id,)
+    ).fetchone()
+    if not st_row:
+        err(f"Student {student_id} not found")
+
+    guardian = dict(g_row)
+    student = dict(st_row)
+
+    # Get company info
+    _co = Table("company")
+    co_row = conn.execute(
+        Q.from_(_co).select(_co.name).where(_co.id == P()).get_sql(),
+        (company_id,)
+    ).fetchone()
+    company_name = dict(co_row)["name"] if co_row else company_id
+
+    now = _now_iso()
+    receipt_number = f"REC-{uuid.uuid4().hex[:8].upper()}"
+
+    ok({
+        "receipt_number": receipt_number,
+        "guardian_name": guardian["full_name"],
+        "guardian_email": guardian["email"],
+        "student_name": student["full_name"],
+        "student_id_series": student["naming_series"],
+        "amount": str(_d(amount)),
+        "company_name": company_name,
+        "payment_date": now,
+        "note": "This receipt confirms payment submission.",
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ACTIONS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -764,4 +1003,8 @@ ACTIONS = {
     "edu-get-student-account": get_student_account,
     "edu-get-outstanding-fees": get_outstanding_fees,
     "edu-apply-late-fee": apply_late_fee,
+    "edu-add-payment-method": add_payment_method,
+    "edu-list-payment-methods": list_payment_methods,
+    "edu-portal-pay-fee": portal_pay_fee,
+    "edu-payment-receipt": payment_receipt,
 }

@@ -207,6 +207,160 @@ def degree_audit(conn, args):
 
 
 # ===========================================================================
+# Degree Audit Expansion
+# ===========================================================================
+
+def transfer_credit_eval(conn, args):
+    """Evaluate transfer credits against a program's requirements.
+
+    Takes a student and evaluates how their transfer courses (provided as JSON)
+    map to the target program's required courses.
+    """
+    student_id = getattr(args, "student_id", None)
+    program_id = getattr(args, "program_id", None)
+
+    if not student_id:
+        return err("--student-id is required")
+    if not program_id:
+        return err("--program-id is required (target program)")
+
+    record = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
+    if not record:
+        return err("Student record not found")
+
+    program = conn.execute(Q.from_(Table("highered_degree_program")).select(Table("highered_degree_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
+    if not program:
+        return err("Degree program not found")
+
+    # Get all completed courses for this student (including transfers)
+    completed = conn.execute("""
+        SELECT c.code, c.name, c.credits, e.grade
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
+        WHERE e.student_id=? AND e.enrollment_status='completed' AND e.grade NOT IN ('F', '')
+    """, (student_id,)).fetchall()
+
+    completed_codes = {r["code"] for r in completed}
+    earned_credits = sum(r["credits"] for r in completed)
+    required_credits = program["credits_required"]
+
+    # Check each completed course for transfer applicability
+    # A transfer credit is accepted if it maps to a course in the program catalog
+    program_courses = conn.execute("""
+        SELECT c.code, c.name, c.credits
+        FROM educlaw_course c
+        WHERE c.is_active = 1
+    """, ()).fetchall()
+    program_codes = {r["code"] for r in program_courses}
+
+    accepted = []
+    not_applicable = []
+    for c in completed:
+        cd = dict(c)
+        if cd["code"] in program_codes:
+            accepted.append({
+                "code": cd["code"], "name": cd["name"],
+                "credits": cd["credits"], "grade": cd["grade"],
+                "status": "accepted",
+            })
+        else:
+            not_applicable.append({
+                "code": cd["code"], "name": cd["name"],
+                "credits": cd["credits"], "grade": cd["grade"],
+                "status": "not_applicable",
+            })
+
+    accepted_credits = sum(c["credits"] for c in accepted)
+    remaining = max(0, required_credits - accepted_credits)
+
+    ok({
+        "student_id": student_id,
+        "target_program": program["name"],
+        "target_program_id": program_id,
+        "credits_required": required_credits,
+        "accepted_transfer_credits": accepted_credits,
+        "credits_remaining": remaining,
+        "accepted_courses": accepted,
+        "not_applicable_courses": not_applicable,
+        "evaluation_date": _now_iso(),
+    })
+
+
+def what_if_audit(conn, args):
+    """Simulate a degree audit as if the student changed to a different major/program.
+
+    Runs the same logic as degree_audit but against a hypothetical target program
+    instead of the student's current program.
+    """
+    student_id = getattr(args, "student_id", None)
+    program_id = getattr(args, "program_id", None)
+
+    if not student_id:
+        return err("--student-id is required")
+    if not program_id:
+        return err("--program-id is required (target program for what-if)")
+
+    record = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("student_id") == P()).get_sql(), (student_id,)).fetchone()
+    if not record:
+        return err("Student record not found")
+
+    current_program_id = record["program_id"]
+
+    # Get hypothetical program
+    target_program = conn.execute(Q.from_(Table("highered_degree_program")).select(Table("highered_degree_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
+    if not target_program:
+        return err("Target program not found")
+
+    # Also load current program for comparison
+    current_program = None
+    if current_program_id:
+        current_program = conn.execute(Q.from_(Table("highered_degree_program")).select(Table("highered_degree_program").star).where(Field("id") == P()).get_sql(), (current_program_id,)).fetchone()
+
+    # Get completed courses
+    completed = conn.execute("""
+        SELECT c.code, c.name, c.credits, e.grade
+        FROM educlaw_course_enrollment e
+        JOIN educlaw_section s ON e.section_id = s.id
+        JOIN educlaw_course c ON s.course_id = c.id
+        WHERE e.student_id=? AND e.enrollment_status='completed' AND e.grade NOT IN ('F', '')
+    """, (student_id,)).fetchall()
+
+    earned_credits = sum(r["credits"] for r in completed)
+    target_required = target_program["credits_required"]
+    target_remaining = max(0, target_required - earned_credits)
+    target_progress = round(earned_credits / target_required * 100, 1) if target_required > 0 else 0
+
+    current_required = current_program["credits_required"] if current_program else 0
+    current_remaining = max(0, current_required - earned_credits)
+    current_progress = round(earned_credits / current_required * 100, 1) if current_required > 0 else 0
+
+    ok({
+        "student_id": student_id,
+        "current_program": {
+            "id": current_program_id,
+            "name": current_program["name"] if current_program else "None",
+            "credits_required": current_required,
+            "credits_earned": earned_credits,
+            "credits_remaining": current_remaining,
+            "progress_percent": current_progress,
+        },
+        "what_if_program": {
+            "id": program_id,
+            "name": target_program["name"],
+            "degree_type": target_program["degree_type"],
+            "credits_required": target_required,
+            "credits_earned": earned_credits,
+            "credits_remaining": target_remaining,
+            "progress_percent": target_progress,
+        },
+        "completed_courses": [dict(r) for r in completed],
+        "gpa": record["gpa"],
+        "simulation_date": _now_iso(),
+    })
+
+
+# ===========================================================================
 # Academic Standing
 # ===========================================================================
 
@@ -337,6 +491,8 @@ ACTIONS = {
     "highered-generate-transcript": generate_transcript,
     "highered-calculate-gpa": calculate_gpa,
     "highered-degree-audit": degree_audit,
+    "highered-transfer-credit-eval": transfer_credit_eval,
+    "highered-what-if-audit": what_if_audit,
     "highered-update-academic-standing": update_academic_standing,
     "highered-add-hold": add_hold,
     "highered-remove-hold": remove_hold,

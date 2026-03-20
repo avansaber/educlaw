@@ -37,6 +37,7 @@ from schedule_patterns import ACTIONS as SCHEDULE_PATTERNS_ACTIONS
 from master_schedule import ACTIONS as MASTER_SCHEDULE_ACTIONS
 from conflict_resolution import ACTIONS as CONFLICT_RESOLUTION_ACTIONS
 from room_assignment import ACTIONS as ROOM_ASSIGNMENT_ACTIONS
+from auto_schedule import ACTIONS as AUTO_SCHEDULE_ACTIONS
 
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
@@ -49,12 +50,13 @@ ACTIONS.update(SCHEDULE_PATTERNS_ACTIONS)
 ACTIONS.update(MASTER_SCHEDULE_ACTIONS)
 ACTIONS.update(CONFLICT_RESOLUTION_ACTIONS)
 ACTIONS.update(ROOM_ASSIGNMENT_ACTIONS)
+ACTIONS.update(AUTO_SCHEDULE_ACTIONS)
 ACTIONS["status"] = lambda conn, args: ok({
     "skill": SKILL,
-    "version": "1.0.0",
+    "version": "1.1.0",
     "actions_available": len([k for k in ACTIONS if k != "status"]),
     "domains": ["schedule_patterns", "master_schedule",
-                "conflict_resolution", "room_assignment"],
+                "conflict_resolution", "room_assignment", "auto_schedule"],
     "database": DEFAULT_DB_PATH,
 })
 
