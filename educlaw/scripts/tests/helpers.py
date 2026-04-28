@@ -24,8 +24,8 @@ from unittest.mock import patch
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULE_DIR = os.path.dirname(TESTS_DIR)           # scripts/
 ROOT_DIR = os.path.dirname(MODULE_DIR)             # educlaw/
-PARENT_DIR = os.path.dirname(ROOT_DIR)             # src/educlaw/
-SRC_DIR = os.path.dirname(PARENT_DIR)              # src/
+PARENT_DIR = os.path.dirname(ROOT_DIR)             # source/educlaw/
+SRC_DIR = os.path.dirname(PARENT_DIR)              # source/
 SETUP_DIR = os.path.join(SRC_DIR, "erpclaw", "scripts", "erpclaw-setup")
 INIT_SCHEMA_PATH = os.path.join(SETUP_DIR, "init_schema.py")
 BASE_SCHEMA_PATH = os.path.join(PARENT_DIR, "educlaw_base_schema.py")

@@ -58,6 +58,8 @@ financial aid, alumni relations, and faculty management.
 
 ### Student Records
 - `highered-degree-audit` — Check program completion progress
+- `highered-what-if-audit` — What-if degree audit for alternate program
+- `highered-transfer-credit-eval` — Evaluate transfer credits for equivalency
 - `highered-update-academic-standing` — Update standing (good/probation/suspension/etc.)
 - `highered-add-hold` — Place a hold on student record
 - `highered-remove-hold` — Remove a hold

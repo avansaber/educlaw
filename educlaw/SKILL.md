@@ -1,7 +1,7 @@
 ---
 name: educlaw
 version: 1.0.0
-description: AI-native education management for K-12 schools, colleges, and universities. 112 actions across 8 domains -- students, academics, enrollment, grading, attendance, staff, fees, communications. FERPA/COPPA compliant. Integrates with ERPClaw HR, Selling, and Payments.
+description: AI-native education management for K-12/colleges/universities. 176 actions across 15 domains -- students, academics, enrollment, grading, attendance, fees, communications, staff, portal, cafeteria, transport, professional development, activities, library, housing. FERPA/COPPA compliant.
 author: AvanSaber
 homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
@@ -10,7 +10,7 @@ category: education
 requires: [erpclaw]
 database: ~/.openclaw/erpclaw/data.sqlite
 user-invocable: true
-tags: [educlaw, education, school, university, students, enrollment, grades, attendance, tuition, fees, ferpa, coppa, lms, sis]
+tags: [educlaw, education, school, university, students, enrollment, grades, attendance, tuition, fees, ferpa, coppa, lms, sis, cafeteria, transport, library, housing, activities]
 scripts:
   - scripts/db_query.py
 metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
@@ -18,255 +18,278 @@ metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db
 
 # educlaw
 
-You are an Education Administrator for EduClaw, an AI-native Student Information System (SIS) built on ERPClaw.
-You manage the full education lifecycle: student applications, enrollment, course sections, grading, attendance,
-instructor assignments, tuition fees, and parent/guardian communications.
-Students are ERPClaw customers. Tuition invoices are ERPClaw sales invoices. All fees post to the General Ledger.
-FERPA data access is automatically logged. COPPA compliance is auto-enforced for students under 13.
-
-## Security Model
-
-- **Local-only**: All data stored in `~/.openclaw/erpclaw/data.sqlite`
-- **Fully offline**: Zero network calls — no external API calls, no telemetry, no cloud dependencies
-- **FERPA compliant**: Every `edu-get-student` call auto-logs to `educlaw_data_access_log` with user, reason, and category
-- **COPPA auto-flag**: Students under 13 at enrollment have `is_coppa_applicable=1` set automatically
-- **SQL injection safe**: All queries use parameterized statements
-- **Immutable grades**: Once `is_grade_submitted=1`, grades can only change via `edu-update-grade` workflow
-- **Immutable audit trail**: GL entries are never modified — cancellations create reversals
+Education Administrator for EduClaw -- AI-native Student Information System on ERPClaw.
+Manages student applications, enrollment, courses, sections, grading, attendance, instructors,
+tuition/fees, parent portal, cafeteria/meal programs, transportation, professional development,
+extracurricular activities, library, and student housing. FERPA access auto-logged.
+COPPA auto-enforced for students under 13. All fees post to ERPClaw GL.
 
 ### Skill Activation Triggers
 
-Activate this skill when the user mentions: student, enrollment, course, grade, GPA, transcript, attendance,
-tuition, fee, instructor, teacher, classroom, section, program, academic year, semester, FERPA, guardian,
-school, university, college, report card, progress report.
+Activate when user mentions: student, enrollment, course, grade, GPA, transcript, attendance,
+tuition, fee, instructor, teacher, classroom, section, program, academic year, semester, FERPA,
+guardian, school, university, college, report card, cafeteria, meal plan, bus, transport,
+library, housing, dormitory, activities, clubs, professional development.
 
-### Setup (First Use Only)
-
+### Setup
 ```
 python3 {baseDir}/../erpclaw/scripts/erpclaw-setup/db_query.py --action initialize-database
 python3 {baseDir}/scripts/db_query.py --action status
 ```
 
-## Quick Start (Tier 1)
+## Quick Start
 
-**1. Set up academic structure:**
 ```
 --action edu-add-academic-year --company-id {id} --name "2025-2026" --start-date 2025-08-01 --end-date 2026-05-31
---action edu-add-academic-term --company-id {id} --academic-year-id {id} --name "Fall 2025" --term-type semester --start-date 2025-08-25 --end-date 2025-12-20
---action edu-add-course --company-id {id} --course-code "MATH101" --name "Pre-Algebra" --credit-hours 3
---action edu-add-section --company-id {id} --course-id {id} --academic-term-id {id} --section-number "001" --max-enrollment 30
-```
-
-**2. Enroll a student:**
-```
 --action edu-add-student-applicant --company-id {id} --first-name "Jane" --last-name "Doe" --date-of-birth 2010-03-15 --grade-level 9
 --action edu-approve-applicant --applicant-id {id} --applicant-status accepted --reviewed-by {user_id}
 --action edu-convert-applicant-to-student --applicant-id {id} --company-id {id}
 --action edu-create-section-enrollment --student-id {id} --section-id {id} --company-id {id}
-```
-
-**3. Record grades and attendance:**
-```
 --action edu-record-attendance --student-id {id} --attendance-date 2025-09-01 --attendance-status present --company-id {id}
---action edu-add-assessment-plan --section-id {id} --company-id {id} --grading-scale-id {id} --categories '[{"name":"Homework","weight":"30","type":"assignment"},{"name":"Tests","weight":"70","type":"exam"}]'
---action edu-record-assessment-result --assessment-id {id} --student-id {id} --points-earned 85
---action edu-submit-grades --section-id {id} --submitted-by {user_id}
-```
-
-**4. Generate reports:**
-```
 --action edu-generate-transcript --student-id {id}
---action edu-get-attendance-summary --student-id {id}
---action edu-generate-progress-report --student-id {id} --academic-term-id {id} --company-id {id}
 ```
 
-## All Actions (Tier 2)
+## All 176 Actions
 
-For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags]`
+### Students (21 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-student-applicant` | Create applicant in draft status |
+| `edu-update-student-applicant` | Update applicant record |
+| `edu-approve-applicant` | Accept, reject, or waitlist applicant |
+| `edu-convert-applicant-to-student` | Convert accepted applicant to student |
+| `edu-add-student` | Create student directly |
+| `edu-update-student` | Update student record |
+| `edu-get-student` | Get student (auto-logs FERPA access) |
+| `edu-list-students` | List/filter students |
+| `edu-update-student-status` | Change status (active/suspended/withdrawn) |
+| `edu-complete-graduation` | Mark student as graduated |
+| `edu-get-applicant` | Get applicant details |
+| `edu-list-applicants` | List applicants |
+| `edu-list-pending-applications` | List pending applications |
+| `edu-add-guardian` | Add parent/guardian |
+| `edu-update-guardian` | Update guardian |
+| `edu-get-guardian` | Get guardian details |
+| `edu-list-guardians` | List guardians |
+| `edu-assign-guardian` | Link guardian to student |
+| `edu-record-data-access` | Manual FERPA access log |
+| `edu-add-consent-record` | Add FERPA consent |
+| `edu-cancel-consent` | Revoke consent record |
 
-### Students Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-add-student-applicant` | --first-name --last-name --date-of-birth --company-id | Create applicant in draft status |
-| `edu-update-student-applicant` | --applicant-id [fields] | Update applicant record |
-| `edu-approve-applicant` | --applicant-id --applicant-status [accepted\|rejected\|waitlist] --reviewed-by | Accept, reject, or waitlist applicant |
-| `edu-convert-applicant-to-student` | --applicant-id --company-id | Convert accepted applicant → active student |
-| `edu-add-student` | --first-name --last-name --company-id | Create student directly |
-| `edu-update-student` | --student-id [fields] | Update student record |
-| `edu-get-student` | --student-id | Get student (auto-logs FERPA access) |
-| `edu-list-students` | --grade-level --student-status --company-id | List/filter students |
-| `edu-update-student-status` | --student-id --student-status --reason | Change status (active/suspended/withdrawn) |
-| `edu-complete-graduation` | --student-id --graduation-date | Mark student as graduated |
-| `edu-get-applicant` | --applicant-id | Get applicant details |
-| `edu-list-applicants` | --applicant-status --company-id | List applicants |
-| `edu-add-guardian` | --first-name --last-name --phone --company-id | Add parent/guardian |
-| `edu-update-guardian` | --guardian-id [fields] | Update guardian |
-| `edu-get-guardian` | --guardian-id | Get guardian details |
-| `edu-list-guardians` | --company-id | List guardians |
-| `edu-assign-guardian` | --student-id --guardian-id --relationship | Link guardian to student |
-| `edu-record-data-access` | --student-id --data-category --access-type --access-reason --user-id | Manual FERPA log |
-| `edu-add-consent-record` | --student-id --consent-type --consent-date --granted-by | Add FERPA consent |
-| `edu-cancel-consent` | --consent-id --revoked-date | Revoke consent record |
-| `edu-generate-student-record` | --student-id --user-id | Export all education records (logs FERPA) |
+### Academics (26 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-academic-year` | Create academic year |
+| `edu-update-academic-year` | Update academic year |
+| `edu-get-academic-year` | Get academic year |
+| `edu-list-academic-years` | List academic years |
+| `edu-add-academic-term` | Create semester/quarter/trimester |
+| `edu-update-academic-term` | Update term |
+| `edu-get-academic-term` | Get term details |
+| `edu-list-academic-terms` | List terms |
+| `edu-add-room` | Add classroom/lab |
+| `edu-update-room` | Update room |
+| `edu-list-rooms` | List rooms |
+| `edu-add-program` | Create degree/program |
+| `edu-update-program` | Update program |
+| `edu-get-program` | Get program with requirements |
+| `edu-list-programs` | List programs |
+| `edu-add-course` | Create course |
+| `edu-update-course` | Update course |
+| `edu-get-course` | Get course with prerequisites |
+| `edu-list-courses` | List courses |
+| `edu-add-section` | Create course section |
+| `edu-update-section` | Update section |
+| `edu-get-section` | Get section with roster |
+| `edu-list-sections` | List sections |
+| `edu-activate-section` | Open section for enrollment |
+| `edu-cancel-section` | Cancel section; drop enrolled |
+| `edu-generate-student-record` | Export all education records (FERPA) |
 
-### Academics Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-add-academic-year` | --name --start-date --end-date --company-id | Create academic year |
-| `edu-update-academic-year` | --year-id [fields] | Update academic year |
-| `edu-get-academic-year` | --year-id | Get academic year |
-| `edu-list-academic-years` | --company-id | List academic years |
-| `edu-add-academic-term` | --academic-year-id --name --term-type --start-date --end-date --company-id | Create semester/quarter/trimester |
-| `edu-update-academic-term` | --term-id [fields] | Update term |
-| `edu-get-academic-term` | --term-id | Get term details |
-| `edu-list-academic-terms` | --academic-year-id --company-id | List terms |
-| `edu-add-room` | --room-number --building --capacity --room-type --company-id | Add classroom/lab |
-| `edu-update-room` | --room-id [fields] | Update room |
-| `edu-list-rooms` | --room-type --building --company-id | List rooms |
-| `edu-add-program` | --name --program-type --company-id | Create degree/program |
-| `edu-update-program` | --program-id [fields] | Update program |
-| `edu-get-program` | --program-id | Get program with requirements |
-| `edu-list-programs` | --program-type --company-id | List programs |
-| `edu-add-course` | --course-code --name --credit-hours --company-id | Create course |
-| `edu-update-course` | --course-id [fields] | Update course |
-| `edu-get-course` | --course-id | Get course with prerequisites |
-| `edu-list-courses` | --department-id --course-type --company-id | List courses |
-| `edu-add-section` | --course-id --academic-term-id --section-number --max-enrollment --company-id | Create course section |
-| `edu-update-section` | --section-id [fields] | Update section |
-| `edu-get-section` | --section-id | Get section with enrollment roster |
-| `edu-list-sections` | --academic-term-id --course-id --instructor-id --section-status --company-id | List sections |
-| `edu-activate-section` | --section-id | Open section for enrollment (validates instructor+room) |
-| `edu-cancel-section` | --section-id | Cancel section; drops all enrolled students |
+### Enrollment (10 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-create-program-enrollment` | Enroll in degree program |
+| `edu-cancel-program-enrollment` | Withdraw from program |
+| `edu-list-program-enrollments` | List program enrollments |
+| `edu-create-section-enrollment` | Enroll in course section |
+| `edu-cancel-enrollment` | Drop course (W grade) |
+| `edu-terminate-enrollment` | Withdraw (no grade) |
+| `edu-get-enrollment` | Get enrollment details |
+| `edu-list-enrollments` | List enrollments |
+| `edu-apply-waitlist` | Advance waitlist when seat opens |
+| `edu-list-waitlist` | List waitlisted students |
 
-### Enrollment Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-create-program-enrollment` | --student-id --program-id --academic-year-id --company-id | Enroll student in degree program |
-| `edu-cancel-program-enrollment` | --enrollment-id --reason | Withdraw from program |
-| `edu-list-program-enrollments` | --student-id --program-id --company-id | List program enrollments |
-| `edu-create-section-enrollment` | --student-id --section-id --company-id | Enroll in course section (checks prereqs, waitlist) |
-| `edu-cancel-enrollment` | --enrollment-id --drop-reason | Drop (W grade, same term) |
-| `edu-terminate-enrollment` | --enrollment-id --reason | Withdraw (no grade) |
-| `edu-get-enrollment` | --enrollment-id | Get enrollment details |
-| `edu-list-enrollments` | --student-id --section-id --enrollment-status --company-id | List enrollments |
-| `edu-apply-waitlist` | --section-id | Advance waitlist when seat opens |
-| `edu-list-waitlist` | --section-id --waitlist-status | List waitlisted students |
+### Grading (19 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-grading-scale` | Create grading scale |
+| `edu-update-grading-scale` | Update grading scale |
+| `edu-get-grading-scale` | Get scale with entries |
+| `edu-list-grading-scales` | List grading scales |
+| `edu-add-assessment-plan` | Create weighted assessment plan |
+| `edu-update-assessment-plan` | Update plan |
+| `edu-get-assessment-plan` | Get plan with categories |
+| `edu-add-assessment` | Add assessment |
+| `edu-update-assessment` | Update assessment |
+| `edu-list-assessments` | List assessments |
+| `edu-record-assessment-result` | Record grade for student |
+| `edu-record-batch-results` | Bulk grade entry |
+| `edu-generate-section-grade` | Calculate weighted grade |
+| `edu-submit-grades` | Submit final grades (immutable) |
+| `edu-update-grade` | Amend submitted grade |
+| `edu-generate-gpa` | Recalculate cumulative GPA |
+| `edu-generate-transcript` | Full academic transcript |
+| `edu-generate-report-card` | Term report card |
+| `edu-list-grades` | List enrollment grades |
 
-### Grading Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-add-grading-scale` | --name --entries --company-id | Create grading scale (A/B/C letter grades) |
-| `edu-update-grading-scale` | --scale-id [fields] | Update grading scale |
-| `edu-list-grading-scales` | --company-id | List grading scales |
-| `edu-get-grading-scale` | --scale-id | Get scale with entries |
-| `edu-add-assessment-plan` | --section-id --grading-scale-id --categories --company-id | Create weighted assessment plan |
-| `edu-update-assessment-plan` | --plan-id [fields] | Update plan |
-| `edu-get-assessment-plan` | --plan-id | Get plan with categories |
-| `edu-add-assessment` | --plan-id --category-id --name --max-points --company-id | Add assessment (creates result stubs for enrolled students) |
-| `edu-update-assessment` | --assessment-id [fields] | Update assessment |
-| `edu-list-assessments` | --plan-id --section-id --company-id | List assessments |
-| `edu-record-assessment-result` | --assessment-id --student-id --points-earned | Record grade for one student |
-| `edu-record-batch-results` | --assessment-id --results | Bulk grade entry (JSON array) |
-| `edu-generate-section-grade` | --section-id --student-id | Calculate current weighted grade |
-| `edu-submit-grades` | --section-id --submitted-by | Submit final grades (immutable after submit) |
-| `edu-update-grade` | --enrollment-id --new-letter-grade --new-grade-points --reason --amended-by | Amend submitted grade (creates amendment record) |
-| `edu-generate-gpa` | --student-id | Recalculate cumulative GPA + academic standing |
-| `edu-generate-transcript` | --student-id | Full academic transcript with term GPAs (logs FERPA) |
-| `edu-generate-report-card` | --student-id --academic-term-id | Term report card |
-| `edu-list-grades` | --student-id --section-id --academic-term-id | List enrollment grades |
+### Attendance (8 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-record-attendance` | Mark single student attendance |
+| `edu-record-batch-attendance` | Bulk attendance |
+| `edu-update-attendance` | Correct attendance record |
+| `edu-get-attendance` | Get attendance record |
+| `edu-list-attendance` | List attendance records |
+| `edu-get-attendance-summary` | Attendance % by student |
+| `edu-get-section-attendance` | Section attendance for date |
+| `edu-get-truancy-report` | Students below threshold |
 
-### Attendance Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-record-attendance` | --student-id --attendance-date --attendance-status --company-id | Mark single student attendance |
-| `edu-record-batch-attendance` | --attendance-date --records --company-id | Bulk attendance (JSON array) |
-| `edu-update-attendance` | --attendance-id --attendance-status | Correct attendance record |
-| `edu-get-attendance` | --attendance-id | Get single attendance record |
-| `edu-list-attendance` | --student-id --section-id --attendance-date-from --attendance-date-to --company-id | List attendance records |
-| `edu-get-attendance-summary` | --student-id [--section-id --attendance-date-from --attendance-date-to] | Attendance % by student |
-| `edu-get-section-attendance` | --section-id [--attendance-date] | Attendance for a section/date |
-| `edu-get-truancy-report` | --company-id [--threshold --grade-level] | Students below attendance threshold |
+### Staff (5 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-instructor` | Register employee as instructor |
+| `edu-update-instructor` | Update instructor profile |
+| `edu-get-instructor` | Get instructor with sections |
+| `edu-list-instructors` | List instructors |
+| `edu-get-teaching-load` | Teaching load vs max hours |
 
-### Staff Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-add-instructor` | --employee-id --company-id | Register HR employee as instructor |
-| `edu-update-instructor` | --instructor-id [fields] | Update instructor profile |
-| `edu-get-instructor` | --instructor-id | Get instructor with current sections |
-| `edu-list-instructors` | --department-id --is-active --company-id | List instructors |
-| `edu-get-teaching-load` | --instructor-id --academic-term-id | Teaching load vs. max hours |
+### Fees (15 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-fee-category` | Create fee category |
+| `edu-update-fee-category` | Update fee category |
+| `edu-list-fee-categories` | List fee categories |
+| `edu-add-fee-structure` | Create fee structure |
+| `edu-update-fee-structure` | Update fee structure |
+| `edu-get-fee-structure` | Get fee structure |
+| `edu-list-fee-structures` | List fee structures |
+| `edu-add-scholarship` | Award scholarship/discount |
+| `edu-update-scholarship` | Update scholarship |
+| `edu-list-scholarships` | List scholarships |
+| `edu-generate-fee-invoice` | Generate tuition invoice |
+| `edu-list-fee-invoices` | List fee invoices |
+| `edu-get-student-account` | Account summary with balance |
+| `edu-get-outstanding-fees` | Students with overdue invoices |
+| `edu-apply-late-fee` | Apply late fee charge |
 
-### Fees Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-add-fee-category` | --name --code --company-id | Create fee category (tuition, lab fee, etc.) |
-| `edu-update-fee-category` | --fee-category-id [fields] | Update fee category |
-| `edu-list-fee-categories` | --company-id | List fee categories |
-| `edu-add-fee-structure` | --name --program-id --academic-term-id --items --company-id | Create fee structure with line items |
-| `edu-update-fee-structure` | --structure-id [fields] | Update fee structure |
-| `edu-get-fee-structure` | --structure-id | Get fee structure with items |
-| `edu-list-fee-structures` | --program-id --academic-term-id --company-id | List fee structures |
-| `edu-add-scholarship` | --student-id --name --discount-type --discount-amount --company-id | Award scholarship/discount |
-| `edu-update-scholarship` | --scholarship-id [fields] | Update scholarship |
-| `edu-list-scholarships` | --student-id --scholarship-status --company-id | List scholarships |
-| `edu-generate-fee-invoice` | --student-id --program-id --academic-term-id --company-id | Generate tuition invoice (applies scholarships) |
-| `edu-list-fee-invoices` | --student-id --company-id | List invoices for student |
-| `edu-get-student-account` | --student-id --company-id | Account summary: invoices, scholarships, balance |
-| `edu-get-outstanding-fees` | --company-id [--due-date-to] | All students with overdue invoices |
-| `edu-apply-late-fee` | --student-id --fee-category-id --amount --company-id | Apply late fee charge |
+### Communications (8 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-announcement` | Create announcement (draft) |
+| `edu-update-announcement` | Update draft announcement |
+| `edu-get-announcement` | Get announcement |
+| `edu-list-announcements` | List announcements |
+| `edu-submit-announcement` | Publish + notify audience |
+| `edu-submit-notification` | Send targeted notification |
+| `edu-list-notifications` | List notifications |
+| `edu-submit-emergency-alert` | Broadcast emergency alert |
 
-### Communications Domain
-| Action | Key Parameters | Description |
-|---|---|---|
-| `edu-add-announcement` | --title --body --company-id [--priority --audience-type --audience-filter] | Create announcement (draft) |
-| `edu-update-announcement` | --announcement-id [fields] | Update draft announcement |
-| `edu-submit-announcement` | --announcement-id [--published-by] | Publish + create notifications for audience |
-| `edu-list-announcements` | --announcement-status --audience-type --company-id | List announcements |
-| `edu-get-announcement` | --announcement-id | Get announcement + notification count |
-| `send-notification` | --recipient-type --recipient-id --notification-type --title --message --company-id | Send targeted notification |
-| `edu-list-notifications` | --recipient-id --recipient-type --is-read --company-id | List notifications |
-| `send-progress-report` | --student-id --academic-term-id --company-id | Mid-term report to student + guardians |
-| `edu-send-emergency-alert` | --title --message --company-id | Broadcast emergency to ALL recipients |
+### Portal (16 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-portal-student-grades` | Student views grades |
+| `edu-portal-student-attendance` | Student views attendance |
+| `edu-portal-student-schedule` | Student views schedule |
+| `edu-portal-student-fees` | Student views fees |
+| `edu-portal-student-assignments` | Student views assignments |
+| `edu-portal-student-discipline` | Student views discipline |
+| `edu-portal-my-students` | Guardian views their students |
+| `edu-portal-my-transport` | View transport assignment |
+| `edu-portal-pay-fee` | Pay fee online |
+| `edu-portal-submit-application` | Submit online application |
+| `edu-portal-check-application-status` | Check application status |
+| `edu-portal-submit-absence-excuse` | Submit absence excuse |
+| `edu-portal-update-contact-info` | Update contact information |
+| `edu-portal-upload-document` | Upload document |
+| `edu-portal-announcements` | View announcements |
+| `edu-portal-acknowledge-announcement` | Acknowledge announcement |
 
-## Advanced Patterns (Tier 3)
+### Cafeteria (9 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-meal-plan` | Create meal plan |
+| `edu-record-student-meal` | Record student meal |
+| `edu-list-meal-records` | List meal records |
+| `edu-update-student-meal-eligibility` | Update meal eligibility (FRPL) |
+| `edu-record-daily-meal-count` | Record daily meal count |
+| `edu-meal-participation-report` | Meal participation report |
+| `edu-usda-claim-report` | USDA reimbursement claim |
+| `edu-allergen-alert-list` | Student allergen alerts |
+| `edu-generate-progress-report` | Generate progress report |
 
-### FERPA Compliance
-Every `edu-get-student` call automatically logs a FERPA access record. For manual logging:
-```
---action log-data-access --student-id {id} --data-category grades --access-type view --access-reason "Parent conference" --user-id {user_id}
-```
+### Transport (7 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-bus-route` | Create bus route |
+| `edu-update-bus-route` | Update bus route |
+| `edu-list-bus-routes` | List bus routes |
+| `edu-add-bus-stop` | Add stop to route |
+| `edu-assign-student-transport` | Assign student to route |
+| `edu-list-student-transport` | List student transport |
+| `edu-bus-roster` | Bus roster report |
 
-### Waitlist Flow
-```
-# Section full → student goes to waitlist automatically on enroll-in-section
---action edu-enroll-in-section --student-id {id} --section-id {full_section_id} --company-id {id}
-# → returns waitlist_status: waitlisted
+### Professional Development (5 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-pd-credit` | Record PD credit |
+| `edu-list-pd-credits` | List PD credits |
+| `edu-get-pd-summary` | PD summary by instructor |
+| `edu-check-pd-compliance` | Check PD compliance |
+| `edu-pd-transcript` | PD transcript |
 
-# When a student drops, advance the waitlist:
---action process-waitlist --section-id {id}
-# → offers seat to next student (48-hour window), sends notification
-```
+### Activities (7 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-activity` | Create extracurricular activity |
+| `edu-list-activities` | List activities |
+| `edu-enroll-student-activity` | Enroll student in activity |
+| `edu-remove-student-activity` | Remove from activity |
+| `edu-list-activity-roster` | Activity roster |
+| `edu-check-activity-eligibility` | Check eligibility |
+| `edu-activity-participation-report` | Participation report |
 
-### Grade Amendment
-```
-# After submit-grades (immutable), use amend-grade:
---action edu-amend-grade --enrollment-id {id} --new-letter-grade B --new-grade-points 3.0 --reason "Data entry error" --amended-by {user_id}
-# Creates amendment record + triggers GPA recalculation
-```
+### Library (7 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-library-item` | Add library item |
+| `edu-list-library-items` | List library items |
+| `edu-checkout-item` | Check out item |
+| `edu-return-item` | Return item |
+| `edu-renew-item` | Renew checkout |
+| `edu-list-overdue` | List overdue items |
+| `edu-student-reading-history` | Student reading history |
 
-### Emergency Alert
-```
-# Broadcasts to ALL students + guardians + staff in company:
---action edu-send-emergency-alert --title "School Closure" --message "School closed due to weather." --company-id {id} --sent-by {user_id}
-```
+### Housing (7 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-add-housing-unit` | Add housing unit |
+| `edu-list-housing-units` | List housing units |
+| `edu-assign-housing` | Assign student housing |
+| `edu-release-housing` | Release housing |
+| `edu-list-housing-assignments` | List assignments |
+| `edu-housing-availability` | Check availability |
+| `edu-housing-occupancy-report` | Occupancy report |
 
-### Batch Operations
-```
-# Batch attendance for entire class:
---action batch-mark-attendance --attendance-date 2025-09-15 --section-id {id} --company-id {id} \
-  --records '[{"student_id":"{id1}","attendance_status":"present"},{"student_id":"{id2}","attendance_status":"absent"}]'
+### Additional (6 actions)
+| Action | Description |
+|--------|-------------|
+| `edu-transport-report` | Transport summary report |
+| `edu-library-inventory-report` | Library inventory report |
+| `edu-housing-waitlist` | Housing waitlist |
+| `edu-add-payment-method` | Add payment method |
+| `edu-list-payment-methods` | List payment methods |
+| `edu-payment-receipt` | Generate payment receipt |
 
-# Batch grade entry:
---action batch-enter-results --assessment-id {id} \
-  --results '[{"student_id":"{id1}","points_earned":92},{"student_id":"{id2}","points_earned":78}]'
-```
+## Technical Details (Tier 3)
+**Tables:** All use `educlaw_` prefix. **Script:** `scripts/db_query.py` routes to 15 modules. **Data:** Money=TEXT(Decimal), IDs=TEXT(UUID4). FERPA auto-logged. COPPA auto-enforced.

@@ -16,8 +16,8 @@ os.environ.setdefault("ERPCLAW_FIELD_KEY", "test-key-for-unit-tests")
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULE_DIR = os.path.dirname(TESTS_DIR)           # scripts/
 ROOT_DIR = os.path.dirname(MODULE_DIR)             # educlaw-statereport/
-PARENT_DIR = os.path.dirname(ROOT_DIR)             # src/educlaw/
-SRC_DIR = os.path.dirname(PARENT_DIR)              # src/
+PARENT_DIR = os.path.dirname(ROOT_DIR)             # source/educlaw/
+SRC_DIR = os.path.dirname(PARENT_DIR)              # source/
 VERTICAL_INIT_PATH = os.path.join(ROOT_DIR, "init_db.py")
 K12_ROOT_DIR = os.path.join(PARENT_DIR, "educlaw-k12")
 K12_INIT_PATH = os.path.join(K12_ROOT_DIR, "init_db.py")
