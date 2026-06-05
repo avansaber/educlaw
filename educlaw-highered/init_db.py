@@ -75,38 +75,9 @@ def create_educlaw_highered_tables(db_path):
     CREATE INDEX IF NOT EXISTS idx_hh_student ON highered_hold(student_id);
     CREATE INDEX IF NOT EXISTS idx_hh_status ON highered_hold(hold_status);
 
-    CREATE TABLE IF NOT EXISTS highered_transcript (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL DEFAULT '',
-        section_id TEXT NOT NULL DEFAULT '',
-        course_code TEXT NOT NULL DEFAULT '',
-        course_name TEXT NOT NULL DEFAULT '',
-        credits INTEGER NOT NULL DEFAULT 3,
-        grade TEXT NOT NULL DEFAULT '',
-        grade_points TEXT NOT NULL DEFAULT '0.00',
-        term TEXT NOT NULL DEFAULT '',
-        year INTEGER NOT NULL DEFAULT 0,
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_ht_student ON highered_transcript(student_id);
-    CREATE INDEX IF NOT EXISTS idx_ht_company ON highered_transcript(company_id);
-
-    CREATE TABLE IF NOT EXISTS highered_academic_standing (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL DEFAULT '',
-        term TEXT NOT NULL DEFAULT '',
-        year INTEGER NOT NULL DEFAULT 0,
-        term_gpa TEXT NOT NULL DEFAULT '0.00',
-        cumulative_gpa TEXT NOT NULL DEFAULT '0.00',
-        total_credits INTEGER NOT NULL DEFAULT 0,
-        standing TEXT NOT NULL DEFAULT 'good' CHECK(standing IN ('good','probation','suspension','dismissal','dean_list')),
-        notes TEXT NOT NULL DEFAULT '',
-        company_id TEXT NOT NULL DEFAULT '' REFERENCES company(id) ON DELETE RESTRICT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_has_student ON highered_academic_standing(student_id);
-    CREATE INDEX IF NOT EXISTS idx_has_company ON highered_academic_standing(company_id);
+    -- highered_transcript / highered_academic_standing removed 2026-06-01 (audit P2):
+    -- dead scaffolding (zero code/doc references). Dropped from existing DBs by this
+    -- module's migration 001.
 
     -- ==========================================================
     -- Financial Aid domain (1 table — disbursements)

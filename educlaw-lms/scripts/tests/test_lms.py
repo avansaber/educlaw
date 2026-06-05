@@ -241,3 +241,105 @@ class TestCourseMaterials:
             limit=50, offset=0,
         ))
         assert is_ok(r)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Audit / FERPA-log silencer fix (A11) — dialect-agnostic, surfaces real failures
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# These tests guard the fix that replaced `except Exception: pass` around the
+# FERPA data-access log and audit() writes with dialect-agnostic handling:
+#   - a missing table (minimal install) is tolerated silently,
+#   - any OTHER database error is surfaced on stderr (never silently swallowed),
+#   - non-database errors propagate normally.
+# Regression target: a broken FERPA/audit trail must never fail silently again.
+
+import sqlite3 as _sqlite3
+
+# The FERPA helper lives at module scope; load the module to reach it.
+_GRADEBOOK_MOD = _load("online_gradebook", _SCRIPTS_DIR)
+_log_ferpa_access = _GRADEBOOK_MOD._log_ferpa_access
+
+
+class TestAuditFerpaSilencerFix:
+    def test_db_error_types_sqlite_shape(self):
+        """Under the default (sqlite) dialect, db_error_types() returns the
+        sqlite3 missing-table + base error classes — not hardcoded anywhere."""
+        from erpclaw_lib.db import db_error_types
+        missing_table, db_error = db_error_types()
+        assert _sqlite3.OperationalError in missing_table
+        assert db_error is _sqlite3.Error
+        # missing-table class must subclass the base, so except-ordering holds
+        assert issubclass(missing_table[0], db_error)
+
+    def test_ferpa_log_writes_row(self, db_path):
+        """Happy path: the ported insert_row() write lands a real row."""
+        conn = get_conn(db_path)
+        cid = seed_company(conn)
+        sid = seed_student(conn, cid)
+        _log_ferpa_access(conn, sid, cid, "unit-test grade access", "tester")
+        conn.commit()
+        row = conn.execute(
+            "SELECT student_id, data_category, access_type, access_reason, created_by "
+            "FROM educlaw_data_access_log WHERE student_id = ?", (sid,)
+        ).fetchone()
+        assert row is not None
+        assert row["student_id"] == sid
+        assert row["data_category"] == "grades"
+        assert row["access_type"] == "api"
+        assert row["access_reason"] == "unit-test grade access"
+        conn.close()
+
+    def test_ferpa_log_tolerates_missing_table(self, db_path):
+        """Minimal install (table absent) is tolerated silently — no raise."""
+        conn = get_conn(db_path)
+        cid = seed_company(conn)
+        sid = seed_student(conn, cid)
+        conn.execute("DROP TABLE educlaw_data_access_log")
+        conn.commit()
+        # Must NOT raise even though the table is gone.
+        _log_ferpa_access(conn, sid, cid, "reason", "tester")
+        conn.close()
+
+    def test_ferpa_log_surfaces_other_db_error(self, db_path, capsys):
+        """A real DB error (FK violation here) is surfaced on stderr, NOT
+        silently swallowed and NOT raised into the caller's main operation."""
+        conn = get_conn(db_path)
+        cid = seed_company(conn)
+        bogus_student = "does-not-exist-" + cid[:8]  # FK to educlaw_student fails
+        # Must not raise (logging never aborts the main op)...
+        _log_ferpa_access(conn, bogus_student, cid, "reason", "tester")
+        # ...but the failure must be visible, not silent.
+        assert "WARN" in capsys.readouterr().err
+        # And nothing was written.
+        cnt = conn.execute(
+            "SELECT COUNT(*) FROM educlaw_data_access_log WHERE student_id = ?",
+            (bogus_student,)).fetchone()[0]
+        assert cnt == 0
+        conn.close()
+
+    def test_audit_safe_writes_row(self, db_path):
+        """audit_safe() happy path writes to audit_log."""
+        from erpclaw_lib.audit import audit_safe
+        conn = get_conn(db_path)
+        cid = seed_company(conn)
+        audit_safe(conn, "lms-educlaw-lms", "unit-test-action", "company", cid,
+                   new_values={"k": "v"})
+        conn.commit()
+        row = conn.execute(
+            "SELECT skill, action, entity_type, entity_id FROM audit_log WHERE entity_id = ?",
+            (cid,)).fetchone()
+        assert row is not None
+        assert row["action"] == "unit-test-action"
+        assert row["entity_type"] == "company"
+        conn.close()
+
+    def test_audit_safe_tolerates_missing_table(self, db_path):
+        """audit_safe() tolerates a missing audit_log table without raising."""
+        from erpclaw_lib.audit import audit_safe
+        conn = get_conn(db_path)
+        cid = seed_company(conn)
+        conn.execute("DROP TABLE audit_log")
+        conn.commit()
+        audit_safe(conn, "lms-educlaw-lms", "unit-test-action", "company", cid)
+        conn.close()

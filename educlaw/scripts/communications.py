@@ -630,8 +630,8 @@ def send_emergency_alert(conn, args):
         "published_by": P(), "company_id": P(), "created_at": P(), "updated_at": P()
     })
     conn.execute(sql,
-        (ann_id, title, message, "emergency", "all", None,
-         now, None, "published", sent_by, company_id, now, now)
+        (ann_id, title, message, "emergency", "all", "{}",
+         now, "", "published", sent_by, company_id, now, now)
     )
 
     # Get ALL recipients in the company

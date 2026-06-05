@@ -340,10 +340,14 @@ def main():
     parser.add_argument("--count-date")
     parser.add_argument("--free-breakfast", type=int)
     parser.add_argument("--reduced-breakfast", type=int)
-    parser.add_argument("--paid-breakfast", type=int)
+    # USDA NSLP calls this category "paid" (not "regular"). The DB column +
+    # function reads + rate tables are all spelled `regular_breakfast` for
+    # historical reasons, so we route both flag names to the same dest so
+    # agents using the USDA term get persisted correctly.
+    parser.add_argument("--paid-breakfast", "--regular-breakfast", dest="regular_breakfast", type=int)
     parser.add_argument("--free-lunch", type=int)
     parser.add_argument("--reduced-lunch", type=int)
-    parser.add_argument("--paid-lunch", type=int)
+    parser.add_argument("--paid-lunch", "--regular-lunch", dest="regular_lunch", type=int)
     parser.add_argument("--adult-meals", type=int)
     parser.add_argument("--snack-count", type=int)
     parser.add_argument("--counted-by")

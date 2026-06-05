@@ -969,7 +969,6 @@ class TestNotification:
 
 
 class TestEmergencyAlert:
-    @pytest.mark.xfail(reason="Code bug: communications.py inserts NULL for NOT NULL columns")
     def test_send(self, full_setup):
         s = full_setup
         r = call_action(COMMUNICATIONS_ACTIONS["edu-submit-emergency-alert"], s["conn"], ns(

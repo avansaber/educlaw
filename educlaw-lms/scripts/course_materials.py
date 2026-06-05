@@ -18,7 +18,7 @@ try:
     sys.path.insert(0, os.path.expanduser("~/.openclaw/erpclaw/lib"))
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err, row_to_dict
-    from erpclaw_lib.audit import audit
+    from erpclaw_lib.audit import audit_safe
     from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     pass
@@ -130,11 +130,8 @@ def add_course_material(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Failed to create course material: {e}")
 
-    try:
-        audit(conn, SKILL, "lms-add-course-material", "educlaw_lms_course_material", material_id,
-              new_values={"name": name, "material_type": material_type, "access_type": access_type})
-    except Exception:
-        pass
+    audit_safe(conn, SKILL, "lms-add-course-material", "educlaw_lms_course_material", material_id,
+               new_values={"name": name, "material_type": material_type, "access_type": access_type})
     conn.commit()
     ok({
         "id": material_id,
@@ -223,11 +220,8 @@ def update_course_material(conn, args):
         f"UPDATE educlaw_lms_course_material SET {', '.join(updates)} WHERE id = ?",
         params
     )
-    try:
-        audit(conn, SKILL, "lms-update-course-material", "educlaw_lms_course_material", material_id,
-              new_values={"fields_updated": [u.split(" =")[0] for u in updates if "updated_at" not in u]})
-    except Exception:
-        pass
+    audit_safe(conn, SKILL, "lms-update-course-material", "educlaw_lms_course_material", material_id,
+               new_values={"fields_updated": [u.split(" =")[0] for u in updates if "updated_at" not in u]})
     conn.commit()
     ok({"id": material_id, "message": "Course material updated"})
 
@@ -328,11 +322,8 @@ def delete_course_material(conn, args):
                    where={"id": P()}),
         ("archived", _now_iso(), material_id)
     )
-    try:
-        audit(conn, SKILL, "lms-delete-course-material", "educlaw_lms_course_material", material_id,
-              new_values={"material_status": "archived"})
-    except Exception:
-        pass
+    audit_safe(conn, SKILL, "lms-delete-course-material", "educlaw_lms_course_material", material_id,
+               new_values={"material_status": "archived"})
     conn.commit()
     ok({
         "id": material_id,

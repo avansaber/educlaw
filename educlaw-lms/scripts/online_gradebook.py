@@ -19,9 +19,9 @@ from decimal import Decimal, InvalidOperation
 
 try:
     sys.path.insert(0, os.path.expanduser("~/.openclaw/erpclaw/lib"))
-    from erpclaw_lib.db import get_connection
+    from erpclaw_lib.db import get_connection, db_error_types
     from erpclaw_lib.response import ok, err, row_to_dict
-    from erpclaw_lib.audit import audit
+    from erpclaw_lib.audit import audit_safe
     from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 except ImportError:
     pass
@@ -62,19 +62,34 @@ def _get_adapter(conn_row, key=None):
 
 
 def _log_ferpa_access(conn, student_id, company_id, access_reason, triggered_by="system"):
-    """Write a FERPA data access log entry for grade access."""
+    """Write a FERPA data access log entry for grade access.
+
+    Tolerates minimal installs that lack educlaw_data_access_log
+    (missing-table error). Any other DB error is surfaced on stderr rather
+    than swallowed — a silently broken FERPA audit trail is a real
+    compliance hole. Logging never aborts the caller's main operation.
+
+    Dialect-agnostic: the INSERT is built via insert_row() (routes through
+    the query-builder chokepoint) and the except clauses come from
+    erpclaw_lib.db.db_error_types(), so this works on SQLite and PostgreSQL.
+    """
     log_id = str(uuid.uuid4())
+    _missing_table, _db_error = db_error_types()
     try:
-        conn.execute(
-            """INSERT INTO educlaw_data_access_log
-               (id, user_id, student_id, data_category, access_type, access_reason,
-                is_emergency_access, ip_address, company_id, created_at, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        sql, _ = insert_row("educlaw_data_access_log", {
+            "id": P(), "user_id": P(), "student_id": P(), "data_category": P(),
+            "access_type": P(), "access_reason": P(), "is_emergency_access": P(),
+            "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P(),
+        })
+        conn.execute(sql,
             (log_id, triggered_by, student_id, "grades", "api",
              access_reason, 0, "", company_id, _now_iso(), triggered_by)
         )
-    except Exception:
-        pass
+    except _missing_table:
+        pass  # table absent on minimal installs; fall through silently
+    except _db_error as e:
+        print(f"WARN: FERPA log write failed for student={student_id} "
+              f"category=grades: {e}", file=sys.stderr)
 
 
 def _next_lms_series(conn, entity_type, prefix, company_id, use_year=True):
@@ -812,11 +827,8 @@ def resolve_grade_conflict(conn, args):
         (new_sync_status, resolved_by, now, resolution,
          assessment_result_id, grade_sync_id)
     )
-    try:
-        audit(conn, SKILL, "lms-apply-grade-resolution", "educlaw_lms_grade_sync", grade_sync_id,
-              new_values={"resolution": resolution, "grade_sync_status": new_sync_status})
-    except Exception:
-        pass
+    audit_safe(conn, SKILL, "lms-apply-grade-resolution", "educlaw_lms_grade_sync", grade_sync_id,
+               new_values={"resolution": resolution, "grade_sync_status": new_sync_status})
     conn.commit()
 
     ok({
@@ -903,6 +915,7 @@ def export_oneroster_csv(conn, args):
         )
 
         # FERPA disclosure log per student
+        _missing_table, _db_error = db_error_types()
         try:
             # Get all students for the exported sections
             sections = conn.execute(
@@ -923,8 +936,10 @@ def export_oneroster_csv(conn, args):
                         f"OneRoster CSV export for term {term.get('name', '')}",
                         triggered_by
                     )
-        except Exception:
-            pass
+        except _missing_table:
+            pass  # enrollment/section tables absent on minimal install
+        except _db_error as e:
+            print(f"WARN: FERPA export disclosure log failed: {e}", file=sys.stderr)
 
         conn.commit()
 
@@ -989,11 +1004,8 @@ def close_lms_course(conn, args):
          triggered_by, now, now, company_id, now, triggered_by)
     )
 
-    try:
-        audit(conn, SKILL, "lms-complete-lms-course", "educlaw_lms_course_mapping", mapping["id"],
-              new_values={"sync_status": "closed"})
-    except Exception:
-        pass
+    audit_safe(conn, SKILL, "lms-complete-lms-course", "educlaw_lms_course_mapping", mapping["id"],
+               new_values={"sync_status": "closed"})
     conn.commit()
 
     ok({

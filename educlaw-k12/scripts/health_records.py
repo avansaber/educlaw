@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.expanduser("~/.openclaw/erpclaw/lib"))
-from erpclaw_lib.db import get_connection
+from erpclaw_lib.db import get_connection, db_error_types
 from erpclaw_lib.decimal_utils import to_decimal
 from erpclaw_lib.response import ok, err, row_to_dict, rows_to_list
 from erpclaw_lib.audit import audit
@@ -35,7 +35,15 @@ _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def _log_ferpa(conn, user_id, student_id, data_category, company_id,
                access_type="view", access_reason="", is_emergency=False):
-    """Insert a FERPA data access log entry. Silently ignores failures."""
+    """Insert a FERPA data access log entry.
+
+    Tolerates older installs that don't have educlaw_data_access_log yet
+    (missing-table error). Other DB errors are logged to stderr so
+    a broken compliance trail is visible rather than silent — silent
+    failure on FERPA logs is a real compliance hole. Dialect-agnostic: the
+    except classes come from db_error_types() so this works on SQLite + PG.
+    """
+    _missing_table, _db_error = db_error_types()
     try:
         sql, _ = insert_row("educlaw_data_access_log", {"id": P(), "user_id": P(), "student_id": P(), "data_category": P(), "access_type": P(), "access_reason": P(), "is_emergency_access": P(), "ip_address": P(), "company_id": P(), "created_at": P(), "created_by": P()})
 
@@ -44,8 +52,10 @@ def _log_ferpa(conn, user_id, student_id, data_category, company_id,
              access_type, access_reason, int(is_emergency), "",
              company_id, _now_iso(), user_id or "")
         )
-    except Exception:
-        pass
+    except _missing_table:
+        pass  # table not present on minimal installs; fall through silently
+    except _db_error as e:
+        print(f"WARN: FERPA log write failed for student={student_id} category={data_category}: {e}", file=sys.stderr)
 
 
 def _parse_json_field(value, field_name, default=None):
