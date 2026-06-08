@@ -79,7 +79,9 @@ def _parse_json_field(value, field_name, default=None):
 def add_health_profile(conn, args):
     """Create student health profile with allergies, conditions, physician info."""
     student_id = getattr(args, "student_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -366,7 +368,9 @@ def add_office_visit(conn, args):
     visit_date = getattr(args, "visit_date", None) or None
     chief_complaint = getattr(args, "chief_complaint", None) or None
     disposition = getattr(args, "disposition", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -424,7 +428,9 @@ def list_office_visits(conn, args):
     """List office visits for a student with date/disposition filters; FERPA log."""
     student_id = getattr(args, "student_id", None) or None
     user_id = getattr(args, "user_id", None) or ""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     date_from = getattr(args, "date_from", None) or None
     date_to = getattr(args, "date_to", None) or None
     disposition = getattr(args, "disposition", None) or None
@@ -495,7 +501,9 @@ def add_student_medication(conn, args):
     dosage = getattr(args, "dosage", None) or ""
     route = getattr(args, "route", None) or None
     frequency = getattr(args, "frequency", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -595,7 +603,9 @@ def list_student_medications(conn, args):
     """List active (or all) medications for a student."""
     student_id = getattr(args, "student_id", None) or None
     medication_status = getattr(args, "medication_status", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
 
     if not student_id:
         return err("--student-id is required")
@@ -739,7 +749,9 @@ def add_immunization(conn, args):
     """Add an immutable immunization dose record with CVX code."""
     student_id = getattr(args, "student_id", None) or None
     vaccine_name = getattr(args, "vaccine_name", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -786,7 +798,9 @@ def add_immunization_waiver(conn, args):
     student_id = getattr(args, "student_id", None) or None
     vaccine_name = getattr(args, "vaccine_name", None) or None
     waiver_type = getattr(args, "waiver_type", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -867,7 +881,9 @@ def get_immunization_record(conn, args):
     """Get complete immunization history for a student (doses + waivers); FERPA log."""
     student_id = getattr(args, "student_id", None) or None
     user_id = getattr(args, "user_id", None) or ""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
 
     if not student_id:
         return err("--student-id is required")
@@ -942,7 +958,9 @@ def _grade_to_group(grade_level):
 def check_immunization_compliance(conn, args):
     """Check a student's immunization records against grade-level requirements."""
     student_id = getattr(args, "student_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
 
     if not student_id:
         return err("--student-id is required")
@@ -1041,7 +1059,9 @@ def check_immunization_compliance(conn, args):
 
 def list_health_alerts(conn, args):
     """List students with urgent health concerns."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     today = datetime.now().strftime("%Y-%m-%d")
     # Days ahead for expiry warnings
     days_ahead = int(getattr(args, "days_ahead", None) or 30)
@@ -1151,7 +1171,9 @@ def list_health_alerts(conn, args):
 
 def generate_immunization_report(conn, args):
     """School-wide immunization compliance report by grade level and vaccine."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     today = datetime.now().strftime("%Y-%m-%d")
 
     # Get all active students

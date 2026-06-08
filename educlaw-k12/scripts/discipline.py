@@ -130,7 +130,9 @@ def _recalc_cumulative_suspension(conn, discipline_student_id):
 
 def add_discipline_incident(conn, args):
     """Create a new discipline incident header record."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     incident_date = getattr(args, "incident_date", None) or None
     incident_time = getattr(args, "incident_time", None) or ""
     location = getattr(args, "location", None) or None
@@ -444,7 +446,9 @@ def get_discipline_incident(conn, args):
 
 def list_discipline_incidents(conn, args):
     """List incidents with optional filters."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     academic_year_id = getattr(args, "academic_year_id", None) or None
     date_from = getattr(args, "date_from", None) or None
     date_to = getattr(args, "date_to", None) or None
@@ -501,7 +505,9 @@ def get_discipline_history(conn, args):
     """Get complete discipline history for a student across all years; FERPA log."""
     student_id = getattr(args, "student_id", None) or None
     user_id = getattr(args, "user_id", None) or ""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
 
     if not student_id:
         return err("--student-id is required")
@@ -626,7 +632,9 @@ def add_manifestation_review(conn, args):
     student_id = getattr(args, "student_id", None) or None
     iep_id = getattr(args, "iep_id", None) or None
     mdr_date = getattr(args, "mdr_date", None) or ""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
     notes = getattr(args, "notes", None) or ""
 
@@ -716,7 +724,9 @@ def add_pbis_recognition(conn, args):
     and description prefixed with '[PBIS]'. A corresponding discipline_student record
     is also created with role='bystander' (positive recognition context).
     """
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     student_id = getattr(args, "student_id", None) or None
     academic_year_id = getattr(args, "academic_year_id", None) or None
     incident_date = getattr(args, "incident_date", None) or None
@@ -861,7 +871,9 @@ def notify_guardians_discipline(conn, args):
 
 def generate_discipline_report(conn, args):
     """School-wide discipline analytics: incidents by type/severity/location."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     academic_year_id = getattr(args, "academic_year_id", None) or None
     date_from = getattr(args, "date_from", None) or None
     date_to = getattr(args, "date_to", None) or None
@@ -966,7 +978,9 @@ def generate_discipline_report(conn, args):
 
 def generate_discipline_state_report(conn, args):
     """State-format discipline report: suspensions/expulsions by grade/disability status."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     academic_year_id = getattr(args, "academic_year_id", None) or None
 
     if not academic_year_id:

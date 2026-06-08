@@ -105,7 +105,9 @@ def create_sped_referral(conn, args):
     student_id = getattr(args, "student_id", None) or None
     referral_source = getattr(args, "referral_source", None) or None
     referral_date = getattr(args, "referral_date", None) or datetime.now().strftime("%Y-%m-%d")
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -233,7 +235,9 @@ def get_sped_referral(conn, args):
 
 def list_sped_referrals(conn, args):
     """List referrals with filters."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     student_id = getattr(args, "student_id", None) or None
     referral_status = getattr(args, "referral_status", None) or None
     approaching_deadline = getattr(args, "approaching_deadline", None) or None
@@ -342,7 +346,9 @@ def record_sped_eligibility(conn, args):
     eligibility_meeting_date = getattr(args, "eligibility_meeting_date", None) or ""
     is_eligible = int(bool(getattr(args, "is_eligible", None) or 0))
     primary_disability = getattr(args, "primary_disability", None) or "not_applicable"
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
     user_id = getattr(args, "user_id", None) or ""
 
@@ -462,7 +468,9 @@ def add_iep(conn, args):
     """Create a new IEP in draft status; auto-set transition_plan_required if student ≥ 16."""
     student_id = getattr(args, "student_id", None) or None
     eligibility_id = getattr(args, "eligibility_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -663,7 +671,9 @@ def activate_iep(conn, args):
 def amend_iep(conn, args):
     """Create mid-year amendment: new IEP record with is_amendment=1; prior IEP → amended."""
     iep_id = getattr(args, "iep_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not iep_id:
@@ -815,7 +825,9 @@ def _get_iep_with_children(conn, iep_row, user_id):
 
 def list_iep_deadlines(conn, args):
     """List students with IEP annual review due within a configurable window."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     days_window = int(getattr(args, "days_window", None) or 30)
 
     today = datetime.now().strftime("%Y-%m-%d")
@@ -851,7 +863,9 @@ def list_iep_deadlines(conn, args):
 
 def list_reevaluation_due(conn, args):
     """List students with triennial re-evaluation due within a configurable window."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     days_window = int(getattr(args, "days_window", None) or 90)
 
     today = datetime.now().strftime("%Y-%m-%d")
@@ -1366,7 +1380,9 @@ def generate_iep_progress_report(conn, args):
 def add_504_plan(conn, args):
     """Create a Section 504 accommodation plan."""
     student_id = getattr(args, "student_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:

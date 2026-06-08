@@ -64,6 +64,7 @@ def main():
 
     # ── Shared ────────────────────────────────────────────────────────────
     parser.add_argument("--company-id")
+    parser.add_argument("--company", dest="company_name", default=None)  # NL: company by name
     parser.add_argument("--user-id")
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)

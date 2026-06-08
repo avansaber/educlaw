@@ -55,7 +55,9 @@ def create_promotion_review(conn, args):
     """Create end-of-year promotion review; pre-populate with GPA/attendance/discipline."""
     student_id = getattr(args, "student_id", None) or None
     academic_year_id = getattr(args, "academic_year_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -215,7 +217,9 @@ def update_promotion_review(conn, args):
 
 def list_promotion_reviews(conn, args):
     """List all promotion reviews for an academic year, filterable by grade level and status."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     academic_year_id = getattr(args, "academic_year_id", None) or None
     grade_level = getattr(args, "grade_level", None) or None
     review_status = getattr(args, "review_status", None) or None
@@ -256,7 +260,9 @@ def submit_promotion_decision(conn, args):
     decision = getattr(args, "decision", None) or None
     decided_by = getattr(args, "decided_by", None) or ""
     rationale = getattr(args, "rationale", None) or ""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not promotion_review_id:
@@ -484,7 +490,9 @@ def batch_promote_grade(conn, args):
     12th graders with promote decision → status='graduated'.
     """
     academic_year_id = getattr(args, "academic_year_id", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     dry_run = getattr(args, "dry_run", None) or False
 
     if not academic_year_id:
@@ -607,7 +615,9 @@ def create_intervention_plan(conn, args):
     student_id = getattr(args, "student_id", None) or None
     academic_year_id = getattr(args, "academic_year_id", None) or None
     trigger = getattr(args, "trigger", None) or None
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     created_by = getattr(args, "user_id", None) or ""
 
     if not student_id:
@@ -699,7 +709,9 @@ def update_intervention_plan(conn, args):
 
 def list_intervention_plans(conn, args):
     """List intervention plans by academic year, status, or student."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     student_id = getattr(args, "student_id", None) or None
     academic_year_id = getattr(args, "academic_year_id", None) or None
     plan_status = getattr(args, "plan_status", None) or None
@@ -736,7 +748,9 @@ def list_intervention_plans(conn, args):
 
 def identify_at_risk_students(conn, args):
     """Flag students below GPA/attendance thresholds or failing required subjects."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     academic_year_id = getattr(args, "academic_year_id", None) or None
     gpa_threshold = getattr(args, "gpa_threshold", None) or "2.0"
     attendance_threshold = getattr(args, "attendance_threshold", None) or "90.0"
@@ -841,7 +855,9 @@ def identify_at_risk_students(conn, args):
 
 def generate_promotion_report(conn, args):
     """Summary by grade: count of promote/retain/conditional; intervention plan coverage."""
-    company_id = resolve_company_id(conn, getattr(args, "company_id", None) or None)
+    company_id = resolve_company_id(conn,
+                                    getattr(args, "company_id", None) or None,
+                                    getattr(args, "company_name", None) or None)
     academic_year_id = getattr(args, "academic_year_id", None) or None
 
     if not academic_year_id:
