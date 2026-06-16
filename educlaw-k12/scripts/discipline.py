@@ -14,7 +14,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.expanduser("~/.openclaw/erpclaw/lib"))
+sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
 from erpclaw_lib.db import get_connection, db_error_types
 from erpclaw_lib.decimal_utils import to_decimal
 from erpclaw_lib.naming import get_next_name
