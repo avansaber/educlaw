@@ -187,6 +187,9 @@ def main():
     parser.add_argument("--duration-years")
     parser.add_argument("--prerequisites")       # JSON
     parser.add_argument("--is-published")
+    parser.add_argument("--requirement-type")    # program requirement enum
+    parser.add_argument("--credit-category")
+    parser.add_argument("--min-grade")
 
     # ── Course ────────────────────────────────────────────────────────────
     parser.add_argument("--course-id")

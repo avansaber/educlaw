@@ -1,11 +1,11 @@
 # EduClaw
 
-Education management suite for [ERPClaw](https://github.com/avansaber/erpclaw). <!-- SYNC:value:group.educlaw.module_count -->7<!-- /SYNC --> modules covering student information, financial aid, K-12, scheduling, LMS integration, state reporting, and higher education. <!-- SYNC:value:group.educlaw.total_actions -->610<!-- /SYNC --> actions total. FERPA/COPPA compliant.
+Education management suite for [ERPClaw](https://github.com/avansaber/erpclaw). <!-- SYNC:value:group.educlaw.module_count -->7<!-- /SYNC --> modules covering student information, financial aid, K-12, scheduling, LMS integration, state reporting, and higher education. <!-- SYNC:value:group.educlaw.total_actions -->612<!-- /SYNC --> actions total. FERPA/COPPA compliant.
 
 ## Modules
 
 ### Core (`educlaw`)
-Student information system for K-12 and higher ed. <!-- SYNC:value:module.educlaw.actions -->176<!-- /SYNC --> actions across 8 domains -- students, academics, enrollment, grading, attendance, staff, fees, and communications. Integrates with ERPClaw HR, Selling, and Payments.
+Student information system for K-12 and higher ed. <!-- SYNC:value:module.educlaw.actions -->178<!-- /SYNC --> actions across 8 domains -- students, academics, enrollment, grading, attendance, staff, fees, and communications. Integrates with ERPClaw HR, Selling, and Payments.
 
 ### Financial Aid (`educlaw-finaid`)
 Federal, state, and institutional aid with Title IV compliance. ISIR processing, SAP evaluation, R2T4 calculations, award packaging, disbursements, COD origination, scholarships, work-study, and loan tracking. <!-- SYNC:value:module.educlaw-finaid.actions -->116<!-- /SYNC --> actions.

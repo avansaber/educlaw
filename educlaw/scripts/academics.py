@@ -33,6 +33,7 @@ VALID_ROOM_TYPES = ("classroom", "lab", "auditorium", "gym", "library", "office"
 VALID_PROGRAM_TYPES = ("k12", "associate", "bachelor", "master", "doctoral", "certificate", "diploma")
 VALID_COURSE_TYPES = ("lecture", "lab", "seminar", "independent_study", "internship", "online")
 VALID_SECTION_STATUSES = ("draft", "scheduled", "open", "closed", "cancelled")
+VALID_REQUIREMENT_TYPES = ("required", "elective", "core", "major", "general_education")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -631,6 +632,87 @@ def list_programs(conn, args):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PROGRAM REQUIREMENT (degree curriculum: which courses satisfy a program)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def add_program_requirement(conn, args):
+    """Attach a course to a program's degree requirements.
+
+    Fills the `requirements` array that edu-get-program reads. Validates both
+    FKs (program + course) up front so the caller gets a clear message rather
+    than a raw FK error, and honors the table's UNIQUE(program_id, course_id)
+    with a clean duplicate message.
+    """
+    program_id = getattr(args, "program_id", None)
+    course_id = getattr(args, "course_id", None)
+    requirement_type = getattr(args, "requirement_type", None)
+
+    if not program_id:
+        err("--program-id is required")
+    if not course_id:
+        err("--course-id is required")
+    if not requirement_type:
+        err("--requirement-type is required")
+    if requirement_type not in VALID_REQUIREMENT_TYPES:
+        err(f"--requirement-type must be one of: {', '.join(VALID_REQUIREMENT_TYPES)}")
+
+    prog = conn.execute(Q.from_(Table("educlaw_program")).select(Table("educlaw_program").star).where(Field("id") == P()).get_sql(), (program_id,)).fetchone()
+    if not prog:
+        err(f"Program {program_id} not found")
+
+    # The requirement row is scoped through its parent program (the table has no
+    # company_id column). If a company is supplied, verify the program belongs
+    # to it so a caller cannot cross-link another company's program.
+    company_id = getattr(args, "company_id", None)
+    if company_id and dict(prog).get("company_id") != company_id:
+        err(f"Program {program_id} does not belong to company {company_id}")
+
+    if not conn.execute(Q.from_(Table("educlaw_course")).select(Field("id")).where(Field("id") == P()).get_sql(), (course_id,)).fetchone():
+        err(f"Course {course_id} not found")
+
+    req_id = str(uuid.uuid4())
+    now = _now_iso()
+
+    try:
+        sql, _ = insert_row("educlaw_program_requirement", {"id": P(), "program_id": P(), "course_id": P(), "requirement_type": P(), "credit_category": P(), "min_grade": P(), "created_at": P(), "created_by": P()})
+
+        conn.execute(sql,
+            (req_id, program_id, course_id, requirement_type,
+             getattr(args, "credit_category", None) or "",
+             getattr(args, "min_grade", None) or "",
+             now, getattr(args, "user_id", None) or "")
+        )
+    except sqlite3.IntegrityError:
+        err(f"Course {course_id} is already a requirement of program {program_id}")
+
+    audit(conn, SKILL, "edu-add-program-requirement", "educlaw_program_requirement", req_id,
+          new_values={"program_id": program_id, "course_id": course_id, "requirement_type": requirement_type})
+    conn.commit()
+    ok({"id": req_id, "program_id": program_id, "course_id": course_id, "requirement_type": requirement_type})
+
+
+def list_program_requirements(conn, args):
+    program_id = getattr(args, "program_id", None)
+    if not program_id:
+        err("--program-id is required")
+
+    if not conn.execute(Q.from_(Table("educlaw_program")).select(Field("id")).where(Field("id") == P()).get_sql(), (program_id,)).fetchone():
+        err(f"Program {program_id} not found")
+
+    _pr = Table("educlaw_program_requirement")
+    _c = Table("educlaw_course")
+    rows = conn.execute(
+        Q.from_(_pr).join(_c).on(_c.id == _pr.course_id)
+        .select(_pr.star, _c.course_code, _c.name.as_("course_name"), _c.credit_hours)
+        .where(_pr.program_id == P())
+        .orderby(_c.course_code)
+        .get_sql(),
+        (program_id,)
+    ).fetchall()
+    ok({"requirements": [dict(r) for r in rows], "count": len(rows)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # COURSE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1197,6 +1279,8 @@ ACTIONS = {
     "edu-update-program": update_program,
     "edu-get-program": get_program,
     "edu-list-programs": list_programs,
+    "edu-add-program-requirement": add_program_requirement,
+    "edu-list-program-requirements": list_program_requirements,
     "edu-add-course": add_course,
     "edu-update-course": update_course,
     "edu-get-course": get_course,

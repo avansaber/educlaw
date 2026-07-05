@@ -1,6 +1,6 @@
 ---
 name: educlaw
-version: 1.0.0
+version: 1.1.0
 description: AI-native education management for K-12/colleges/universities. 176 actions across 15 domains -- students, academics, enrollment, grading, attendance, fees, communications, staff, portal, cafeteria, transport, professional development, activities, library, housing. FERPA/COPPA compliant.
 author: AvanSaber
 homepage: https://github.com/avansaber/educlaw
@@ -76,7 +76,7 @@ python3 {baseDir}/scripts/db_query.py --action status
 | `edu-add-consent-record` | Add FERPA consent |
 | `edu-cancel-consent` | Revoke consent record |
 
-### Academics (26 actions)
+### Academics (28 actions)
 | Action | Description |
 |--------|-------------|
 | `edu-add-academic-year` | Create academic year |
@@ -94,6 +94,8 @@ python3 {baseDir}/scripts/db_query.py --action status
 | `edu-update-program` | Update program |
 | `edu-get-program` | Get program with requirements |
 | `edu-list-programs` | List programs |
+| `edu-add-program-requirement` | Add required/elective course to program |
+| `edu-list-program-requirements` | List a program's course requirements |
 | `edu-add-course` | Create course |
 | `edu-update-course` | Update course |
 | `edu-get-course` | Get course with prerequisites |
