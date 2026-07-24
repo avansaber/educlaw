@@ -740,19 +740,9 @@ def create_educlaw_tables(db_path):
         -- ==========================================================
         -- DOMAIN: CAFETERIA / MEAL MANAGEMENT (NSLP)
         -- ==========================================================
-
-        CREATE TABLE IF NOT EXISTS educlaw_meal_plan (
-            id              TEXT PRIMARY KEY,
-            school_id       TEXT NOT NULL,
-            academic_year   TEXT NOT NULL,
-            plan_type       TEXT NOT NULL CHECK (plan_type IN ('free','reduced','paid')),
-            daily_rate      TEXT NOT NULL DEFAULT '0',
-            description     TEXT,
-            status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_educlaw_meal_plan_school ON educlaw_meal_plan(school_id);
+        -- educlaw_meal_plan dropped 2026-07-22 (WS4/D5, M33b §5 ratified DROP):
+        -- dead write-only surface — USDA claims use federal-constant rates, the
+        -- table was never read. Existing DBs cleaned by migration 002.
 
         CREATE TABLE IF NOT EXISTS educlaw_daily_meal_count (
             id              TEXT PRIMARY KEY,

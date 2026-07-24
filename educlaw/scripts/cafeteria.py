@@ -1,7 +1,7 @@
 """EduClaw — cafeteria domain module (Meal Management / NSLP)
 
-8 actions for USDA National School Lunch Program compliance:
-meal plans, daily counts, student meal records, participation reporting,
+7 actions for USDA National School Lunch Program compliance:
+daily counts, student meal records, participation reporting,
 USDA reimbursement claim calculation, and allergen alerts.
 
 Imported by db_query.py (unified router).
@@ -26,7 +26,6 @@ except ImportError:
 SKILL = "educlaw"
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-VALID_PLAN_TYPES = ("free", "reduced", "paid")
 VALID_MEAL_TYPES = ("breakfast", "lunch", "snack")
 VALID_ELIGIBILITIES = ("free", "reduced", "paid")
 
@@ -46,51 +45,6 @@ def _d(val, default="0"):
         return Decimal(str(val)) if val not in (None, "", "None") else Decimal(default)
     except (InvalidOperation, Exception):
         return Decimal(default)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# MEAL PLAN
-# ─────────────────────────────────────────────────────────────────────────────
-
-def add_meal_plan(conn, args):
-    """Create a meal plan for a school."""
-    school_id = getattr(args, "school_id", None)
-    plan_type = getattr(args, "plan_type", None)
-    daily_rate = getattr(args, "daily_rate", None)
-    academic_year = getattr(args, "academic_year", None)
-
-    if not school_id:
-        err("--school-id is required")
-    if not plan_type:
-        err("--plan-type is required (free, reduced, paid)")
-    if plan_type not in VALID_PLAN_TYPES:
-        err(f"--plan-type must be one of: {', '.join(VALID_PLAN_TYPES)}")
-    if not daily_rate:
-        err("--daily-rate is required")
-    if _d(daily_rate) < 0:
-        err("--daily-rate must be >= 0")
-    if not academic_year:
-        err("--academic-year is required")
-
-    plan_id = str(uuid.uuid4())
-    now = _now_iso()
-    description = getattr(args, "description", None) or ""
-
-    sql, _ = insert_row("educlaw_meal_plan", {
-        "id": P(), "school_id": P(), "academic_year": P(),
-        "plan_type": P(), "daily_rate": P(), "description": P(),
-        "status": P(), "created_at": P(), "updated_at": P(),
-    })
-    conn.execute(sql,
-        (plan_id, school_id, academic_year, plan_type,
-         str(_d(daily_rate)), description, "active", now, now)
-    )
-
-    audit(conn, SKILL, "edu-add-meal-plan", "educlaw_meal_plan", plan_id,
-          new_values={"plan_type": plan_type, "daily_rate": str(_d(daily_rate))})
-    conn.commit()
-    ok({"id": plan_id, "school_id": school_id, "plan_type": plan_type,
-        "daily_rate": str(_d(daily_rate)), "academic_year": academic_year})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -432,7 +386,6 @@ def allergen_alert_list(conn, args):
 # ─────────────────────────────────────────────────────────────────────────────
 
 ACTIONS = {
-    "edu-add-meal-plan": add_meal_plan,
     "edu-update-student-meal-eligibility": update_student_meal_eligibility,
     "edu-record-daily-meal-count": record_daily_meal_count,
     "edu-record-student-meal": record_student_meal,

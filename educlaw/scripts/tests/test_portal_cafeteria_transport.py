@@ -271,22 +271,6 @@ class TestPortalSubmitAbsenceExcuse:
 # CAFETERIA DOMAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestAddMealPlan:
-    def test_add_meal_plan(self, cafeteria_setup):
-        s = cafeteria_setup
-        r = call_action(CAFETERIA_ACTIONS["edu-add-meal-plan"], s["conn"], ns(
-            school_id=s["company_id"],
-            plan_type="free",
-            daily_rate="0.00",
-            academic_year="2025-2026",
-            description="Free lunch program",
-        ))
-        assert is_ok(r)
-        assert r["plan_type"] == "free"
-        assert r["daily_rate"] == "0.00"
-        assert r["academic_year"] == "2025-2026"
-
-
 class TestRecordDailyMealCount:
     def test_record_daily_meal_count(self, cafeteria_setup):
         s = cafeteria_setup

@@ -1,7 +1,7 @@
 ---
 name: educlaw
-version: 1.1.0
-description: AI-native education management for K-12/colleges/universities. 176 actions across 15 domains -- students, academics, enrollment, grading, attendance, fees, communications, staff, portal, cafeteria, transport, professional development, activities, library, housing. FERPA/COPPA compliant.
+version: 1.2.0
+description: AI-native education management for K-12/colleges/universities. 175 actions across 15 domains -- students, academics, enrollment, grading, attendance, fees, communications, staff, portal, cafeteria, transport, professional development, activities, library, housing. FERPA/COPPA compliant.
 author: AvanSaber
 homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
@@ -217,10 +217,9 @@ python3 {baseDir}/scripts/db_query.py --action status
 | `edu-portal-announcements` | View announcements |
 | `edu-portal-acknowledge-announcement` | Acknowledge announcement |
 
-### Cafeteria (9 actions)
+### Cafeteria (8 actions)
 | Action | Description |
 |--------|-------------|
-| `edu-add-meal-plan` | Create meal plan |
 | `edu-record-student-meal` | Record student meal |
 | `edu-list-meal-records` | List meal records |
 | `edu-update-student-meal-eligibility` | Update meal eligibility (FRPL) |
