@@ -1,6 +1,6 @@
 ---
 name: educlaw
-version: 1.2.0
+version: 1.2.1
 description: AI-native education management for K-12/colleges/universities. 175 actions across 15 domains -- students, academics, enrollment, grading, attendance, fees, communications, staff, portal, cafeteria, transport, professional development, activities, library, housing. FERPA/COPPA compliant.
 author: AvanSaber
 homepage: https://github.com/avansaber/educlaw

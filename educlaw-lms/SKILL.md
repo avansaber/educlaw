@@ -1,6 +1,6 @@
 ---
 name: educlaw-lms
-version: 1.0.0
+version: 1.0.1
 description: LMS sync, assignments, course materials, and online gradebook for EduClaw. Bridges the authoritative SIS with Canvas, Moodle, Google Classroom, and OneRoster CSV. 25 actions across 4 domains. FERPA/COPPA compliant. DPA hard-gated. Credentials AES-256 encrypted at rest.
 author: AvanSaber
 homepage: https://github.com/avansaber/educlaw

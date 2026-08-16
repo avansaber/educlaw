@@ -14,12 +14,14 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 try:
-    sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
+    import importlib.util
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case, LiteralValue
+    from erpclaw_lib.query import Case, Field, Order, P, Q, Table, fn, insert_row, now as sql_now
 except ImportError:
     pass
 
@@ -609,7 +611,7 @@ def enter_assessment_result(conn, args):
             .set(_ar2.comments, P())
             .set(_ar2.graded_by, P())
             .set(_ar2.graded_at, P())
-            .set(_ar2.updated_at, LiteralValue("datetime('now')"))
+            .set(_ar2.updated_at, sql_now())
             .where(_ar2.id == P())
             .get_sql(),
             (str(pts) if points_earned is not None else None,
@@ -720,7 +722,7 @@ def batch_enter_results(conn, args):
                     .set(_ar3.comments, P())
                     .set(_ar3.graded_by, P())
                     .set(_ar3.graded_at, P())
-                    .set(_ar3.updated_at, LiteralValue("datetime('now')"))
+                    .set(_ar3.updated_at, sql_now())
                     .where(_ar3.id == P())
                     .get_sql(),
                     (pts_str, is_exempt, is_late, comments, graded_by, now, dict(existing)["id"])
@@ -931,7 +933,7 @@ def submit_grades(conn, args):
             .set(_ce6.grade_submitted_by, P())
             .set(_ce6.grade_submitted_at, P())
             .set(_ce6.is_grade_submitted, 1)
-            .set(_ce6.updated_at, LiteralValue("datetime('now')"))
+            .set(_ce6.updated_at, sql_now())
             .where(_ce6.id == P())
             .get_sql(),
             (letter, pts, pct, submitted_by, now, e["id"])
@@ -1001,7 +1003,7 @@ def amend_grade(conn, args):
         Q.update(_ce7)
         .set(_ce7.final_letter_grade, P())
         .set(_ce7.final_grade_points, P())
-        .set(_ce7.updated_at, LiteralValue("datetime('now')"))
+        .set(_ce7.updated_at, sql_now())
         .where(_ce7.id == P())
         .get_sql(),
         (new_letter_grade,
@@ -1073,7 +1075,7 @@ def _calculate_gpa_internal(conn, student_id):
         .set(_stu.cumulative_gpa, P())
         .set(_stu.total_credits_earned, P())
         .set(_stu.academic_standing, P())
-        .set(_stu.updated_at, LiteralValue("datetime('now')"))
+        .set(_stu.updated_at, sql_now())
         .where(_stu.id == P())
         .get_sql(),
         (cumulative_gpa, str(all_credits), standing, student_id)

@@ -213,7 +213,7 @@ The following parent actions already cover the underlying data — educlaw-lms s
 |---|---|
 | Table prefix | `educlaw_lms_*` (keep educlaw_ prefix for namespace consistency) |
 | Action names | kebab-case: `add-lms-connection`, `sync-courses`, `pull-grades` |
-| Naming series | `LMS-NNNNN` for connections, `SYN-YYYY-NNNNN` for sync logs |
+| Naming series | `LMS-YYYY-NNNNN` for connections, `SYN-YYYY-NNNNN` for sync logs |
 | All IDs | TEXT (UUID) |
 | All monetary values | TEXT (Python Decimal) |
 | All timestamps | TEXT (ISO 8601) |

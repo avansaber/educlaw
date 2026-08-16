@@ -83,7 +83,7 @@ All new tables use prefix `educlaw_lms_`. IDs are TEXT (UUID). Timestamps TEXT (
 | Column | Type | Constraints | Description |
 | --- | --- | --- | --- |
 | `id` | TEXT | PRIMARY KEY | UUID |
-| `naming_series` | TEXT | NOT NULL, UNIQUE | e.g., `LMS-00001` |
+| `naming_series` | TEXT | NOT NULL, UNIQUE | e.g., `LMS-2026-00001` (M104 — the year is required by INV-10; installs created before that carry the old `LMS-00001` form and keep it) |
 | `display_name` | TEXT | NOT NULL | Human label, e.g., "Jefferson High — Canvas" |
 | `lms_type` | TEXT | NOT NULL | `canvas` / `moodle` / `google_classroom` / `oneroster_csv` |
 | `endpoint_url` | TEXT | | Base URL of LMS instance (NULL for `oneroster_csv`) |
@@ -678,7 +678,7 @@ All 7 new tables use prefix `educlaw_lms_*`. Parent uses `educlaw_*` (without `l
 | `erpclaw-setup` | `get_connection()`, `ensure_db_exists()` | DB connection for all operations; `company` table for institution scoping |
 | `erpclaw-setup` | `audit()` function from `erpclaw_lib/audit.py` | Write audit entries for all state changes |
 | `erpclaw-setup` | `encrypt_field()` / `decrypt_field()` from `erpclaw_lib/crypto.py` | Encrypt/decrypt LMS API credentials at rest |
-| `erpclaw-setup` | `naming_series` table | Generate `LMS-NNNNN` and `SYN-YYYY-NNNNN` naming series |
+| `erpclaw-setup` | `naming_series` table | Generate `LMS-YYYY-NNNNN` and `SYN-YYYY-NNNNN` naming series |
 | `erpclaw-gl` | `account` table | Read-only: institution's chart of accounts (no new GL entries from LMS domain) |
 | `erpclaw-selling` | `customer` table | Read `email` field for student email (student → customer → email) |
 | `erpclaw-hr` | `employee` table | Read `work_email` for instructor email for LMS account creation |

@@ -221,7 +221,7 @@ BASE_TABLES_DDL = """
         id TEXT PRIMARY KEY,
         recipient_type TEXT NOT NULL DEFAULT '' CHECK(recipient_type IN ('student','guardian','employee')),
         recipient_id TEXT NOT NULL DEFAULT '',
-        notification_type TEXT NOT NULL DEFAULT '' CHECK(notification_type IN ('grade_posted','fee_due','absence','announcement','progress_report','emergency','acceptance','enrollment_confirmed')),
+        notification_type TEXT NOT NULL DEFAULT '' CHECK(notification_type IN ('grade_posted','fee_due','absence','announcement','progress_report','emergency','acceptance','enrollment_confirmed','payment','housing_waitlist')),
         title TEXT NOT NULL DEFAULT '',
         message TEXT NOT NULL DEFAULT '',
         reference_type TEXT NOT NULL DEFAULT '',

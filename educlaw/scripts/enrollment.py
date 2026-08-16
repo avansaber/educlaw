@@ -13,12 +13,14 @@ import uuid
 from datetime import datetime, timezone
 
 try:
-    sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
+    import importlib.util
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
+    from erpclaw_lib.query import Field, LiteralValue, Order, P, Q, Table, fn, insert_row, now as sql_now
 except ImportError:
     pass
 
@@ -126,7 +128,7 @@ def withdraw_from_program(conn, args):
     conn.execute(
         Q.update(_pe)
         .set(_pe.enrollment_status, 'withdrawn')
-        .set(_pe.updated_at, LiteralValue("datetime('now')"))
+        .set(_pe.updated_at, sql_now())
         .where(_pe.id == P())
         .get_sql(),
         (enrollment_id,)
@@ -346,7 +348,7 @@ def enroll_in_section(conn, args):
     conn.execute(
         Q.update(_sec)
         .set(_sec.current_enrollment, LiteralValue('"current_enrollment"+1'))
-        .set(_sec.updated_at, LiteralValue("datetime('now')"))
+        .set(_sec.updated_at, sql_now())
         .where(_sec.id == P())
         .get_sql(),
         (section_id,)
@@ -382,7 +384,7 @@ def drop_enrollment(conn, args):
         .set(_ce.enrollment_status, 'dropped')
         .set(_ce.drop_date, P())
         .set(_ce.drop_reason, P())
-        .set(_ce.updated_at, LiteralValue("datetime('now')"))
+        .set(_ce.updated_at, sql_now())
         .where(_ce.id == P())
         .get_sql(),
         (now[:10], drop_reason, enrollment_id)
@@ -393,7 +395,7 @@ def drop_enrollment(conn, args):
     conn.execute(
         Q.update(_sec)
         .set(_sec.current_enrollment, LiteralValue('MAX(0,"current_enrollment"-1)'))
-        .set(_sec.updated_at, LiteralValue("datetime('now')"))
+        .set(_sec.updated_at, sql_now())
         .where(_sec.id == P())
         .get_sql(),
         (r["section_id"],)
@@ -436,7 +438,7 @@ def withdraw_enrollment(conn, args):
         .set(_ce.drop_date, P())
         .set(_ce.drop_reason, P())
         .set(_ce.final_letter_grade, 'W')
-        .set(_ce.updated_at, LiteralValue("datetime('now')"))
+        .set(_ce.updated_at, sql_now())
         .where(_ce.id == P())
         .get_sql(),
         (now[:10], getattr(args, "drop_reason", None) or "Student withdrawal", enrollment_id)
@@ -446,7 +448,7 @@ def withdraw_enrollment(conn, args):
     conn.execute(
         Q.update(_sec)
         .set(_sec.current_enrollment, LiteralValue('MAX(0,"current_enrollment"-1)'))
-        .set(_sec.updated_at, LiteralValue("datetime('now')"))
+        .set(_sec.updated_at, sql_now())
         .where(_sec.id == P())
         .get_sql(),
         (r["section_id"],)
@@ -541,7 +543,7 @@ def _advance_waitlist(conn, section_id, company_id, now):
         Q.update(_wl)
         .set(_wl.waitlist_status, 'offered')
         .set(_wl.offer_expires_at, P())
-        .set(_wl.updated_at, LiteralValue("datetime('now')"))
+        .set(_wl.updated_at, sql_now())
         .where(_wl.id == P())
         .get_sql(),
         (offer_expires, w["id"])

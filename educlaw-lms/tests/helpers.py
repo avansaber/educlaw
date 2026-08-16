@@ -24,15 +24,27 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(TESTS_DIR)
 SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
 INIT_DB_PATH = os.path.join(REPO_ROOT, "init_db.py")
+# The monorepo's source/ dir (absent in the published module repo, which is why
+# every use of it is guarded by an isdir check).
+SRC_DIR = os.path.dirname(os.path.dirname(REPO_ROOT))
 
 # Make scripts importable
 if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 
 # Make erpclaw_lib importable
-ERPCLAW_LIB = os.path.expanduser("~/.openclaw/erpclaw/lib")
+# M54: bind erpclaw_lib to the tree under test, never the deployed
+# ~/.openclaw/erpclaw/lib symlink — the last install to run wins that symlink,
+# so with several worktrees in flight it resolves to a tree nobody is testing
+# (and DANGLES once that worktree is removed). The deployed install stays as
+# the fallback for a published module repo, which ships no source/erpclaw/.
+_IN_TREE_LIB = os.path.join(SRC_DIR, "erpclaw", "scripts", "erpclaw-setup", "lib")
+ERPCLAW_LIB = (_IN_TREE_LIB if os.path.isdir(os.path.join(_IN_TREE_LIB, "erpclaw_lib"))
+               else os.path.join(os.path.expanduser(
+                   os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
 if ERPCLAW_LIB not in sys.path:
-    sys.path.insert(0, ERPCLAW_LIB)
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, ERPCLAW_LIB)
 
 from erpclaw_lib.db import setup_pragmas
 
@@ -270,7 +282,10 @@ def seed_assessment(conn, plan_id, category_id, name="Quiz 1") -> str:
 def seed_lms_connection(conn, company_id, lms_type="oneroster_csv",
                          has_dpa=1, status="active") -> str:
     lid = str(uuid.uuid4())
-    ns_val = f"LMS-{lid[:6]}"
+    # Year-bearing, matching what the module's writer issues (M104): a fixture
+    # that fabricates the old un-yeared shape trains the eye on a format the
+    # constitution rejects.
+    ns_val = f"LMS-{datetime.now(timezone.utc).year}-{lid[:6]}"
     conn.execute(
         """INSERT INTO educlaw_lms_connection
            (id, naming_series, display_name, lms_type, endpoint_url,

@@ -5,7 +5,7 @@
 This document defines the entity-relationship model for educlaw-lms based on competitor analysis, workflow requirements, and parent product analysis. All tables follow EduClaw/ERPClaw conventions:
 - **IDs:** TEXT (UUID)
 - **Monetary amounts:** TEXT (Python Decimal) — not applicable in LMS domain, but timestamps and scores follow standard
-- **Naming series:** `LMS-NNNNN` for connections, `SYN-YYYY-NNNNN` for sync runs
+- **Naming series:** `LMS-YYYY-NNNNN` for connections, `SYN-YYYY-NNNNN` for sync runs
 - **Timestamps:** `created_at`, `updated_at` (sync logs omit `updated_at` — append-only)
 - **Document lifecycle:** Draft → Active → Inactive for connections; Pending → Running → Completed for sync runs
 - **Table prefix:** `educlaw_lms_` for all educlaw-lms-owned tables
@@ -62,7 +62,7 @@ Configuration record for a connected LMS platform.
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | TEXT | PK | UUID |
-| naming_series | TEXT | NOT NULL, UNIQUE | LMS-00001 |
+| naming_series | TEXT | NOT NULL, UNIQUE | LMS-2026-00001 |
 | display_name | TEXT | NOT NULL | e.g., "Jefferson High — Canvas" |
 | lms_type | TEXT | NOT NULL | `canvas` / `moodle` / `google_classroom` / `oneroster_csv` |
 | endpoint_url | TEXT | | Base URL of LMS (null for oneroster_csv) |
@@ -376,7 +376,7 @@ active → archived (removed from student view)
 
 | Entity | Prefix | Year | Example |
 |--------|--------|------|---------|
-| LMS Connection | LMS- | No | LMS-00001 |
+| LMS Connection | LMS- | Yes | LMS-2026-00001 |
 | Sync Run Log | SYN- | Yes | SYN-2026-00042 |
 
 All other tables use system-generated UUIDs without a human-readable naming series (cross-reference tables and grade sync records are operational, not user-facing documents).

@@ -16,7 +16,9 @@ import uuid
 from datetime import datetime, timezone
 
 try:
-    sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
+    import importlib.util
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
     from erpclaw_lib.db import get_connection, db_error_types
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit_safe
@@ -79,10 +81,16 @@ def _log_ferpa_access(conn, student_id, company_id, access_reason, triggered_by=
               f"category=grades: {e}", file=sys.stderr)
 
 
-def _next_lms_series(conn, entity_type, prefix, company_id, use_year=True):
-    """Generate next sequential naming series."""
+def _next_lms_series(conn, entity_type, prefix, company_id):
+    """Generate next sequential naming series.
+
+    The year is always embedded, so the stored prefix satisfies INV-10. The
+    `use_year` flag this used to take is gone (M104): it existed only so a
+    caller could omit the year, and the one caller in the module that did left
+    a shipped writer disagreeing with a shipped check.
+    """
     year = datetime.now(timezone.utc).year
-    full_prefix = f"{prefix}{year}-" if use_year else prefix
+    full_prefix = f"{prefix}{year}-"
     entry_id = str(uuid.uuid4())
     conn.execute(
         """INSERT INTO naming_series (id, entity_type, prefix, current_value, company_id)
@@ -218,7 +226,7 @@ def push_assessment_to_lms(conn, args):
     # Create assignment_push sync log entry
     log_id = str(uuid.uuid4())
     log_naming = _next_lms_series(
-        conn, "educlaw_lms_sync_log", "SYN-", company_id, use_year=True
+        conn, "educlaw_lms_sync_log", "SYN-", company_id
     )
     now = _now_iso()
     conn.execute(

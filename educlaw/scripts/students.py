@@ -14,13 +14,15 @@ from datetime import datetime, date, timezone
 from decimal import Decimal
 
 try:
-    sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
+    import importlib.util
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.decimal_utils import to_decimal
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
+    from erpclaw_lib.query import Field, Order, P, Q, Table, fn, insert_row, now as sql_now
 except ImportError:
     pass
 
@@ -297,7 +299,7 @@ def review_applicant(conn, args):
         .set(_sa.reviewed_by, P())
         .set(_sa.review_date, P())
         .set(_sa.review_notes, P())
-        .set(_sa.updated_at, LiteralValue("datetime('now')"))
+        .set(_sa.updated_at, sql_now())
         .where(_sa.id == P())
         .get_sql(),
         (new_status, reviewed_by, now[:10],
@@ -380,7 +382,7 @@ def convert_applicant_to_student(conn, args):
     conn.execute(
         Q.update(_sa2)
         .set(_sa2.status, 'enrolled')
-        .set(_sa2.updated_at, LiteralValue("datetime('now')"))
+        .set(_sa2.updated_at, sql_now())
         .where(_sa2.id == P())
         .get_sql(),
         (applicant_id,)
@@ -621,7 +623,7 @@ def change_student_status(conn, args):
     conn.execute(
         Q.update(_s)
         .set(_s.status, P())
-        .set(_s.updated_at, LiteralValue("datetime('now')"))
+        .set(_s.updated_at, sql_now())
         .where(_s.id == P())
         .get_sql(),
         (new_status, student_id)
@@ -652,7 +654,7 @@ def graduate_student(conn, args):
         Q.update(_s)
         .set(_s.status, 'graduated')
         .set(_s.graduation_date, P())
-        .set(_s.updated_at, LiteralValue("datetime('now')"))
+        .set(_s.updated_at, sql_now())
         .where(_s.id == P())
         .get_sql(),
         (graduation_date, student_id)
@@ -670,7 +672,7 @@ def graduate_student(conn, args):
         conn.execute(
             Q.update(_pe)
             .set(_pe.enrollment_status, 'completed')
-            .set(_pe.updated_at, LiteralValue("datetime('now')"))
+            .set(_pe.updated_at, sql_now())
             .where(_pe.id == P())
             .get_sql(),
             (prog_enr["id"],)
@@ -1219,7 +1221,7 @@ def revoke_consent(conn, args):
         Q.update(_cr)
         .set(_cr.is_revoked, 1)
         .set(_cr.revoked_date, P())
-        .set(_cr.updated_at, LiteralValue("datetime('now')"))
+        .set(_cr.updated_at, sql_now())
         .where(_cr.id == P())
         .get_sql(),
         (revoked_date, consent_id)

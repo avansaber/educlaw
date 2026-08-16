@@ -14,13 +14,15 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 try:
-    sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
+    import importlib.util
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
+    from erpclaw_lib.query import Field, LiteralValue, Order, P, Q, Table, fn, insert_or_ignore, insert_row, now as sql_now
 except ImportError:
     pass
 
@@ -772,10 +774,11 @@ def add_course(conn, args):
                 if not conn.execute(Q.from_(Table("educlaw_course")).select(Field("id")).where(Field("id") == P()).get_sql(), (prereq_course_id,)).fetchone():
                     err(f"Prerequisite course {prereq_course_id} not found")
                 prereq_id = str(uuid.uuid4())
-                conn.execute(  # PyPika: skipped — INSERT OR IGNORE not supported by PyPika
-                    """INSERT OR IGNORE INTO educlaw_course_prerequisite
+                conn.execute(  # PyPika skips INSERT OR IGNORE; insert_or_ignore keeps it dialect-portable (PG: ON CONFLICT DO NOTHING)
+                    insert_or_ignore(
+                        """INSERT OR IGNORE INTO educlaw_course_prerequisite
                        (id, course_id, prerequisite_course_id, min_grade, is_corequisite, created_at, created_by)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?)"""),
                     (prereq_id, course_id, prereq_course_id,
                      prereq.get("min_grade", "") if isinstance(prereq, dict) else "",
                      int(prereq.get("is_corequisite", 0)) if isinstance(prereq, dict) else 0,
@@ -1171,7 +1174,7 @@ def open_section(conn, args):
     conn.execute(
         Q.update(_sec2)
         .set(_sec2.status, P())
-        .set(_sec2.updated_at, LiteralValue("datetime('now')"))
+        .set(_sec2.updated_at, sql_now())
         .where(_sec2.id == P())
         .get_sql(),
         (new_status, section_id)
@@ -1214,7 +1217,7 @@ def cancel_section(conn, args):
             .set(_ce2.enrollment_status, 'dropped')
             .set(_ce2.drop_date, P())
             .set(_ce2.drop_reason, 'Section cancelled')
-            .set(_ce2.updated_at, LiteralValue("datetime('now')"))
+            .set(_ce2.updated_at, sql_now())
             .where(_ce2.id == P())
             .get_sql(),
             (now[:10], enr["id"])
@@ -1237,7 +1240,7 @@ def cancel_section(conn, args):
     conn.execute(
         Q.update(_wl)
         .set(_wl.waitlist_status, 'cancelled')
-        .set(_wl.updated_at, LiteralValue("datetime('now')"))
+        .set(_wl.updated_at, sql_now())
         .where(_wl.section_id == P()).where(_wl.waitlist_status == 'waiting')
         .get_sql(),
         (section_id,)
@@ -1248,7 +1251,7 @@ def cancel_section(conn, args):
         Q.update(_sec3)
         .set(_sec3.status, 'cancelled')
         .set(_sec3.current_enrollment, 0)
-        .set(_sec3.updated_at, LiteralValue("datetime('now')"))
+        .set(_sec3.updated_at, sql_now())
         .where(_sec3.id == P())
         .get_sql(),
         (section_id,)

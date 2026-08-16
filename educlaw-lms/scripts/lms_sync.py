@@ -18,7 +18,9 @@ import uuid
 from datetime import datetime, timezone
 
 try:
-    sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
+    import importlib.util
+    if importlib.util.find_spec("erpclaw_lib") is None:
+        sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
     from erpclaw_lib.db import get_connection, db_error_types
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit_safe
@@ -87,13 +89,20 @@ def _mask_cred(value):
     return f"{'*' * (len(clean) - 4)}{clean[-4:]}"
 
 
-def _next_lms_series(conn, entity_type, prefix, company_id, use_year=False):
+def _next_lms_series(conn, entity_type, prefix, company_id):
     """Generate next sequential naming series for LMS entities.
 
     Bypasses ENTITY_PREFIXES restriction by directly using naming_series table.
+
+    The year is ALWAYS embedded, exactly as `erpclaw_lib.naming.get_next_name`
+    does it, so the stored prefix satisfies constitutional invariant INV-10
+    (`^[A-Z0-9]+-\\d{4}-$`) and the sequence resets annually. This used to take
+    `use_year=False` and `add-lms-connection` passed it, which is how a shipped
+    writer came to emit a prefix our own check rejects (M104); the parameter is
+    gone so no future call site can reintroduce that.
     """
     year = datetime.now(timezone.utc).year
-    full_prefix = f"{prefix}{year}-" if use_year else prefix
+    full_prefix = f"{prefix}{year}-"
     entry_id = str(uuid.uuid4())
     # PyPika: skipped — ON CONFLICT / UPSERT not supported by PyPika
     conn.execute(
@@ -235,9 +244,11 @@ def add_lms_connection(conn, args):
     conn_id = str(uuid.uuid4())
     now = _now_iso()
 
-    # Generate naming series: LMS-00001 format
+    # Generate naming series: LMS-YYYY-00001 format (M104 — the year is what
+    # INV-10 requires; migration 001 converts installs that carry the old
+    # un-yeared counter row).
     naming_series = _next_lms_series(
-        conn, "educlaw_lms_connection", "LMS-", company_id, use_year=False
+        conn, "educlaw_lms_connection", "LMS-", company_id
     )
 
     try:
@@ -595,7 +606,7 @@ def sync_courses(conn, args):
     # Create sync log entry
     log_id = str(uuid.uuid4())
     log_naming = _next_lms_series(
-        conn, "educlaw_lms_sync_log", "SYN-", company_id, use_year=True
+        conn, "educlaw_lms_sync_log", "SYN-", company_id
     )
     now = _now_iso()
     conn.execute(

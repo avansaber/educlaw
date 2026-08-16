@@ -482,6 +482,33 @@ class TestCourse:
         ))
         assert is_ok(r)
 
+    def test_add_with_prerequisites_routes_insert_or_ignore(self, setup):
+        """M48/F5: the prerequisite INSERT OR IGNORE is now dialect-helper-routed;
+        SQLite behaviour is unchanged — the row lands and a duplicate is ignored."""
+        import json
+        conn, cid = setup
+        prereq_id = seed_course(conn, cid, code="PRE101")
+        r = call_action(ACADEMICS_ACTIONS["edu-add-course"], conn, ns(
+            company_id=cid, course_code="ADV201", name="Advanced",
+            credit_hours="3", course_type=None, description=None,
+            department_id=None, grade_level=None, max_enrollment=None,
+            is_active=None,
+            # Same prerequisite twice: the second insert hits UNIQUE(course_id,
+            # prerequisite_course_id) and must be silently ignored (OR IGNORE).
+            prerequisites=json.dumps([
+                {"course_id": prereq_id, "min_grade": "C"},
+                {"course_id": prereq_id, "min_grade": "C"},
+            ]),
+        ))
+        assert is_ok(r)
+        course_id = r["id"]
+        rows = conn.execute(
+            "SELECT prerequisite_course_id FROM educlaw_course_prerequisite WHERE course_id = ?",
+            (course_id,),
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["prerequisite_course_id"] == prereq_id
+
     def test_update(self, setup):
         conn, cid = setup
         crs_id = seed_course(conn, cid)
