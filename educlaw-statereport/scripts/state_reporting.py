@@ -112,7 +112,8 @@ def add_collection_window(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create collection window: {e}")
 
-    audit(conn, "sr_collection_window", window_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-collection-window", "sr_collection_window", window_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": window_id, "name": name, "window_type": window_type,
         "school_year": int(school_year), "window_status": "upcoming",
         "message": "Collection window created"})
@@ -149,7 +150,8 @@ def update_collection_window(conn, args):
     sql, params = dynamic_update("sr_collection_window", data=updates, where={"id": window_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_collection_window", window_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-collection-window", "sr_collection_window", window_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": window_id, "message": "Collection window updated"})
 
 
@@ -268,7 +270,8 @@ def advance_window_status(conn, args):
         (next_status, now, window_id)
     )
     conn.commit()
-    audit(conn, "sr_collection_window", window_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-apply-window-status", "sr_collection_window", window_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": window_id, "previous_status": current_status,
         "window_status": next_status,
         "message": f"Window advanced from '{current_status}' to '{next_status}'"})
@@ -403,7 +406,7 @@ def take_snapshot(conn, args):
     )
 
     conn.commit()
-    audit(conn, "sr_snapshot", snapshot_id, "INSERT", user_id)
+    audit(conn, SKILL, "statereport-create-snapshot", "sr_snapshot", snapshot_id, new_values={"user_id": user_id} if user_id else None)
     ok({"id": snapshot_id, "collection_window_id": window_id,
         "total_students": total_students, "total_enrollment": total_enrollment,
         "total_sped": total_sped, "total_el": total_el,

@@ -198,6 +198,8 @@ def add_fund_allocation(conn, args):
         return err("fund_type is required")
     if not fund_name:
         return err("fund_name is required")
+    if to_decimal(total_allocation) < 0:
+        return err("total_allocation cannot be negative")
     alloc_id = str(uuid.uuid4())
     available_amount = total_allocation
     try:
@@ -227,6 +229,8 @@ def update_fund_allocation(conn, args):
     total_allocation = getattr(args, 'total_allocation', None)
     if total_allocation is not None:
         new_total = str(round_currency(to_decimal(total_allocation)))
+        if to_decimal(new_total) < to_decimal(row['committed_amount']):
+            return err(f"total_allocation {new_total} is below the committed amount {row['committed_amount']}")
         committed = to_decimal(row['committed_amount'])
         new_available = str(round_currency(to_decimal(new_total) - committed))
         data["total_allocation"] = new_total
@@ -299,6 +303,11 @@ def add_cost_of_attendance(conn, args):
     transportation = str(round_currency(to_decimal(getattr(args, 'transportation', '0') or '0')))
     personal_expenses = str(round_currency(to_decimal(getattr(args, 'personal_expenses', '0') or '0')))
     loan_fees = str(round_currency(to_decimal(getattr(args, 'loan_fees', '0') or '0')))
+    for name, value in [('tuition_fees', tuition_fees), ('books_supplies', books_supplies),
+                        ('room_board', room_board), ('transportation', transportation),
+                        ('personal_expenses', personal_expenses), ('loan_fees', loan_fees)]:
+        if to_decimal(value) < 0:
+            return err(f"{name} cannot be negative")
     total_coa = _calc_total_coa(tuition_fees, books_supplies, room_board, transportation, personal_expenses, loan_fees)
     program_id = getattr(args, 'program_id', None)
     coa_id = str(uuid.uuid4())
@@ -812,7 +821,7 @@ def list_verification_documents(conn, args):
 def _update_package_totals(conn, pkg_id):
     _aw = Table("finaid_award")
     awards = conn.execute(
-        Q.from_(_aw).select(_aw.aid_type, _aw.aid_source, _aw.offered_amount).where(_aw.award_package_id == P()).get_sql(),
+        Q.from_(_aw).select(_aw.aid_type, _aw.aid_source, _aw.offered_amount, _aw.acceptance_status).where(_aw.award_package_id == P()).get_sql(),
         (pkg_id,)
     ).fetchall()
     total_grants = Decimal('0')
@@ -821,6 +830,8 @@ def _update_package_totals(conn, pkg_id):
     grant_types = {'pell', 'fseog', 'institutional_grant', 'institutional_scholarship', 'state_grant', 'external_scholarship', 'tuition_waiver', 'teach_grant'}
     loan_types = {'subsidized_loan', 'unsubsidized_loan', 'plus_loan', 'parent_plus_loan'}
     for a in awards:
+        if a['acceptance_status'] == 'declined':
+            continue
         amt = to_decimal(a['offered_amount'])
         if a['aid_type'] in grant_types:
             total_grants += amt
@@ -853,6 +864,24 @@ def create_award_package(conn, args):
                        ('academic_term_id', academic_term_id), ('company_id', company_id)]:
         if not val:
             return err(f"{name} is required")
+    for name, val in [('program_enrollment_id', program_enrollment_id),
+                       ('isir_id', isir_id),
+                       ('cost_of_attendance_id', cost_of_attendance_id)]:
+        if not val:
+            return err(f"{name} is required")
+    if not enrollment_status:
+        return err("enrollment_status is required")
+    if enrollment_status not in ('full_time', 'three_quarter', 'half_time', 'less_than_half'):
+        return err("enrollment_status must be one of full_time, three_quarter, half_time, less_than_half")
+    _pe = Table("educlaw_program_enrollment")
+    if not conn.execute(Q.from_(_pe).select(_pe.id).where(_pe.id == P()).get_sql(), (program_enrollment_id,)).fetchone():
+        return err(f"Program enrollment {program_enrollment_id} not found")
+    _isir = Table("finaid_isir")
+    if not conn.execute(Q.from_(_isir).select(_isir.id).where(_isir.id == P()).get_sql(), (isir_id,)).fetchone():
+        return err(f"ISIR {isir_id} not found")
+    _coa = Table("finaid_cost_of_attendance")
+    if not conn.execute(Q.from_(_coa).select(_coa.id).where(_coa.id == P()).get_sql(), (cost_of_attendance_id,)).fetchone():
+        return err(f"Cost of attendance {cost_of_attendance_id} not found")
     # Get COA total for financial_need computation
     financial_need = '0'
     if cost_of_attendance_id and isir_id:
@@ -873,9 +902,9 @@ def create_award_package(conn, args):
         sql, _ = insert_row("finaid_award_package", {"id": P(), "naming_series": P(), "student_id": P(), "aid_year_id": P(), "academic_term_id": P(), "program_enrollment_id": P(), "isir_id": P(), "cost_of_attendance_id": P(), "enrollment_status": P(), "financial_need": P(), "total_grants": P(), "total_loans": P(), "total_work_study": P(), "total_aid": P(), "status": P(), "packaged_by": P(), "packaged_at": P(), "notes": P(), "company_id": P()})
 
         conn.execute(sql,
-            (pkg_id, naming_series, student_id, aid_year_id, academic_term_id or '',
-             program_enrollment_id or '', isir_id or '', cost_of_attendance_id or '',
-             enrollment_status or '', financial_need, '0', '0', '0', '0', 'draft',
+            (pkg_id, naming_series, student_id, aid_year_id, academic_term_id,
+             program_enrollment_id, isir_id, cost_of_attendance_id,
+             enrollment_status, financial_need, '0', '0', '0', '0', 'draft',
              packaged_by, _now_iso(), notes, company_id)
         )
         conn.commit()
@@ -888,6 +917,9 @@ def update_award_package(conn, args):
     pkg_id = getattr(args, 'award_package_id', None) or getattr(args, 'id', None)
     if not pkg_id:
         return err("award_package_id or id is required")
+    _pkg = Table("finaid_award_package")
+    if not conn.execute(Q.from_(_pkg).select(_pkg.id).where(_pkg.id == P()).get_sql(), (pkg_id,)).fetchone():
+        return err("Award package not found")
     data = {}
     for f in ['notes', 'enrollment_status', 'acceptance_deadline', 'approved_by', 'approved_at']:
         v = getattr(args, f, None)
@@ -947,6 +979,8 @@ def add_award(conn, args):
                        ('aid_type', aid_type), ('aid_source', aid_source), ('company_id', company_id)]:
         if not val:
             return err(f"{name} is required")
+    if to_decimal(offered_amount) <= 0:
+        return err("offered_amount must be greater than zero")
     # Validate package is draft
     pkg = conn.execute(Q.from_(Table("finaid_award_package")).select(Field("status")).where(Field("id") == P()).get_sql(), (award_package_id,)).fetchone()
     if not pkg:
@@ -976,17 +1010,25 @@ def update_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
-    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("accepted_amount"), Field("is_locked")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
     _ap = Table("finaid_award_package")
     pkg = conn.execute(Q.from_(_ap).select(_ap.status).where(_ap.id == P()).get_sql(), (row['award_package_id'],)).fetchone()
     if pkg and pkg['status'] != 'draft':
         return err("Can only update awards in draft packages")
+    if row['is_locked']:
+        return err("Award is locked by a disbursement and cannot be updated")
     data = {}
     offered_amount = getattr(args, 'offered_amount', None)
     if offered_amount is not None:
-        data["offered_amount"] = str(round_currency(to_decimal(offered_amount)))
+        offered_decimal = round_currency(to_decimal(offered_amount))
+        if offered_decimal <= 0:
+            return err("offered_amount must be greater than zero")
+        accepted = to_decimal(row['accepted_amount'])
+        if offered_decimal < accepted:
+            return err(f"Offered amount {offered_decimal} is below the accepted amount {accepted}")
+        data["offered_amount"] = str(offered_decimal)
     for f in ['notes', 'gl_account_id']:
         v = getattr(args, f, None)
         if v is not None:
@@ -1042,15 +1084,21 @@ def delete_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
         return err("award_id or id is required")
-    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("is_locked"), Field("accepted_amount"), Field("fund_source_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
     _ap = Table("finaid_award_package")
     pkg = conn.execute(Q.from_(_ap).select(_ap.status).where(_ap.id == P()).get_sql(), (row['award_package_id'],)).fetchone()
     if pkg and pkg['status'] != 'draft':
         return err("Can only delete awards from draft packages")
+    if row['is_locked']:
+        return err("Award is locked by a disbursement and cannot be deleted")
+    accepted = to_decimal(row['accepted_amount'])
+    alloc = _fund_allocation_for(conn, row['fund_source_id'])
     _aw = Table("finaid_award")
     conn.execute(Q.from_(_aw).delete().where(_aw.id == P()).get_sql(), (award_id,))
+    if alloc is not None and accepted > 0:
+        _move_fund(conn, alloc, -accepted, Decimal('0'))
     _update_package_totals(conn, row['award_package_id'])
     conn.commit()
     return ok({"id": award_id, "deleted": True})
@@ -1076,6 +1124,38 @@ def offer_award_package(conn, args):
     return ok({"id": pkg_id, "status": "offered"})
 
 
+def _fund_allocation_for(conn, fund_source_id):
+    if not fund_source_id:
+        return None
+    _fa = Table("finaid_fund_allocation")
+    return conn.execute(
+        Q.from_(_fa).select(_fa.star).where(_fa.id == P()).get_sql(),
+        (fund_source_id,)).fetchone()
+
+
+def _move_fund(conn, alloc, committed_delta, disbursed_delta):
+    _fa = Table("finaid_fund_allocation")
+    if committed_delta:
+        new_committed = round_currency(to_decimal(alloc['committed_amount']) + committed_delta)
+        if new_committed < 0:
+            new_committed = Decimal('0.00')
+        new_available = round_currency(to_decimal(alloc['total_allocation']) - new_committed)
+        if new_available < 0:
+            new_available = Decimal('0.00')
+        conn.execute(
+            Q.update(_fa).set(_fa.committed_amount, P()).set(_fa.available_amount, P()).set(_fa.updated_at, P()).where(_fa.id == P()).get_sql(),
+            (str(new_committed), str(new_available), _now_iso(), alloc['id'])
+        )
+    if disbursed_delta:
+        new_disbursed = round_currency(to_decimal(alloc['disbursed_amount']) + disbursed_delta)
+        if new_disbursed < 0:
+            new_disbursed = Decimal('0.00')
+        conn.execute(
+            Q.update(_fa).set(_fa.disbursed_amount, P()).set(_fa.updated_at, P()).where(_fa.id == P()).get_sql(),
+            (str(new_disbursed), _now_iso(), alloc['id'])
+        )
+
+
 def accept_award(conn, args):
     award_id = getattr(args, 'award_id', None) or getattr(args, 'id', None)
     if not award_id:
@@ -1083,14 +1163,36 @@ def accept_award(conn, args):
     row = conn.execute(Q.from_(Table("finaid_award")).select(Table("finaid_award").star).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not row:
         return err("Award not found")
+    _ap = Table("finaid_award_package")
+    pkg = conn.execute(Q.from_(_ap).select(_ap.status).where(_ap.id == P()).get_sql(), (row['award_package_id'],)).fetchone()
+    if pkg and pkg['status'] == 'cancelled':
+        return err("Cannot accept an award in a cancelled package")
     accepted_amount = getattr(args, 'accepted_amount', None)
     if accepted_amount is None:
         accepted_amount = row['offered_amount']
+    accepted_decimal = round_currency(to_decimal(accepted_amount))
+    if accepted_decimal <= 0:
+        return err("accepted_amount must be greater than zero")
+    offered = to_decimal(row['offered_amount'])
+    if accepted_decimal > offered:
+        return err(f"Accepted amount {accepted_decimal} exceeds the offered amount {offered}")
+    disbursed = to_decimal(row['disbursed_amount'])
+    if accepted_decimal < disbursed:
+        return err(f"Accepted amount {accepted_decimal} is below the disbursed amount {disbursed}")
+    alloc = _fund_allocation_for(conn, row['fund_source_id'])
+    if alloc is not None:
+        if alloc['company_id'] != row['company_id']:
+            return err(f"Fund allocation {alloc['id']} belongs to another company")
+        needed = accepted_decimal - to_decimal(row['accepted_amount'])
+        if needed > to_decimal(alloc['available_amount']):
+            return err(f"Fund allocation {alloc['fund_name']} has {alloc['available_amount']} available; accepting {accepted_decimal} needs {needed}")
     acceptance_date = getattr(args, 'acceptance_date', _today()) or _today()
     _aw = Table("finaid_award")
     sql = (Q.update(_aw).set(_aw.acceptance_status, "accepted").set(_aw.accepted_amount, P())
            .set(_aw.acceptance_date, P()).set(_aw.updated_at, P()).where(_aw.id == P()).get_sql())
-    conn.execute(sql, (str(round_currency(to_decimal(accepted_amount))), acceptance_date, _now_iso(), award_id))
+    conn.execute(sql, (str(accepted_decimal), acceptance_date, _now_iso(), award_id))
+    if alloc is not None and needed:
+        _move_fund(conn, alloc, needed, Decimal('0'))
     conn.commit()
     return ok({"id": award_id, "acceptance_status": "accepted"})
 
@@ -1100,10 +1202,21 @@ def decline_award(conn, args):
     if not award_id:
         return err("award_id or id is required")
     _aw = Table("finaid_award")
+    row = conn.execute(Q.from_(_aw).select(_aw.disbursed_amount, _aw.accepted_amount, _aw.fund_source_id, _aw.award_package_id).where(_aw.id == P()).get_sql(), (award_id,)).fetchone()
+    if not row:
+        return err("Award not found")
+    disbursed = to_decimal(row['disbursed_amount'])
+    if disbursed > 0:
+        return err(f"Cannot decline an award with disbursed amount {disbursed}; cancel its disbursements first")
+    accepted = to_decimal(row['accepted_amount'])
+    alloc = _fund_allocation_for(conn, row['fund_source_id'])
     conn.execute(
         Q.update(_aw).set(_aw.acceptance_status, "declined").set(_aw.accepted_amount, "0").set(_aw.updated_at, P()).where(_aw.id == P()).get_sql(),
         (_now_iso(), award_id)
     )
+    if alloc is not None and accepted > 0:
+        _move_fund(conn, alloc, -accepted, Decimal('0'))
+    _update_package_totals(conn, row['award_package_id'])
     conn.commit()
     return ok({"id": award_id, "acceptance_status": "declined"})
 
@@ -1113,9 +1226,25 @@ def cancel_award_package(conn, args):
     if not pkg_id:
         return err("award_package_id or id is required")
     _pkg = Table("finaid_award_package")
-    conn.execute(Q.update(_pkg).set(_pkg.status, "cancelled").set(_pkg.updated_at, P()).where(_pkg.id == P()).get_sql(), (_now_iso(), pkg_id))
+    if not conn.execute(Q.from_(_pkg).select(_pkg.id).where(_pkg.id == P()).get_sql(), (pkg_id,)).fetchone():
+        return err("Award package not found")
     _aw = Table("finaid_award")
+    awards = conn.execute(Q.from_(_aw).select(_aw.accepted_amount, _aw.disbursed_amount, _aw.fund_source_id).where(_aw.award_package_id == P()).get_sql(), (pkg_id,)).fetchall()
+    if any(to_decimal(a['disbursed_amount']) > 0 for a in awards):
+        return err("Cannot cancel a package with disbursed awards; cancel their disbursements first")
+    releases = []
+    for a in awards:
+        accepted = to_decimal(a['accepted_amount'])
+        if accepted > 0:
+            alloc = _fund_allocation_for(conn, a['fund_source_id'])
+            if alloc is not None:
+                releases.append((alloc, accepted))
+    conn.execute(Q.update(_pkg).set(_pkg.status, "cancelled").set(_pkg.updated_at, P()).where(_pkg.id == P()).get_sql(), (_now_iso(), pkg_id))
     conn.execute(Q.update(_aw).set(_aw.acceptance_status, "declined").set(_aw.accepted_amount, "0").set(_aw.updated_at, P()).where(_aw.award_package_id == P()).get_sql(), (_now_iso(), pkg_id))
+    for alloc, accepted in releases:
+        fresh = _fund_allocation_for(conn, alloc['id'])
+        _move_fund(conn, fresh, -accepted, Decimal('0'))
+    _update_package_totals(conn, pkg_id)
     conn.commit()
     return ok({"id": pkg_id, "status": "cancelled"})
 
@@ -1142,11 +1271,18 @@ def disburse_award(conn, args):
     holds = json.loads(award_row['disbursement_holds'] or '[]')
     if holds:
         return err(f"Disbursement blocked by holds: {', '.join(holds)}")
+    amount_decimal = round_currency(to_decimal(amount))
+    if amount_decimal <= 0:
+        return err("amount must be greater than zero")
+    accepted = to_decimal(award_row['accepted_amount'])
+    already_disbursed = to_decimal(award_row['disbursed_amount'])
+    if already_disbursed + amount_decimal > accepted:
+        return err(f"Disbursement of {amount_decimal} would exceed the accepted amount {accepted} "
+                   f"(already disbursed {already_disbursed})")
     pkg_id = award_row['award_package_id']
     disb_id = str(uuid.uuid4())
     disbursed_by = getattr(args, 'disbursed_by', '') or ''
     disbursement_number = int(getattr(args, 'disbursement_number', 1) or 1)
-    amount_decimal = round_currency(to_decimal(amount))
     sql, _ = insert_row("finaid_disbursement", {"id": P(), "award_id": P(), "award_package_id": P(), "student_id": P(), "disbursement_type": P(), "disbursement_number": P(), "amount": P(), "disbursement_date": P(), "disbursed_by": P(), "company_id": P(), "created_by": P()})
 
     conn.execute(sql,
@@ -1159,6 +1295,9 @@ def disburse_award(conn, args):
         Q.update(_aw).set(_aw.disbursed_amount, P()).set(_aw.is_locked, 1).set(_aw.updated_at, P()).where(_aw.id == P()).get_sql(),
         (new_disbursed, _now_iso(), award_id)
     )
+    alloc = _fund_allocation_for(conn, award_row['fund_source_id'])
+    if alloc is not None:
+        _move_fund(conn, alloc, Decimal('0'), amount_decimal)
     conn.commit()
     return ok({"id": disb_id, "amount": str(amount_decimal), "disbursement_date": disbursement_date})
 
@@ -1170,11 +1309,16 @@ def reverse_disbursement(conn, args):
     company_id = getattr(args, 'company_id', None)
     if not award_id or not amount or not company_id:
         return err("award_id, amount, and company_id are required")
-    award_row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("student_id"), Field("disbursed_amount")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
+    award_row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("student_id"), Field("disbursed_amount"), Field("fund_source_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not award_row:
         return err("Award not found")
-    disb_id = str(uuid.uuid4())
     amount_decimal = round_currency(to_decimal(amount))
+    if amount_decimal <= 0:
+        return err("amount must be greater than zero")
+    disbursed = to_decimal(award_row['disbursed_amount'])
+    if amount_decimal > disbursed:
+        return err(f"Reversal of {amount_decimal} exceeds the disbursed amount {disbursed}")
+    disb_id = str(uuid.uuid4())
     sql, _ = insert_row("finaid_disbursement", {"id": P(), "award_id": P(), "award_package_id": P(), "student_id": P(), "disbursement_type": P(), "disbursement_number": P(), "amount": P(), "disbursement_date": P(), "company_id": P(), "created_by": P()})
 
     conn.execute(sql,
@@ -1184,6 +1328,9 @@ def reverse_disbursement(conn, args):
     new_disbursed = str(round_currency(to_decimal(award_row['disbursed_amount']) - amount_decimal))
     _aw = Table("finaid_award")
     conn.execute(Q.update(_aw).set(_aw.disbursed_amount, P()).set(_aw.updated_at, P()).where(_aw.id == P()).get_sql(), (new_disbursed, _now_iso(), award_id))
+    alloc = _fund_allocation_for(conn, award_row['fund_source_id'])
+    if alloc is not None:
+        _move_fund(conn, alloc, Decimal('0'), -amount_decimal)
     conn.commit()
     return ok({"id": disb_id, "type": "reversal", "amount": str(amount_decimal)})
 
@@ -1199,12 +1346,19 @@ def record_r2t4_return_disbursement(conn, args):
     award_row = conn.execute(Q.from_(Table("finaid_award")).select(Field("award_package_id"), Field("student_id")).where(Field("id") == P()).get_sql(), (award_id,)).fetchone()
     if not award_row:
         return err("Award not found")
+    amount_decimal = round_currency(to_decimal(amount))
+    if amount_decimal <= 0:
+        return err("amount must be greater than zero")
+    if r2t4_id:
+        _r2 = Table("finaid_r2t4_calculation")
+        if not conn.execute(Q.from_(_r2).select(_r2.id).where(_r2.id == P()).get_sql(), (r2t4_id,)).fetchone():
+            return err("R2T4 calculation not found")
     disb_id = str(uuid.uuid4())
     sql, _ = insert_row("finaid_disbursement", {"id": P(), "award_id": P(), "award_package_id": P(), "student_id": P(), "disbursement_type": P(), "disbursement_number": P(), "amount": P(), "disbursement_date": P(), "company_id": P(), "created_by": P()})
 
     conn.execute(sql,
         (disb_id, award_id, award_row['award_package_id'], award_row['student_id'],
-         'return', 1, str(round_currency(to_decimal(amount))), disbursement_date, company_id, '')
+         'return', 1, str(amount_decimal), disbursement_date, company_id, '')
     )
     if r2t4_id:
         _r2 = Table("finaid_r2t4_calculation")
@@ -1277,11 +1431,13 @@ def mark_credit_balance_returned(conn, args):
     return_date = getattr(args, 'return_date', _today()) or _today()
     if not disb_id:
         return err("id is required")
-    row = conn.execute(Q.from_(Table("finaid_disbursement")).select(Field("credit_balance_date"), Field("is_credit_balance")).where(Field("id") == P()).get_sql(), (disb_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("finaid_disbursement")).select(Field("credit_balance_date"), Field("is_credit_balance"), Field("credit_balance_returned_date")).where(Field("id") == P()).get_sql(), (disb_id,)).fetchone()
     if not row:
         return err("Disbursement not found")
     if not row['is_credit_balance']:
         return err("This disbursement is not a credit balance")
+    if row['credit_balance_returned_date']:
+        return err(f"Credit balance already returned on {row['credit_balance_returned_date']}")
     # Validate 14-day rule (lenient check)
     _d = Table("finaid_disbursement")
     conn.execute(Q.update(_d).set(_d.credit_balance_returned_date, P()).where(_d.id == P()).get_sql(), (return_date, disb_id))

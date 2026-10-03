@@ -20,7 +20,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue, now as sql_now
 except ImportError:
     pass
 
@@ -173,7 +173,7 @@ def update_attendance(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(attendance_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_student_attendance SET {', '.join(updates)} WHERE id = ?", params)

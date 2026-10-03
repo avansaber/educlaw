@@ -20,7 +20,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue, update_row, now as sql_now
 except ImportError:
     pass
 
@@ -388,7 +388,7 @@ def portal_update_contact_info(conn, args):
     if not changed:
         err("No fields to update. Provide at least one of: --phone, --email, --address")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(guardian_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_guardian SET {', '.join(updates)} WHERE id = ?", params)
@@ -474,9 +474,11 @@ def portal_submit_absence_excuse(conn, args):
         att = dict(att_row)
         # Update the attendance record to excused with the reason
         conn.execute(
-            "UPDATE educlaw_student_attendance SET attendance_status = 'excused', "
-            "comments = ?, updated_at = datetime('now') WHERE id = ?",
-            (f"Guardian excuse: {reason}", att["id"])
+            update_row("educlaw_student_attendance",
+                       data={"attendance_status": P(), "comments": P(),
+                             "updated_at": sql_now()},
+                       where={"id": P()}),
+            ("excused", f"Guardian excuse: {reason}", att["id"])
         )
     else:
         # Create a new excused attendance record

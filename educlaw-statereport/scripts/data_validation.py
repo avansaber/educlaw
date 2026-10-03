@@ -90,7 +90,8 @@ def add_validation_rule(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create validation rule: {e}")
 
-    audit(conn, "sr_validation_rule", rule_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-validation-rule", "sr_validation_rule", rule_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": rule_id, "rule_code": rule_code, "message": "Validation rule created"})
 
 
@@ -125,7 +126,8 @@ def update_validation_rule(conn, args):
     sql, params = dynamic_update("sr_validation_rule", data=updates, where={"id": row["id"]})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_validation_rule", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-validation-rule", "sr_validation_rule", row["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": row["id"], "message": "Validation rule updated"})
 
 
@@ -769,7 +771,8 @@ def assign_submission_error(conn, args):
         (assigned_to, now, now, error_id)
     )
     conn.commit()
-    audit(conn, "sr_submission_error", error_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-assign-submission-error", "sr_submission_error", error_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": error_id, "assigned_to": assigned_to, "assigned_at": now,
         "message": "Error assigned"})
 
@@ -826,7 +829,7 @@ def update_error_resolution(conn, args):
         )
         conn.commit()
 
-    audit(conn, "sr_submission_error", error_id, "UPDATE", user_id)
+    audit(conn, SKILL, "statereport-update-error-resolution", "sr_submission_error", error_id, new_values={"user_id": user_id} if user_id else None)
     ok({"id": error_id, "resolution_status": resolution_status,
         "message": f"Error {resolution_status}"})
 
@@ -964,7 +967,8 @@ def escalate_error(conn, args):
         (state_ticket_id, now, error_id)
     )
     conn.commit()
-    audit(conn, "sr_submission_error", error_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-submit-error-escalation", "sr_submission_error", error_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": error_id, "state_ticket_id": state_ticket_id,
         "message": "Error escalated to state help desk"})
 

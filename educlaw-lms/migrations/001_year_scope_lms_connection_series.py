@@ -86,8 +86,6 @@ connection, `erpclaw_lib.seam.table_exists` for the catalog question. Every
 statement is a FIXED string — no table name, column name or value is ever
 formatted into SQL.
 
-SIM: planning/simlogs/m104_SIM_2026-08-13.md
-Plan home: planning/pending_items.md row M104.
 
 Usage:
     python3 001_year_scope_lms_connection_series.py [--db-path PATH] [--report-only]

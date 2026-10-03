@@ -25,7 +25,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case, now as sql_now
 except ImportError:
     pass
 
@@ -92,7 +92,8 @@ def _update_open_conflicts(conn, master_id):
         (master_id,)
     ).fetchone()[0]
     conn.execute(
-        "UPDATE educlaw_master_schedule SET open_conflicts = ?, updated_at = datetime('now') "
+        "UPDATE educlaw_master_schedule SET open_conflicts = ?, "
+        f"updated_at = {sql_now()} "
         "WHERE id = ?",
         (count, master_id)
     )
@@ -487,8 +488,8 @@ def run_conflict_check(conn, args):
 
     # Supersede existing open conflicts
     conn.execute(
-        """UPDATE educlaw_schedule_conflict
-           SET conflict_status = 'superseded', updated_at = datetime('now')
+        f"""UPDATE educlaw_schedule_conflict
+           SET conflict_status = 'superseded', updated_at = {sql_now()}
            WHERE master_schedule_id = ? AND conflict_status = 'open'""",
         (master_id,)
     )
@@ -631,9 +632,9 @@ def resolve_conflict(conn, args):
 
     now = _now_iso()
     conn.execute(
-        """UPDATE educlaw_schedule_conflict
+        f"""UPDATE educlaw_schedule_conflict
            SET conflict_status = 'resolved', resolution_notes = ?,
-               resolved_by = ?, resolved_at = ?, updated_at = datetime('now')
+               resolved_by = ?, resolved_at = ?, updated_at = {sql_now()}
            WHERE id = ?""",
         (resolution_notes, resolved_by, now, conflict_id)
     )
@@ -669,9 +670,9 @@ def accept_conflict(conn, args):
 
     now = _now_iso()
     conn.execute(
-        """UPDATE educlaw_schedule_conflict
+        f"""UPDATE educlaw_schedule_conflict
            SET conflict_status = 'accepted', resolution_notes = ?,
-               resolved_by = ?, resolved_at = ?, updated_at = datetime('now')
+               resolved_by = ?, resolved_at = ?, updated_at = {sql_now()}
            WHERE id = ?""",
         (resolution_notes or "Accepted as known exception", resolved_by, now, conflict_id)
     )

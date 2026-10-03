@@ -26,7 +26,7 @@ try:
     from erpclaw_lib.db import get_connection
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, Case, now as sql_now
 except ImportError:
     pass
 
@@ -101,9 +101,9 @@ def _refresh_master_stats(conn, master_id):
     rate = f"{round((placed / total * 100), 1)}%" if total > 0 else "0.0%"
 
     conn.execute(
-        """UPDATE educlaw_master_schedule
+        f"""UPDATE educlaw_master_schedule
            SET sections_placed = ?, sections_with_room = ?, open_conflicts = ?,
-               fulfillment_rate = ?, updated_at = datetime('now')
+               fulfillment_rate = ?, updated_at = {sql_now()}
            WHERE id = ?""",
         (placed, with_room, open_conf, rate, master_id)
     )
@@ -226,7 +226,7 @@ def update_master_schedule(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(master_id)
     conn.execute(
         f"UPDATE educlaw_master_schedule SET {', '.join(updates)} WHERE id = ?", params
@@ -332,8 +332,8 @@ def add_section_to_schedule(conn, args):
     # Check if total_sections already counts this section (via any previous add)
     # We increment unconditionally — caller should only call once per section
     conn.execute(
-        """UPDATE educlaw_master_schedule
-           SET total_sections = total_sections + 1, updated_at = datetime('now')
+        f"""UPDATE educlaw_master_schedule
+           SET total_sections = total_sections + 1, updated_at = {sql_now()}
            WHERE id = ?""",
         (master_id,)
     )
@@ -811,23 +811,24 @@ def publish_master_schedule(conn, args):
     ).fetchall()
     for row in section_ids:
         conn.execute(
-            "UPDATE educlaw_section SET status = 'scheduled', updated_at = datetime('now') "
+            "UPDATE educlaw_section SET status = 'scheduled', "
+            f"updated_at = {sql_now()} "
             "WHERE id = ? AND status = 'draft'",
             (row["section_id"],)
         )
 
     # Update academic term to enrollment_open
     conn.execute(
-        """UPDATE educlaw_academic_term
-           SET status = 'enrollment_open', updated_at = datetime('now')
+        f"""UPDATE educlaw_academic_term
+           SET status = 'enrollment_open', updated_at = {sql_now()}
            WHERE id = ? AND status IN ('setup', 'enrollment_open')""",
         (master["academic_term_id"],)
     )
 
     conn.execute(
-        """UPDATE educlaw_master_schedule
+        f"""UPDATE educlaw_master_schedule
            SET schedule_status = 'published', published_at = ?, published_by = ?,
-               updated_at = datetime('now')
+               updated_at = {sql_now()}
            WHERE id = ?""",
         (now, published_by, master_id)
     )
@@ -856,9 +857,9 @@ def lock_master_schedule(conn, args):
 
     now = _now_iso()
     conn.execute(
-        """UPDATE educlaw_master_schedule
+        f"""UPDATE educlaw_master_schedule
            SET schedule_status = 'locked', locked_at = ?, locked_by = ?,
-               updated_at = datetime('now')
+               updated_at = {sql_now()}
            WHERE id = ?""",
         (now, locked_by, master_id)
     )
@@ -1104,7 +1105,7 @@ def update_course_request(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(request_id)
     conn.execute(
         f"UPDATE educlaw_course_request SET {', '.join(updates)} WHERE id = ?", params
@@ -1184,7 +1185,7 @@ def approve_course_requests(conn, args):
 
     query = ("UPDATE educlaw_course_request "
              "SET request_status = 'approved', approved_by = ?, "
-             "approved_at = datetime('now'), updated_at = datetime('now') "
+             f"approved_at = {sql_now()}, updated_at = {sql_now()} "
              "WHERE academic_term_id = ? AND request_status = 'submitted'")
     params = [approved_by, academic_term_id]
 

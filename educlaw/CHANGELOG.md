@@ -7,7 +7,7 @@ All notable changes to the educlaw core module.
 ### Removed
 - **`edu-add-meal-plan` action and the `educlaw_meal_plan` table.** The table had a single writer and no reader: the USDA claim report always used the built-in federal reimbursement constants and never consulted a school-entered plan rate, and the schema shape (three plan types, one daily rate) could not feed the report's per-meal-type math anyway. A school-entered rate had zero effect on anything. Migration `002_drop_meal_plan.py` removes the table from existing databases (data-preserving for every other table, idempotent). Ratified drop per the M33b necessity dossier §5.
 
-## [1.1.0] — 2026-07-05 — M33 Item 4 (B11 — educlaw program-requirement CRUD)
+## [1.1.0] — 2026-07-05 — educlaw program-requirement CRUD
 
 ### Added
 - **`edu-add-program-requirement`** — attach a course to a program's degree

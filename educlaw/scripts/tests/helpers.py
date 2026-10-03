@@ -175,10 +175,35 @@ def bootstrap_foundation(db_path: str):
             id TEXT PRIMARY KEY,
             naming_series TEXT NOT NULL DEFAULT '',
             customer_id TEXT,
+            posting_date TEXT,
             total_amount TEXT NOT NULL DEFAULT '0',
+            grand_total TEXT NOT NULL DEFAULT '0',
+            outstanding_amount TEXT NOT NULL DEFAULT '0',
             status TEXT NOT NULL DEFAULT 'draft',
             company_id TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS payment_entry (
+            id TEXT PRIMARY KEY,
+            naming_series TEXT NOT NULL DEFAULT '',
+            payment_type TEXT NOT NULL DEFAULT 'receive',
+            posting_date TEXT,
+            party_type TEXT,
+            party_id TEXT,
+            paid_amount TEXT NOT NULL DEFAULT '0',
+            unallocated_amount TEXT NOT NULL DEFAULT '0',
+            status TEXT NOT NULL DEFAULT 'draft',
+            company_id TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS payment_allocation (
+            id TEXT PRIMARY KEY,
+            payment_entry_id TEXT,
+            voucher_type TEXT NOT NULL DEFAULT '',
+            voucher_id TEXT NOT NULL DEFAULT '',
+            allocated_amount TEXT NOT NULL DEFAULT '0',
+            delinked INTEGER NOT NULL DEFAULT 0
         );
     """)
     conn.commit()

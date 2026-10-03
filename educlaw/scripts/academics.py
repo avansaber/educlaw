@@ -157,7 +157,7 @@ def update_academic_year(conn, args):
     if start >= end:
         err("start_date must be before end_date")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(year_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_academic_year SET {', '.join(updates)} WHERE id = ?", params)
@@ -318,7 +318,7 @@ def update_academic_term(conn, args):
     if start >= end:
         err("start_date must be before end_date")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(term_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_academic_term SET {', '.join(updates)} WHERE id = ?", params)
@@ -453,7 +453,7 @@ def update_room(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(room_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_room SET {', '.join(updates)} WHERE id = ?", params)
@@ -576,7 +576,7 @@ def update_program(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(program_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_program SET {', '.join(updates)} WHERE id = ?", params)
@@ -827,7 +827,7 @@ def update_course(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(course_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_course SET {', '.join(updates)} WHERE id = ?", params)
@@ -1073,7 +1073,7 @@ def update_section(conn, args):
     if conflict:
         err(conflict)
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(section_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_section SET {', '.join(updates)} WHERE id = ?", params)

@@ -4,7 +4,6 @@ Each test function gets its own fresh SQLite database via the `db_path`
 fixture (function scope), ensuring complete isolation.
 """
 import os
-import sqlite3
 import sys
 
 # Ensure the tests/ directory is on sys.path so helpers.py is importable
@@ -31,10 +30,7 @@ def db_path(tmp_path):
 
     # Step 2: Create educlaw base tables (6 merged tables now live here)
     from educlaw_base_schema import ensure_educlaw_base_tables
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    ensure_educlaw_base_tables(conn)
-    conn.close()
+    ensure_educlaw_base_tables(path)
 
     # Step 3: Run educlaw-highered init_db (creates 12 highered-only tables)
     run_init_db(path)

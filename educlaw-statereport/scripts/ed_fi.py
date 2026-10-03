@@ -134,7 +134,8 @@ def add_edfi_config(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create Ed-Fi config: {e}")
 
-    audit(conn, "sr_edfi_config", config_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-edfi-config", "sr_edfi_config", config_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": config_id, "profile_name": profile_name, "state_code": state_code,
         "school_year": int(school_year), "message": "Ed-Fi config created"})
 
@@ -167,7 +168,8 @@ def update_edfi_config(conn, args):
     sql, params = dynamic_update("sr_edfi_config", data=updates, where={"id": config_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_edfi_config", config_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-edfi-config", "sr_edfi_config", config_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": config_id, "message": "Ed-Fi config updated"})
 
 
@@ -240,7 +242,8 @@ def test_edfi_connection(conn, args):
         (now, now, config_id)
     )
     conn.commit()
-    audit(conn, "sr_edfi_config", config_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-get-edfi-connection-test", "sr_edfi_config", config_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": config_id, "last_tested_at": now,
         "message": "Connection test recorded. External OAuth/ODS call must be made by client."})
 
@@ -288,7 +291,8 @@ def add_org_mapping(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create org mapping: {e}")
 
-    audit(conn, "sr_org_mapping", mapping_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-org-mapping", "sr_org_mapping", mapping_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": mapping_id, "nces_lea_id": nces_lea_id, "state_code": state_code,
         "message": "Org mapping created"})
 
@@ -319,7 +323,8 @@ def update_org_mapping(conn, args):
     sql, params = dynamic_update("sr_org_mapping", data=updates, where={"id": mapping_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_org_mapping", mapping_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-org-mapping", "sr_org_mapping", mapping_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": mapping_id, "message": "Org mapping updated"})
 
 
@@ -407,7 +412,8 @@ def add_descriptor_mapping(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create descriptor mapping: {e}")
 
-    audit(conn, "sr_edfi_descriptor_map", desc_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-descriptor-mapping", "sr_edfi_descriptor_map", desc_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": desc_id, "descriptor_type": descriptor_type, "internal_code": internal_code,
         "message": "Descriptor mapping created"})
 
@@ -433,7 +439,8 @@ def update_descriptor_mapping(conn, args):
     sql, params = dynamic_update("sr_edfi_descriptor_map", data=updates, where={"id": desc_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_edfi_descriptor_map", desc_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-descriptor-mapping", "sr_edfi_descriptor_map", desc_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": desc_id, "message": "Descriptor mapping updated"})
 
 
@@ -546,7 +553,8 @@ def delete_descriptor_mapping(conn, args):
 
     conn.execute("DELETE FROM sr_edfi_descriptor_map WHERE id = ?", (desc_id,))
     conn.commit()
-    audit(conn, "sr_edfi_descriptor_map", desc_id, "DELETE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-delete-descriptor-mapping", "sr_edfi_descriptor_map", desc_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": desc_id, "message": "Descriptor mapping deleted"})
 
 

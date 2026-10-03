@@ -97,7 +97,8 @@ def add_submission(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create submission: {e}")
 
-    audit(conn, "sr_submission", submission_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-submission", "sr_submission", submission_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": submission_id, "naming_series": naming_series,
         "submission_type": submission_type, "submission_status": "pending",
         "message": "Submission record created"})
@@ -129,7 +130,8 @@ def update_submission_status(conn, args):
     sql, params = dynamic_update("sr_submission", data=updates, where={"id": submission_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_submission", submission_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-submission-status", "sr_submission", submission_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": submission_id, "submission_status": submission_status,
         "message": "Submission status updated"})
 
@@ -256,7 +258,7 @@ def certify_submission(conn, args):
         conn.execute("ROLLBACK")
         err(f"Certification failed: {e}")
 
-    audit(conn, "sr_submission", submission_id, "UPDATE", certified_by)
+    audit(conn, SKILL, "statereport-approve-submission", "sr_submission", submission_id, new_values={"user_id": certified_by} if certified_by else None)
     ok({"id": submission_id, "submission_status": "certified",
         "certified_by": certified_by, "certified_at": now,
         "message": "Submission certified successfully"})
@@ -318,7 +320,8 @@ def create_amendment(conn, args):
         conn.execute("ROLLBACK")
         err(f"Cannot create amendment: {e}")
 
-    audit(conn, "sr_submission", amendment_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-create-amendment", "sr_submission", amendment_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": amendment_id, "naming_series": naming_series,
         "submission_type": "amendment",
         "linked_submission_id": original_submission_id,

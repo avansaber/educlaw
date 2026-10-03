@@ -22,7 +22,7 @@ try:
     from erpclaw_lib.naming import get_next_name
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Field, Order, P, Q, Table, fn, insert_row, now as sql_now
+    from erpclaw_lib.query import Field, Order, P, Q, Table, fn, insert_row, now as sql_now, update_row
 except ImportError:
     pass
 
@@ -207,7 +207,7 @@ def update_student_applicant(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(applicant_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_student_applicant SET {', '.join(updates)} WHERE id = ?", params
@@ -520,7 +520,7 @@ def update_student(conn, args):
         full_name = f"{new_first} {new_mid} {new_last}".replace("  ", " ").strip()
         updates.append("full_name = ?"); params.append(full_name)
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(student_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_student SET {', '.join(updates)} WHERE id = ?", params)
@@ -795,7 +795,7 @@ def update_guardian(conn, args):
         updates.append("full_name = ?")
         params.append(f"{new_first} {new_last}".strip())
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(guardian_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_guardian SET {', '.join(updates)} WHERE id = ?", params)
@@ -1052,7 +1052,9 @@ def portal_upload_document(conn, args):
     existing_docs.append(doc_entry)
 
     conn.execute(
-        "UPDATE educlaw_student_applicant SET documents = ?, updated_at = datetime('now') WHERE id = ?",
+        update_row("educlaw_student_applicant",
+                   data={"documents": P(), "updated_at": sql_now()},
+                   where={"id": P()}),
         (json.dumps(existing_docs), applicant_id)
     )
     conn.commit()

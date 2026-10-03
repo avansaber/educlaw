@@ -11,6 +11,7 @@ import sqlite3
 import sys
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 try:
     import importlib.util
@@ -111,6 +112,7 @@ def enroll_in_program(conn, args):
 
 
 def withdraw_from_program(conn, args):
+    """Withdraw from program (reports fee bills still open; the bill is not changed)."""
     enrollment_id = getattr(args, "enrollment_id", None)
     if not enrollment_id:
         err("--enrollment-id is required")
@@ -122,6 +124,46 @@ def withdraw_from_program(conn, args):
     r = dict(row)
     if r["enrollment_status"] != "active":
         err(f"Only active enrollments can be withdrawn (current: {r['enrollment_status']})")
+
+    # Read-only look at the student's open fee bills for this company, before
+    # any write. Withdrawal never changes the bill; it only names what is
+    # still owed so the school can decide under its refund policy.
+    _fi = Table("educlaw_fee_invoice")
+    _si = Table("sales_invoice")
+    fee_rows = conn.execute(
+        Q.from_(_fi).join(_si).on(_si.id == _fi.sales_invoice_id)
+        .select(_si.id, _si.posting_date, _si.grand_total, _si.outstanding_amount,
+                _fi.invoice_kind)
+        .where(_fi.student_id == P()).where(_fi.company_id == P())
+        .where(_si.status.isin([P(), P(), P()]))
+        .orderby(_si.posting_date).orderby(_si.id)
+        .get_sql(),
+        (r["student_id"], r["company_id"], "submitted", "partially_paid", "overdue")
+    ).fetchall()
+
+    open_fee_invoices = []
+    open_fee_balance = Decimal("0.00")
+    for fee_row in fee_rows:
+        f = dict(fee_row)
+        try:
+            outstanding = Decimal(str(f.get("outstanding_amount", "0") or "0"))
+        except (InvalidOperation, ValueError):
+            err("Cannot withdraw: fee invoice %s has an unreadable amount; correct it in selling before withdrawing" % f.get("id"))
+        if outstanding <= 0:
+            continue
+        try:
+            grand_total = Decimal(str(f.get("grand_total", "0") or "0"))
+        except (InvalidOperation, ValueError):
+            err("Cannot withdraw: fee invoice %s has an unreadable amount; correct it in selling before withdrawing" % f.get("id"))
+        open_fee_balance += outstanding
+        open_fee_invoices.append({
+            "sales_invoice_id": f["id"],
+            "invoice_kind": f["invoice_kind"],
+            "grand_total": str(grand_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+            "outstanding_amount": str(outstanding.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+        })
+    open_fee_balance = str(open_fee_balance.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    billing_review_required = open_fee_balance != "0.00"
 
     now = _now_iso()
     _pe = Table("educlaw_program_enrollment")
@@ -146,9 +188,21 @@ def withdraw_from_program(conn, args):
     )
 
     audit(conn, SKILL, "edu-withdraw-from-program", "educlaw_program_enrollment", enrollment_id,
-          new_values={"enrollment_status": "withdrawn"})
+          new_values={"enrollment_status": "withdrawn",
+                      "open_fee_invoices": [e["sales_invoice_id"] for e in open_fee_invoices],
+                      "open_fee_balance": open_fee_balance})
     conn.commit()
-    ok({"id": enrollment_id, "enrollment_status": "withdrawn"})
+    response = {"id": enrollment_id, "enrollment_status": "withdrawn",
+                "open_fee_invoices": open_fee_invoices,
+                "open_fee_balance": open_fee_balance,
+                "billing_review_required": billing_review_required}
+    if billing_review_required:
+        response["suggestion"] = (
+            "This student still owes %s on %d fee invoice(s). "
+            "Withdrawal does not change the bill. Decide under the school's "
+            "refund policy whether to keep, credit or refund it."
+            % (open_fee_balance, len(open_fee_invoices)))
+    ok(response)
 
 
 def list_program_enrollments(conn, args):

@@ -99,7 +99,8 @@ def add_discipline_incident(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create discipline incident: {e}")
 
-    audit(conn, "educlaw_k12_discipline_incident", incident_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-discipline-incident", "educlaw_k12_discipline_incident", incident_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": incident_id, "naming_series": naming_series, "message": "Discipline incident created"})
 
 
@@ -131,7 +132,8 @@ def update_discipline_incident(conn, args):
     sql, params = dynamic_update("educlaw_k12_discipline_incident", data=updates, where={"id": incident_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "educlaw_k12_discipline_incident", incident_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-discipline-incident", "educlaw_k12_discipline_incident", incident_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": incident_id, "message": "Discipline incident updated"})
 
 
@@ -222,7 +224,8 @@ def delete_discipline_incident(conn, args):
 
     conn.execute("DELETE FROM educlaw_k12_discipline_incident WHERE id = ?", (incident_id,))
     conn.commit()
-    audit(conn, "educlaw_k12_discipline_incident", incident_id, "DELETE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-delete-discipline-incident", "educlaw_k12_discipline_incident", incident_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": incident_id, "message": "Discipline incident deleted"})
 
 
@@ -289,7 +292,8 @@ def add_discipline_student(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot add student to incident: {e}")
 
-    audit(conn, "educlaw_k12_discipline_student", ds_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-discipline-student", "educlaw_k12_discipline_student", ds_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": ds_id, "incident_id": incident_id, "student_id": student_id,
         "is_idea_student": is_idea, "is_504_student": is_504,
         "message": "Student added to discipline incident"})
@@ -322,7 +326,8 @@ def update_discipline_student(conn, args):
     sql, params = dynamic_update("educlaw_k12_discipline_student", data=updates, where={"id": discipline_student_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "educlaw_k12_discipline_student", discipline_student_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-discipline-student", "educlaw_k12_discipline_student", discipline_student_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": discipline_student_id, "message": "Discipline student record updated"})
 
 
@@ -355,7 +360,8 @@ def remove_discipline_student(conn, args):
         (incident_id, now, incident_id)
     )
     conn.commit()
-    audit(conn, "educlaw_k12_discipline_student", discipline_student_id, "DELETE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-delete-discipline-student", "educlaw_k12_discipline_student", discipline_student_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": discipline_student_id, "message": "Student removed from incident"})
 
 
@@ -440,7 +446,8 @@ def add_discipline_action(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create discipline action: {e}")
 
-    audit(conn, "educlaw_k12_discipline_action", action_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-discipline-action", "educlaw_k12_discipline_action", action_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": action_id, "action_type": action_type, "mdr_required": mdr_required,
         "message": "Discipline action added"})
 
@@ -476,7 +483,8 @@ def update_discipline_action(conn, args):
     sql, params = dynamic_update("educlaw_k12_discipline_action", data=updates, where={"id": action_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "educlaw_k12_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-discipline-action", "educlaw_k12_discipline_action", action_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": action_id, "message": "Discipline action updated"})
 
 
@@ -504,7 +512,8 @@ def record_mdr_outcome(conn, args):
         (mdr_outcome, mdr_date or now[:10], now, action_id)
     )
     conn.commit()
-    audit(conn, "educlaw_k12_discipline_action", action_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-record-mdr-outcome", "educlaw_k12_discipline_action", action_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": action_id, "mdr_outcome": mdr_outcome, "message": "MDR outcome recorded"})
 
 

@@ -10,6 +10,7 @@ Tests cover:
   E11 — Degree Audit Expansion (2 actions in highered)
   E12 — Timetable Auto-Generation (1 action in scheduling)
 """
+import json
 import os
 import sys
 import uuid
@@ -32,6 +33,7 @@ from library import ACTIONS as LIBRARY_ACTIONS
 from housing import ACTIONS as HOUSING_ACTIONS
 from fees import ACTIONS as FEES_ACTIONS
 from students import ACTIONS as STUDENTS_ACTIONS
+from erpclaw_lib.seam import column_names
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -220,7 +222,48 @@ class TestOnlineFeePayment:
         for pm in r["payment_methods"]:
             assert "external_token" not in pm
 
-    def test_portal_pay_fee(self, conn, base):
+    def test_portal_pay_fee(self, conn, base, db):
+        # Open fee invoice the request is measured against. This shared
+        # fixture provisions a minimal foundation schema without the selling
+        # stack, so edu-generate-fee-invoice cannot run here (it delegates to
+        # erpclaw-selling); the real end-to-end generation is covered in
+        # test_portal_pay_fee_is_a_request.py. Build the same link directly:
+        # a fee structure of exactly 1000.00 plus its submitted sales invoice.
+        cat = call_action(FEES_ACTIONS["edu-add-fee-category"], conn, ns(
+            company_id=base["company_id"], name="Tuition", description="tuition",
+            revenue_account_id=None, user_id=None,
+            limit=50, offset=0,
+        ))
+        assert is_ok(cat)
+        fs = call_action(FEES_ACTIONS["edu-add-fee-structure"], conn, ns(
+            company_id=base["company_id"], name="FS-Phase9",
+            program_id=None, academic_term_id=base["term_id"], grade_level="10",
+            items=json.dumps([{"fee_category_id": cat["id"], "amount": "1000.00",
+                               "description": "tuition", "sort_order": 1}]),
+            user_id=None, limit=50, offset=0,
+        ))
+        assert is_ok(fs)
+        assert fs["total_amount"] == "1000.00"
+        cols = column_names("sales_invoice", db)
+        if "outstanding_amount" not in cols:
+            conn.execute("ALTER TABLE sales_invoice ADD COLUMN outstanding_amount TEXT NOT NULL DEFAULT '0'")
+            conn.commit()
+        si_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO sales_invoice (id, naming_series, customer_id, total_amount,"
+            " status, company_id, outstanding_amount)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (si_id, "SINV-P9-001", None, "1000.00", "submitted",
+             base["company_id"], "1000.00"))
+        conn.execute(
+            "INSERT INTO educlaw_fee_invoice (id, student_id, invoice_kind, fee_structure_id,"
+            " fee_category_id, academic_term_id, sales_invoice_id,"
+            " late_fee_for_sales_invoice_id, amount, company_id, created_at, created_by)"
+            " VALUES (?, ?, 'fee', ?, ?, ?, ?, NULL, ?, ?, ?, '')",
+            (str(uuid.uuid4()), base["student_id"], fs["id"], None,
+             base["term_id"], si_id, "1000.00", base["company_id"],
+             "2026-03-02T00:00:00Z"))
+        conn.commit()
         call_action(FEES_ACTIONS["edu-add-payment-method"], conn, ns(
             guardian_id=base["guardian_id"],
             payment_method_type="debit_card",
@@ -239,7 +282,8 @@ class TestOnlineFeePayment:
         ))
         assert is_ok(r)
         assert r["amount"] == "500.00"
-        assert r["payment_status"] == "submitted"
+        assert r["payment_status"] == "requested"
+        assert r["outstanding_amount"] == "1000.00"
 
     def test_payment_receipt(self, conn, base):
         r = call_action(FEES_ACTIONS["edu-payment-receipt"], conn, ns(

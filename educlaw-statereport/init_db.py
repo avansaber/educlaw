@@ -862,12 +862,7 @@ def create_educlaw_statereport_tables(db_path):
     # educlaw core's base schema, created here because a sub-vertical can be
     # installed before its parent. Another module's installer is not this
     # conversion's to rewrite, so it keeps running exactly as it does today.
-    conn = get_connection(db_path)
-    try:
-        ensure_educlaw_base_tables(conn)
-        conn.commit()
-    finally:
-        conn.close()
+    ensure_educlaw_base_tables(db_path)
 
     result = provision(METADATA, db_path)
     return {

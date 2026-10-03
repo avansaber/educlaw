@@ -21,7 +21,11 @@ try:
     from erpclaw_lib.decimal_utils import to_decimal, round_currency
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, LiteralValue, now as sql_now
+    from erpclaw_lib.cross_skill import (
+        create_customer, ensure_service_item, create_invoice, submit_invoice,
+        CrossSkillError,
+    )
 except ImportError:
     pass
 
@@ -103,7 +107,7 @@ def update_fee_category(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(category_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_fee_category SET {', '.join(updates)} WHERE id = ?", params)
@@ -263,7 +267,7 @@ def update_fee_structure(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(structure_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_fee_structure SET {', '.join(updates)} WHERE id = ?", params)
@@ -420,7 +424,7 @@ def update_scholarship(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(scholarship_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_scholarship SET {', '.join(updates)} WHERE id = ?", params)
@@ -455,8 +459,83 @@ def list_scholarships(conn, args):
 # FEE INVOICE GENERATION
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _apply_scholarships_to_lines(conn, student_id, academic_term_id, lines):
+    """Discount each structure line through the student's active scholarships.
+
+    Scholarships read via PyPika: this student's, active, either open to
+    every term or to this one, oldest first. A scholarship with no
+    ``applies_to_category_id`` targets every line; one naming a category
+    targets only that category's line, applying ``0.00`` when the category
+    is not on the structure. ``percentage`` takes ``original line amount *
+    pct / 100`` (2dp) off each targeted line; ``fixed`` takes its amount
+    from the targeted lines in sort order. No line drops below ``0.00``;
+    ``applied_discount`` is what was actually taken, in two places.
+    """
+    _sch = Table("educlaw_scholarship")
+    term = academic_term_id or ""
+    rows = conn.execute(
+        Q.from_(_sch).select(_sch.star)
+        .where(_sch.student_id == P())
+        .where(_sch.scholarship_status == "active")
+        .where((_sch.academic_term_id.isnull()) | (_sch.academic_term_id == P()))
+        .orderby(_sch.created_at).orderby(_sch.id)
+        .get_sql(),
+        (student_id, term),
+    ).fetchall()
+
+    state = []
+    for ln in lines:
+        line = dict(ln)
+        amount = _d(line.get("amount", "0")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP)
+        state.append({
+            "fee_category_id": line.get("fee_category_id"),
+            "category_name": line.get("category_name") or "",
+            "amount": amount,
+            "discount": Decimal("0.00"),
+        })
+
+    details = []
+    for schol in rows:
+        sch = dict(schol)
+        applies = sch.get("applies_to_category_id")
+        targets = [i for i, entry in enumerate(state)
+                   if applies is None or entry["fee_category_id"] == applies]
+        taken = Decimal("0.00")
+        if sch["discount_type"] == "percentage":
+            pct = _d(sch["discount_amount"])
+            for i in targets:
+                disc = (state[i]["amount"] * pct / Decimal("100")).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP)
+                room = state[i]["amount"] - state[i]["discount"]
+                take = disc if disc < room else room
+                state[i]["discount"] += take
+                taken += take
+        else:
+            remaining = _d(sch["discount_amount"])
+            for i in targets:
+                if remaining <= 0:
+                    break
+                room = state[i]["amount"] - state[i]["discount"]
+                take = room if room < remaining else remaining
+                state[i]["discount"] += take
+                taken += take
+                remaining -= take
+        details.append({
+            "scholarship_id": sch["id"],
+            "name": sch["name"],
+            "discount_type": sch["discount_type"],
+            "discount_amount": sch["discount_amount"],
+            "applied_discount": str(taken.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP)),
+        })
+
+    total = sum((entry["discount"] for entry in state), Decimal("0.00"))
+    return state, details, total
+
+
 def generate_fee_invoice(conn, args):
-    """Generate fee invoice for program enrollment. Reads fee structure and applies scholarships."""
+    """Generate fee invoice for program enrollment. Bills the fee structure as a submitted sales invoice."""
     student_id = getattr(args, "student_id", None)
     program_id = getattr(args, "program_id", None)
     academic_term_id = getattr(args, "academic_term_id", None)
@@ -497,7 +576,17 @@ def generate_fee_invoice(conn, args):
         err("No active fee structure found for this student/program/term combination")
 
     fs = dict(fee_struct)
-    base_amount = _d(fs["total_amount"])
+
+    # A fee structure is billed to a student once: refuse before any write.
+    _fi = Table("educlaw_fee_invoice")
+    billed = conn.execute(
+        Q.from_(_fi).select(_fi.sales_invoice_id)
+        .where(_fi.student_id == P()).where(_fi.fee_structure_id == P())
+        .where(_fi.invoice_kind == "fee").get_sql(),
+        (student_id, fs["id"]),
+    ).fetchone()
+    if billed:
+        err(f"Fee structure {fs['id']} is already billed to student {student_id} (sales invoice {dict(billed)['sales_invoice_id']})")
 
     # Get line items
     _fsi = Table("educlaw_fee_structure_item")
@@ -511,40 +600,88 @@ def generate_fee_invoice(conn, args):
         (fs["id"],)
     ).fetchall()
 
-    # Apply scholarships
-    _sch = Table("educlaw_scholarship")
-    scholarships = conn.execute(  # PyPika: skipped — IS NULL OR = ? not cleanly expressible
-        """SELECT * FROM educlaw_scholarship
-           WHERE student_id = ? AND scholarship_status = 'active'
-           AND (academic_term_id IS NULL OR academic_term_id = ?)""",
-        (student_id, academic_term_id or "")
-    ).fetchall()
+    # Apply scholarships, per line.
+    base_amount = _d(fs["total_amount"])
+    state, scholarship_details, total_discount = _apply_scholarships_to_lines(
+        conn, student_id, academic_term_id, items)
+    total_discount = total_discount.quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP)
+    final_amount = (base_amount - total_discount).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if final_amount < 0:
+        final_amount = Decimal("0.00")
+    if final_amount == 0:
+        err("Nothing to bill: scholarships cover the whole fee structure")
 
-    total_discount = Decimal("0")
-    scholarship_details = []
-    for schol in scholarships:
-        s = dict(schol)
-        if s["discount_type"] == "fixed":
-            disc = _d(s["discount_amount"])
-        else:  # percentage
-            disc = (base_amount * _d(s["discount_amount"]) / Decimal("100")).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
-        total_discount += disc
-        scholarship_details.append({
-            "scholarship_id": s["id"],
-            "name": s["name"],
-            "discount_type": s["discount_type"],
-            "discount_amount": s["discount_amount"],
-            "applied_discount": str(disc),
-        })
+    db_path = getattr(args, "db_path", None)
 
-    final_amount = max(Decimal("0"), base_amount - total_discount)
+    # The student owes the money as a customer. Link them first and commit,
+    # so a later failure never leaves an unlinked customer a retry would
+    # duplicate.
+    customer_id = student.get("customer_id")
+    if not customer_id:
+        try:
+            created_customer = create_customer(
+                student.get("full_name") or "", company_id, "individual",
+                student.get("email"), db_path=db_path)
+        except CrossSkillError as e:
+            err(f"Fee invoice could not be created: {e}")
+        customer_id = ((created_customer or {}).get("customer_id")
+                       or (created_customer or {}).get("id"))
+        if not customer_id:
+            err("Fee invoice could not be created: customer creation returned no id")
+        _st = Table("educlaw_student")
+        conn.execute(
+            Q.update(_st).set("customer_id", P()).where(_st.id == P()).get_sql(),
+            (customer_id, student_id))
+        conn.commit()
 
-    # Note: In production, this would call erpclaw-selling subprocess
-    # For now, record the invoice details and return
-    invoice_id = str(uuid.uuid4())
+    # One service item per billed line, then the draft invoice itself.
+    try:
+        item_ids = []
+        for line in state:
+            item_ids.append(ensure_service_item(
+                company_id, db_path,
+                item_code="EDU-FEE-%s" % line["fee_category_id"],
+                item_name=line["category_name"] or line["fee_category_id"]))
+        billed_lines = []
+        for item_id, line in zip(item_ids, state):
+            net_line = (line["amount"] - line["discount"]).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP)
+            billed_lines.append({"item_id": item_id, "qty": "1",
+                                 "rate": str(net_line)})
+        posting_date = getattr(args, "posting_date", None) or date.today().isoformat()
+        created_invoice = create_invoice(
+            customer_id=customer_id, items=billed_lines, company_id=company_id,
+            posting_date=posting_date, due_date=getattr(args, "due_date", None),
+            db_path=db_path)
+    except CrossSkillError as e:
+        err(f"Fee invoice could not be created: {e}")
+    si_id = (created_invoice or {}).get("sales_invoice_id")
+    if not si_id:
+        err("Fee invoice could not be created: sales invoice creation returned no id")
+
+    # The link on educlaw's own side, with its audit line, in one transaction.
+    row_id = str(uuid.uuid4())
     now = _now_iso()
+    net = str(final_amount)
+    sql, _ = insert_row("educlaw_fee_invoice", {"id": P(), "student_id": P(), "invoice_kind": P(), "fee_structure_id": P(), "fee_category_id": P(), "academic_term_id": P(), "sales_invoice_id": P(), "late_fee_for_sales_invoice_id": P(), "amount": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
+        (row_id, student_id, "fee", fs["id"], None, academic_term_id, si_id,
+         None, net, company_id, now, getattr(args, "user_id", None) or "")
+    )
+    audit(conn, SKILL, "edu-generate-fee-invoice", "educlaw_fee_invoice", row_id,
+          new_values={"student_id": student_id, "fee_structure_id": fs["id"],
+                      "sales_invoice_id": si_id, "amount": net})
+    conn.commit()
+
+    # Submit through the selling module. The link row stays when this fails,
+    # so a retry is refused as already billed and names the draft.
+    try:
+        submit_invoice(si_id, db_path=db_path)
+    except CrossSkillError as e:
+        err(f"Sales invoice {si_id} was created for this fee but could not be submitted: {e}")
 
     # Send fee_due notification
     notif_id = str(uuid.uuid4())
@@ -553,23 +690,34 @@ def generate_fee_invoice(conn, args):
     conn.execute(sql,
         (notif_id, "student", student_id, "fee_due",
          "Fee Invoice Generated",
-         f"Your fee invoice for the term has been generated. Total due: ${final_amount}",
-         "educlaw_fee_structure", fs["id"], company_id, now,
+         f"Your fee invoice for the term has been generated. Total due: ${net}",
+         "educlaw_fee_invoice", row_id, company_id, now,
          getattr(args, "user_id", None) or "")
     )
     conn.commit()
 
+    line_items = []
+    for raw, line in zip(items, state):
+        entry = dict(raw)
+        entry["discount"] = str(line["discount"].quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP))
+        entry["billed_amount"] = str((line["amount"] - line["discount"]).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP))
+        line_items.append(entry)
+
     ok({
-        "invoice_id": invoice_id,
+        "invoice_id": row_id,
+        "sales_invoice_id": si_id,
+        "sales_invoice_status": "submitted",
+        "customer_id": customer_id,
         "student_id": student_id,
         "fee_structure_id": fs["id"],
         "base_amount": str(base_amount),
         "total_discount": str(total_discount),
-        "final_amount": str(final_amount),
-        "line_items": [dict(i) for i in items],
+        "final_amount": net,
+        "line_items": line_items,
         "scholarships_applied": scholarship_details,
         "generated_at": now,
-        "note": "Invoice generated. Submit to erpclaw-selling to create billable invoice.",
     })
 
 
@@ -619,20 +767,55 @@ def get_student_account(conn, args):
     outstanding = Decimal("0")
 
     if customer_id:
-        try:
-            _si = Table("sales_invoice")
-            inv_rows = conn.execute(
-                Q.from_(_si).select(_si.id, _si.name, _si.posting_date, _si.grand_total,
-                                    _si.status, _si.outstanding_amount)
-                .where(_si.customer_id == P())
-                .orderby(_si.posting_date, order=Order.desc).get_sql(),
-                (customer_id,)
+        _si = Table("sales_invoice")
+        inv_rows = conn.execute(
+            Q.from_(_si).select(_si.id, _si.naming_series, _si.posting_date, _si.grand_total,
+                                _si.status, _si.outstanding_amount)
+            .where(_si.customer_id == P())
+            .orderby(_si.posting_date, order=Order.desc).get_sql(),
+            (customer_id,)
+        ).fetchall()
+        invoices = [dict(r) for r in inv_rows]
+        for inv in invoices:
+            outstanding += _d(inv.get("outstanding_amount", "0"))
+
+        _pe = Table("payment_entry")
+        pe_rows = conn.execute(
+            Q.from_(_pe).select(_pe.id, _pe.naming_series, _pe.posting_date,
+                                _pe.paid_amount, _pe.unallocated_amount)
+            .where(_pe.party_type == P()).where(_pe.party_id == P()).where(_pe.status == P())
+            .orderby(_pe.posting_date, order=Order.desc).orderby(_pe.id)
+            .get_sql(),
+            ("customer", customer_id, "submitted")
+        ).fetchall()
+        payments = []
+        for pe_row in pe_rows:
+            entry = dict(pe_row)
+            entry["allocations"] = []
+            payments.append(entry)
+        if payments:
+            _pa = Table("payment_allocation")
+            _pe2 = Table("payment_entry")
+            alloc_rows = conn.execute(
+                Q.from_(_pa).join(_pe2).on(_pa.payment_entry_id == _pe2.id)
+                .select(_pa.payment_entry_id, _pa.voucher_type, _pa.voucher_id,
+                        _pa.allocated_amount)
+                .where(_pe2.party_type == P()).where(_pe2.party_id == P())
+                .where(_pe2.status == P()).where(_pa.delinked == P())
+                .orderby(_pa.voucher_id)
+                .get_sql(),
+                ("customer", customer_id, "submitted", 0)
             ).fetchall()
-            invoices = [dict(r) for r in inv_rows]
-            for inv in invoices:
-                outstanding += _d(inv.get("outstanding_amount", "0"))
-        except Exception:
-            pass
+            by_entry = {}
+            for alloc_row in alloc_rows:
+                alloc = dict(alloc_row)
+                by_entry.setdefault(alloc.pop("payment_entry_id"), []).append({
+                    "voucher_type": alloc["voucher_type"],
+                    "voucher_id": alloc["voucher_id"],
+                    "allocated_amount": alloc["allocated_amount"],
+                })
+            for entry in payments:
+                entry["allocations"] = by_entry.get(entry["id"], [])
 
     _sch = Table("educlaw_scholarship")
     scholarships = conn.execute(
@@ -678,9 +861,11 @@ def get_outstanding_fees(conn, args):
                 Q.from_(_si).select(_si.id, _si.posting_date, _si.due_date,
                                     _si.grand_total, _si.outstanding_amount, _si.status)
                 .where(_si.customer_id == P())
-                .where(_si.status.isin(['unpaid', 'overdue']))
+                .where(_si.status.isin(['submitted', 'partially_paid', 'overdue']))
                 .where(_si.due_date < P())
-                .where(_si.outstanding_amount > 0)
+                # outstanding_amount is TEXT: compare its numeric value, so an
+                # invoice stored with outstanding "0.00" is not listed.
+                .where(fn.Cast(_si.outstanding_amount, "NUMERIC") > 0)
                 .get_sql(),
                 (s["customer_id"], today)
             ).fetchall()
@@ -702,7 +887,7 @@ def get_outstanding_fees(conn, args):
 
 
 def apply_late_fee(conn, args):
-    """Apply late fee to overdue invoice."""
+    """Apply late fee to an overdue fee invoice, once per overdue invoice."""
     student_id = getattr(args, "student_id", None)
     fee_category_id = getattr(args, "fee_category_id", None)
     amount = getattr(args, "amount", None)
@@ -719,30 +904,124 @@ def apply_late_fee(conn, args):
     if _d(amount) <= 0:
         err("--amount must be greater than 0")
 
-    if not conn.execute(Q.from_(Table("educlaw_student")).select(Field("id")).where(Field("id") == P()).get_sql(), (student_id,)).fetchone():
+    student_row = conn.execute(Q.from_(Table("educlaw_student")).select(Table("educlaw_student").star).where(Field("id") == P()).get_sql(), (student_id,)).fetchone()
+    if not student_row:
         err(f"Student {student_id} not found")
-    if not conn.execute(Q.from_(Table("educlaw_fee_category")).select(Field("id")).where(Field("id") == P()).get_sql(), (fee_category_id,)).fetchone():
+    student = dict(student_row)
+    cat_row = conn.execute(Q.from_(Table("educlaw_fee_category")).select(Table("educlaw_fee_category").star).where(Field("id") == P()).get_sql(), (fee_category_id,)).fetchone()
+    if not cat_row:
         err(f"Fee category {fee_category_id} not found")
 
+    try:
+        fee_amount = Decimal(str(amount))
+    except InvalidOperation:
+        err("--amount must have at most two decimal places")
+    if not fee_amount.is_finite() or fee_amount.as_tuple().exponent < -2:
+        err("--amount must have at most two decimal places")
+    norm = str(fee_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+    sales_invoice_id = getattr(args, "sales_invoice_id", None)
+    if not sales_invoice_id:
+        err("--sales-invoice-id is required")
+    db_path = getattr(args, "db_path", None)
+
+    _fi = Table("educlaw_fee_invoice")
+    fee_row = conn.execute(
+        Q.from_(_fi).select(_fi.star)
+        .where(_fi.sales_invoice_id == P()).where(_fi.student_id == P())
+        .where(_fi.invoice_kind == "fee").get_sql(),
+        (sales_invoice_id, student_id)).fetchone()
+    if not fee_row:
+        err(f"Sales invoice {sales_invoice_id} is not a fee invoice for student {student_id}")
+    prior = conn.execute(
+        Q.from_(_fi).select(_fi.sales_invoice_id)
+        .where(_fi.late_fee_for_sales_invoice_id == P()).get_sql(),
+        (sales_invoice_id,)).fetchone()
+    if prior:
+        err(f"A late fee was already applied to sales invoice {sales_invoice_id} (late fee invoice {dict(prior)['sales_invoice_id']})")
+
+    _si = Table("sales_invoice")
+    inv_row = conn.execute(
+        Q.from_(_si).select(_si.star).where(_si.id == P()).get_sql(),
+        (sales_invoice_id,)).fetchone()
+    if not inv_row:
+        err(f"Sales invoice {sales_invoice_id} is not a fee invoice for student {student_id}")
+    inv = dict(inv_row)
+    fee_link = dict(fee_row)
+    link_company = fee_link.get("company_id") or inv.get("company_id")
+    if link_company != company_id:
+        err(f"Sales invoice {sales_invoice_id} belongs to company {link_company}, not {company_id}")
+    if student.get("company_id") != company_id:
+        err(f"Student {student_id} belongs to company {student.get('company_id')}, not {company_id}")
+    if dict(cat_row).get("company_id") != company_id:
+        err(f"Fee category {fee_category_id} belongs to company {dict(cat_row).get('company_id')}, not {company_id}")
+    if inv.get("status") not in ("submitted", "partially_paid", "overdue") or _d(inv.get("outstanding_amount", "0")) <= 0:
+        err(f"Sales invoice {sales_invoice_id} is {inv.get('status')}; a late fee applies only to an unpaid submitted invoice")
+    posting_date = getattr(args, "posting_date", None) or date.today().isoformat()
+    if not inv.get("due_date"):
+        err(f"Sales invoice {sales_invoice_id} has no due date")
+    if not str(inv.get("due_date")) < str(posting_date):
+        err(f"Sales invoice {sales_invoice_id} is not overdue (due {inv.get('due_date')})")
+
+    category = dict(cat_row)
+    try:
+        item_id = ensure_service_item(
+            company_id, db_path,
+            item_code="EDU-FEE-%s" % fee_category_id,
+            item_name=category.get("name") or fee_category_id)
+        created = create_invoice(
+            customer_id=inv["customer_id"],
+            items=[{"item_id": item_id, "qty": "1", "rate": norm}],
+            company_id=company_id, posting_date=posting_date,
+            db_path=db_path)
+    except CrossSkillError as e:
+        err(f"Late fee could not be created: {e}")
+    late_si_id = (created or {}).get("sales_invoice_id")
+    if not late_si_id:
+        err("Late fee could not be created: sales invoice creation returned no id")
+
+    row_id = str(uuid.uuid4())
     now = _now_iso()
+    sql, _ = insert_row("educlaw_fee_invoice", {"id": P(), "student_id": P(), "invoice_kind": P(), "fee_structure_id": P(), "fee_category_id": P(), "academic_term_id": P(), "sales_invoice_id": P(), "late_fee_for_sales_invoice_id": P(), "amount": P(), "company_id": P(), "created_at": P(), "created_by": P()})
+
+    conn.execute(sql,
+        (row_id, student_id, "late_fee", None, fee_category_id, None,
+         late_si_id, sales_invoice_id, norm, company_id, now,
+         getattr(args, "user_id", None) or "")
+    )
+    audit(conn, SKILL, "edu-apply-late-fee", "educlaw_fee_invoice", row_id,
+          new_values={"student_id": student_id,
+                      "sales_invoice_id": late_si_id,
+                      "late_fee_for_sales_invoice_id": sales_invoice_id,
+                      "amount": norm})
+    conn.commit()
+
+    # Submit through the selling module; the link row stays when this fails.
+    try:
+        submit_invoice(late_si_id, db_path=db_path)
+    except CrossSkillError as e:
+        err(f"Sales invoice {late_si_id} was created for this fee but could not be submitted: {e}")
+
+    now2 = _now_iso()
     notif_id = str(uuid.uuid4())
     sql, _ = insert_row("educlaw_notification", {"id": P(), "recipient_type": P(), "recipient_id": P(), "notification_type": P(), "title": P(), "message": P(), "reference_type": P(), "reference_id": P(), "company_id": P(), "created_at": P(), "created_by": P()})
 
     conn.execute(sql,
         (notif_id, "student", student_id, "fee_due",
          "Late Fee Applied",
-         f"A late fee of ${_d(amount)} has been applied to your account.",
-         "educlaw_fee_category", fee_category_id, company_id, now,
+         f"A late fee of ${norm} has been applied to your account.",
+         "educlaw_fee_invoice", row_id, company_id, now2,
          getattr(args, "user_id", None) or "")
     )
     conn.commit()
 
     ok({
         "student_id": student_id,
-        "late_fee_amount": str(_d(amount)),
+        "late_fee_amount": norm,
         "fee_category_id": fee_category_id,
-        "applied_at": now,
-        "note": "Late fee recorded. Submit to erpclaw-selling to post to invoice.",
+        "overdue_sales_invoice_id": sales_invoice_id,
+        "sales_invoice_id": late_si_id,
+        "applied_at": now2,
     })
 
 
@@ -845,10 +1124,15 @@ def list_payment_methods(conn, args):
 
 
 def portal_pay_fee(conn, args):
-    """Process a fee payment against outstanding fees using a stored payment method.
+    """Request an online fee payment (records a request; no money moves until the school records the payment).
 
-    In production this would integrate with a payment gateway. For now it records
-    the payment intent and creates a notification.
+    No payment gateway exists, so this action never takes a payment, posts to
+    the ledger, or writes to any foundation table. It checks the guardian-student
+    link and the guardian's active payment method, reads the student's open fee
+    invoices, refuses when nothing is outstanding or when the requested amount
+    exceeds the outstanding total, and otherwise records a notification that a
+    payment was requested. The balance is unchanged until the school records the
+    payment received against the invoice.
     """
     guardian_id = getattr(args, "guardian_id", None)
     student_id = getattr(args, "student_id", None)
@@ -890,10 +1174,47 @@ def portal_pay_fee(conn, args):
         err("No active payment method found. Add a payment method first.")
 
     pm = dict(pm_row)
+
+    # Read the student's open fee invoices for the company (read only): the
+    # sales_invoice rows linked through educlaw_fee_invoice.sales_invoice_id
+    # with an open status and an outstanding amount above zero.
+    _fi = Table("educlaw_fee_invoice")
+    _si = Table("sales_invoice")
+    open_rows = conn.execute(
+        Q.from_(_fi).join(_si).on(_si.id == _fi.sales_invoice_id)
+        .select(_si.id, _si.outstanding_amount)
+        .where(_fi.student_id == P()).where(_fi.company_id == P())
+        .where(_si.company_id == P())
+        .where(_si.status.isin(["submitted", "partially_paid", "overdue"]))
+        .where(fn.Cast(_si.outstanding_amount, "NUMERIC") > 0)
+        .get_sql(), (student_id, company_id, company_id)
+    ).fetchall()
+
+    invoices = []
+    total = Decimal("0")
+    for _row in open_rows:
+        _inv = dict(_row)
+        _amt = _d(_inv.get("outstanding_amount", "0"))
+        if _amt <= 0:
+            continue
+        _amt_str = str(_amt.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        invoices.append({"id": _inv["id"], "sales_invoice_id": _inv["id"],
+                         "outstanding_amount": _amt_str})
+        total += _amt
+
+    if not invoices or total <= 0:
+        err("No outstanding fees for this student")
+
+    pay_str = str(pay_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    total_str = str(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    if pay_amount > total:
+        err(f"Requested amount {pay_str} exceeds outstanding fees of {total_str} for this student")
+
     now = _now_iso()
     payment_ref = str(uuid.uuid4())
 
-    # Record notification
+    # Record the request only. No money moves: never write to sales_invoice,
+    # payment_entry, gl_entry or any other foundation table.
     notif_id = str(uuid.uuid4())
     sql, _ = insert_row("educlaw_notification", {
         "id": P(), "recipient_type": P(), "recipient_id": P(),
@@ -903,8 +1224,9 @@ def portal_pay_fee(conn, args):
     })
     conn.execute(sql, (
         notif_id, "guardian", guardian_id, "payment",
-        "Payment Submitted",
-        f"Payment of ${pay_amount} submitted for student account via {pm['method_type']} ending in {pm['last_four']}.",
+        "Payment Request Received",
+        f"Payment request of ${pay_str} received for student account via {pm['method_type']} ending in {pm['last_four']}. "
+        f"No payment has been taken and the balance of ${total_str} is unchanged until the school records the payment.",
         "educlaw_payment_method", pm["id"],
         company_id, now, guardian_id,
     ))
@@ -914,13 +1236,15 @@ def portal_pay_fee(conn, args):
         "payment_reference": payment_ref,
         "guardian_id": guardian_id,
         "student_id": student_id,
-        "amount": str(pay_amount),
+        "amount": pay_str,
+        "outstanding_amount": total_str,
+        "invoices": invoices,
         "payment_method_id": pm["id"],
         "method_type": pm["method_type"],
         "last_four": pm["last_four"],
-        "payment_status": "submitted",
+        "payment_status": "requested",
         "submitted_at": now,
-        "note": "Payment submitted. Integrate with payment gateway for live processing.",
+        "note": "No payment was taken. This records a request only; the balance is unchanged until the school records the payment received against the invoice.",
     })
 
 

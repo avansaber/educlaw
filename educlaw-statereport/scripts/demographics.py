@@ -185,7 +185,8 @@ def add_student_supplement(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create supplement: {e}")
 
-    audit(conn, "sr_student_supplement", supp_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-student-supplement", "sr_student_supplement", supp_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": supp_id, "student_id": student_id, "race_federal_rollup": race_federal_rollup,
         "message": "Student supplement created"})
 
@@ -264,7 +265,8 @@ def update_student_supplement(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot update supplement: {e}")
 
-    audit(conn, "sr_student_supplement", rec["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-student-supplement", "sr_student_supplement", rec["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": rec["id"], "message": "Student supplement updated"})
 
 
@@ -362,7 +364,8 @@ def assign_ssid(conn, args):
     sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-assign-ssid", "sr_student_supplement", row["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": row["id"], "ssid": ssid, "ssid_status": "assigned", "message": "SSID assigned"})
 
 
@@ -395,7 +398,8 @@ def set_student_race(conn, args):
         (is_hispanic, json.dumps(race_codes_list), race_federal_rollup, now, student_id)
     )
     conn.commit()
-    audit(conn, "sr_student_supplement", rec["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-student-race", "sr_student_supplement", rec["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": rec["id"], "race_codes": race_codes_list, "race_federal_rollup": race_federal_rollup,
         "message": "Race/ethnicity updated"})
 
@@ -426,7 +430,8 @@ def update_el_status(conn, args):
     sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-el-status", "sr_student_supplement", row["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": row["id"], "message": "EL status updated"})
 
 
@@ -452,7 +457,8 @@ def update_sped_status(conn, args):
     sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-sped-status", "sr_student_supplement", row["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": row["id"], "message": "SPED status updated"})
 
 
@@ -483,7 +489,8 @@ def update_economic_status(conn, args):
     sql, params = dynamic_update("sr_student_supplement", data=updates, where={"student_id": student_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_student_supplement", row["id"], "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-economic-status", "sr_student_supplement", row["id"], new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": row["id"], "message": "Economic status updated"})
 
 
@@ -555,7 +562,8 @@ def add_sped_placement(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create SPED placement: {e}")
 
-    audit(conn, "sr_sped_placement", placement_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-sped-placement", "sr_sped_placement", placement_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": placement_id, "student_id": student_id, "school_year": int(school_year),
         "message": "SPED placement created"})
 
@@ -587,7 +595,8 @@ def update_sped_placement(conn, args):
     sql, params = dynamic_update("sr_sped_placement", data=updates, where={"id": placement_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_sped_placement", placement_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-sped-placement", "sr_sped_placement", placement_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": placement_id, "message": "SPED placement updated"})
 
 
@@ -701,7 +710,8 @@ def add_sped_service(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create SPED service: {e}")
 
-    audit(conn, "sr_sped_service", service_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-sped-service", "sr_sped_service", service_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": service_id, "sped_placement_id": sped_placement_id, "service_type": service_type,
         "message": "SPED service added"})
 
@@ -727,7 +737,8 @@ def update_sped_service(conn, args):
     sql, params = dynamic_update("sr_sped_service", data=updates, where={"id": service_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_sped_service", service_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-sped-service", "sr_sped_service", service_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": service_id, "message": "SPED service updated"})
 
 
@@ -777,7 +788,8 @@ def delete_sped_service(conn, args):
     # (sr_snapshot_record stores JSON blobs; we can't easily check FK, so we allow deletion)
     conn.execute("DELETE FROM sr_sped_service WHERE id = ?", (service_id,))
     conn.commit()
-    audit(conn, "sr_sped_service", service_id, "DELETE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-delete-sped-service", "sr_sped_service", service_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": service_id, "message": "SPED service deleted"})
 
 
@@ -838,7 +850,8 @@ def add_el_program(conn, args):
     except sqlite3.IntegrityError as e:
         err(f"Cannot create EL program: {e}")
 
-    audit(conn, "sr_el_program", prog_id, "INSERT", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-add-el-program", "sr_el_program", prog_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": prog_id, "student_id": student_id, "school_year": int(school_year),
         "message": "EL program enrollment added"})
 
@@ -869,7 +882,8 @@ def update_el_program(conn, args):
     sql, params = dynamic_update("sr_el_program", data=updates, where={"id": el_program_id})
     conn.execute(sql, params)
     conn.commit()
-    audit(conn, "sr_el_program", el_program_id, "UPDATE", getattr(args, "user_id", None) or "")
+    _audit_user_id = getattr(args, "user_id", None)
+    audit(conn, SKILL, "statereport-update-el-program", "sr_el_program", el_program_id, new_values={"user_id": _audit_user_id} if _audit_user_id else None)
     ok({"id": el_program_id, "message": "EL program updated"})
 
 

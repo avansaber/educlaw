@@ -611,16 +611,24 @@ def approve_work_study_timesheet(conn, args):
            .where(_ts.id == P()).get_sql())
     conn.execute(sql, (supervisor_approved_by, today, now, timesheet_id))
 
-    # Update assignment.earned_to_date += earnings
-    earnings = to_decimal(ts["earnings"])
-    # PyPika: skipped — inline CAST(ROUND(CAST(...) + ?, 2) AS TEXT) expression
-    conn.execute(
-        """UPDATE finaid_work_study_assignment
-           SET earned_to_date = CAST(ROUND(CAST(earned_to_date AS NUMERIC) + ?, 2) AS TEXT),
-               updated_at = ?
-           WHERE id = ?""",
-        (float(earnings), now, ts["assignment_id"])
-    )
+    # Update assignment.earned_to_date += earnings as exact two-place money,
+    # guarded on the text read so a concurrent approval cannot lose an update.
+    _wa = Table("finaid_work_study_assignment")
+    assignment_row = conn.execute(
+        Q.from_(_wa).select(_wa.earned_to_date).where(_wa.id == P()).get_sql(),
+        (ts["assignment_id"],)
+    ).fetchone()
+    old_text = dict(assignment_row)["earned_to_date"]
+    new_total = round_currency(to_decimal(old_text) + to_decimal(ts["earnings"]))
+    _upd_sql = (Q.update(_wa)
+                .set(_wa.earned_to_date, P())
+                .set(_wa.updated_at, P())
+                .where(_wa.id == P())
+                .where(_wa.earned_to_date == P()).get_sql())
+    cur = conn.execute(_upd_sql, (str(new_total), now, ts["assignment_id"], old_text))
+    if cur.rowcount != 1:
+        conn.rollback()
+        err(f"Concurrent change to finaid_work_study_assignment {ts['assignment_id']}: earned_to_date is no longer {old_text}; nothing was written")
 
     audit(conn, SKILL, "finaid-approve-work-study-timesheet", "finaid_work_study_timesheet",
           timesheet_id,

@@ -112,7 +112,7 @@ python3 {baseDir}/scripts/db_query.py --action status
 | Action | Description |
 |--------|-------------|
 | `edu-create-program-enrollment` | Enroll in degree program |
-| `edu-cancel-program-enrollment` | Withdraw from program |
+| `edu-cancel-program-enrollment` | Withdraw from program (reports fee bills still open; the bill is not changed) |
 | `edu-list-program-enrollments` | List program enrollments |
 | `edu-create-section-enrollment` | Enroll in course section |
 | `edu-cancel-enrollment` | Drop course (W grade) |
@@ -179,11 +179,11 @@ python3 {baseDir}/scripts/db_query.py --action status
 | `edu-add-scholarship` | Award scholarship/discount |
 | `edu-update-scholarship` | Update scholarship |
 | `edu-list-scholarships` | List scholarships |
-| `edu-generate-fee-invoice` | Generate tuition invoice |
+| `edu-generate-fee-invoice` | Bill a fee structure to a student as a submitted sales invoice; gated: pass --user-confirmed through the erpclaw router (it consumes the flag; this skill's db_query.py rejects it) |
 | `edu-list-fee-invoices` | List fee invoices |
 | `edu-get-student-account` | Account summary with balance |
 | `edu-get-outstanding-fees` | Students with overdue invoices |
-| `edu-apply-late-fee` | Apply late fee charge |
+| `edu-apply-late-fee` | Bill a late fee on an overdue fee invoice once (--sales-invoice-id); gated: pass --user-confirmed through the erpclaw router (it consumes the flag; this skill's db_query.py rejects it) |
 
 ### Communications (8 actions)
 | Action | Description |
@@ -208,7 +208,7 @@ python3 {baseDir}/scripts/db_query.py --action status
 | `edu-portal-student-discipline` | Student views discipline |
 | `edu-portal-my-students` | Guardian views their students |
 | `edu-portal-my-transport` | View transport assignment |
-| `edu-portal-pay-fee` | Pay fee online |
+| `edu-portal-pay-fee` | Request an online fee payment (records a request; no money moves until the school records the payment) |
 | `edu-portal-submit-application` | Submit online application |
 | `edu-portal-check-application-status` | Check application status |
 | `edu-portal-submit-absence-excuse` | Submit absence excuse |

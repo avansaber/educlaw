@@ -40,6 +40,15 @@ MS_ACTIONS = _load("master_schedule", _SCRIPTS_DIR).ACTIONS
 CR_ACTIONS = _load("conflict_resolution", _SCRIPTS_DIR).ACTIONS
 RA_ACTIONS = _load("room_assignment", _SCRIPTS_DIR).ACTIONS
 
+from erpclaw_lib.query import Field, P, Q, Table
+
+
+def _row(conn, table, row_id):
+    tbl = Table(table)
+    return dict(conn.execute(
+        Q.from_(tbl).select(tbl.star).where(Field("id") == P()).get_sql(),
+        (row_id,)).fetchone())
+
 
 @pytest.fixture
 def setup(db_path):
@@ -117,6 +126,12 @@ class TestSchedulePattern:
             is_active=0, user_id="admin",
         ))
         assert is_ok(add_r)
+        # No ledger or monetary effect: this action rewrites descriptive
+        # columns on educlaw_schedule_pattern only; the module holds no
+        # TEXT Decimal money columns, so there are no legs to balance.
+        before = _row(conn, "educlaw_schedule_pattern", add_r["id"])
+        assert before["name"] == "AB Block"
+        assert before["description"] == ""
         r = call_action(SP_ACTIONS["schedule-update-schedule-pattern"], conn, ns(
             pattern_id=add_r["id"],
             name="AB Block Updated", description="Updated desc",
@@ -124,6 +139,15 @@ class TestSchedulePattern:
             user_id="admin",
         ))
         assert is_ok(r)
+        assert r["updated_fields"] == ["name", "description"]
+        after = _row(conn, "educlaw_schedule_pattern", add_r["id"])
+        assert after["name"] == "AB Block Updated"
+        assert after["description"] == "Updated desc"
+        assert after["notes"] == before["notes"] == ""
+        assert after["total_periods_per_cycle"] == before["total_periods_per_cycle"] == 8
+        assert after["pattern_type"] == before["pattern_type"] == "block_ab"
+        assert after["cycle_days"] == before["cycle_days"] == 2
+        assert after["company_id"] == before["company_id"] == cid
 
     def test_missing_name(self, setup):
         conn, cid = setup
@@ -230,6 +254,23 @@ class TestCourseRequest:
             user_id="counselor",
         ))
         assert is_ok(r)
+        # No ledger or monetary effect: this action inserts one
+        # educlaw_course_request row only; the module holds no TEXT Decimal
+        # money columns, so there are no legs to balance.
+        assert r["request_status"] == "submitted"
+        row = _row(s["conn"], "educlaw_course_request", r["id"])
+        assert row["student_id"] == s["student_id"]
+        assert row["course_id"] == s["course_id"]
+        assert row["academic_term_id"] == s["term_id"]
+        assert row["request_priority"] == 1
+        assert row["is_alternate"] == 0
+        assert row["request_status"] == "submitted"
+        assert row["has_iep_flag"] == 0
+        assert row["submitted_by"] == "counselor"
+        assert row["prerequisite_override"] == 0
+        assert row["fulfilled_section_id"] is None
+        assert row["naming_series"].startswith("CRQ-")
+        assert row["company_id"] == s["company_id"]
 
     def test_list(self, full_setup):
         s = full_setup

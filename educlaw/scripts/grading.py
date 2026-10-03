@@ -188,7 +188,7 @@ def update_grading_scale(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(scale_id)
     if updates[:-1]:  # Only update if there are non-timestamp changes
         conn.execute(  # PyPika: skipped — dynamic column set built conditionally
@@ -355,7 +355,7 @@ def update_assessment_plan(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(plan_id)
     if updates[:-1]:
         conn.execute(  # PyPika: skipped — dynamic column set built conditionally
@@ -515,7 +515,7 @@ def update_assessment(conn, args):
     if not changed:
         err("No fields to update")
 
-    updates.append("updated_at = datetime('now')")
+    updates.append(f"updated_at = {sql_now()}")
     params.append(assessment_id)
     conn.execute(  # PyPika: skipped — dynamic column set built conditionally
         f"UPDATE educlaw_assessment SET {', '.join(updates)} WHERE id = ?", params)

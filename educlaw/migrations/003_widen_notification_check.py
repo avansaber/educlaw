@@ -1,14 +1,15 @@
 """EduClaw migration 003: widen educlaw_notification's CHECK to what core writes (M119).
 
-`educlaw_base_schema.py` and educlaw core's `init_db.py` both declare
-`educlaw_notification`, and their CHECK bodies disagreed: the base omitted
-`'payment'` and `'housing_waitlist'`, and core WRITES both (`fees.py:905`,
-`housing.py:444`). Both declarations create with IF NOT EXISTS, so whichever ran
-first won. Install a sub-vertical before educlaw core — the exact case
+`educlaw_notification` is owned by `educlaw_base_schema.py` (`NOTIFICATION`);
+educlaw core's `init_db.py` imports the shared base tables and declares only
+core's own tables. Core WRITES `'payment'` and `'housing_waitlist'`
+(`fees.py:905`, `housing.py:444`). An install that already carries the narrow
+CHECK baked into the live table — the `notification_type` CHECK without those
+two values — fails those writes at runtime with `CHECK constraint failed`,
+today, on SQLite. Install a sub-vertical before educlaw core — the exact case
 `ensure_educlaw_base_tables` exists to serve — and portal fee payments plus
-housing waitlisting fail at runtime with `CHECK constraint failed`, today, on
-SQLite. Driven both ways before the fix (M119 row); pre-existing, ADR-0034
-neither caused nor cured it.
+housing waitlisting fail. Driven both ways before the fix (M119 row);
+pre-existing, ADR-0034 neither caused nor cured it.
 
 The base declaration is widened for FRESH installs in the same commit as this
 file. This migration repairs EXISTING installs that already carry the narrow
@@ -18,17 +19,15 @@ repair is the standard rebuild: rename the live table aside, provision the
 correct one, copy every row verbatim, drop the aside copy.
 
 THE CORRECT DDL IS NOT WRITTEN HERE. The rebuilt table is provisioned from
-core's OWN `init_db.NOTIFICATION` declaration via `seam.provision`, because a
-third hand-written copy of this table is the exact drift class that produced
-the defect. What this migration believes about the table is a load of
-`../init_db.py`, never a string of its own.
+the base's OWN `educlaw_base_schema.NOTIFICATION` declaration via
+`seam.provision`, because a third hand-written copy of this table is the exact
+drift class that produced the defect. What this migration believes about the
+table is a load of `../../educlaw_base_schema.py`, never a string of its own.
 
 WHO CAN NEED IT. Only an install where educlaw core is present runs an educlaw
-core migration, and only core writes the two blocked values. A PostgreSQL
-install cannot carry the narrow CHECK at all — `educlaw_base_schema.py` is
-SQLite-only (`executescript`), so on PostgreSQL core's declaration always ran
-first. The detection is dialect-portable anyway; on a correct install of either
-dialect this migration prints and does nothing.
+core migration, and only core writes the two blocked values. The detection is
+dialect-portable; on a correct install of either dialect this migration prints
+and does nothing.
 
 DETECTION IS POSITIVE, BOTH WAYS. The rebuild fires only when the
 `notification_type` CHECK is positively identified as the narrow variant
@@ -50,7 +49,7 @@ CRASH SAFETY, stated the way 036 states it: three phases, not one, because
 transaction.
 
   phase 1 — rename aside + drop the table's three indexes, one transaction;
-  phase 2 — provision the correct table + indexes from core's declaration;
+  phase 2 — provision the correct table + indexes from the base declaration;
   phase 3 — copy rows + drop the aside table, one transaction.
 
 A crash between phases leaves the aside table present, and the migration is
@@ -66,10 +65,8 @@ variant found, the row count, and exactly what the real run would do.
 Authored through the seam (ADR-0034): `erpclaw_lib.db.get_connection` for the
 connection, `erpclaw_lib.seam` for every catalog question, `seam.provision`
 for the DDL. Every statement is a FIXED string (migration 031's rule) — the
-three index names are enumerated because base and core declare the same three.
-
-SIM: planning/simlogs/m119_SIM_2026-08-13.md
-Plan home: planning/pending_items.md row M119.
+three index names are enumerated because the base declares the same three
+the rebuild provisions.
 
 Usage:
     python3 003_widen_notification_check.py [--db-path PATH] [--report-only]
@@ -113,7 +110,7 @@ DEFAULT_DB_PATH = db_default()
 TABLE = "educlaw_notification"
 ASIDE = "educlaw_notification_m119_aside"
 
-# Base and core declare the SAME three index names for this table, so the drop
+# The base declares the three index names for this table, so the drop
 # set is closed and each statement stays a fixed string.
 _INDEXES = (
     "idx_notification_recipient",
@@ -125,7 +122,8 @@ _INDEXES = (
 # statically, and a name it cannot read forces a '<dynamic>' exemption that
 # blankets the whole file — the exact width the convention exists to refuse.
 # The column list is spelled out so the copy is order-safe on a table whose
-# column ORDER may differ between a base-created and a core-created install.
+# column ORDER may differ between installs the base provisioned at different
+# revisions.
 _RENAME_ASIDE = ("ALTER TABLE educlaw_notification "
                  "RENAME TO educlaw_notification_m119_aside")
 _DROP_INDEXES = (
@@ -148,24 +146,25 @@ _DROP_ASIDE = "DROP TABLE educlaw_notification_m119_aside"
 
 
 def _core_notification_metadata():
-    """Core's own declaration of this table, loaded — never re-written here.
+    """The base declaration of this table, loaded — never re-written here.
 
     Copies `educlaw_notification` (with its indexes) and the reference-only
-    `company` declaration (so the foreign key resolves) into a fresh MetaData
-    that `seam.provision` can act on. `provision` skips reference-only tables,
-    and `company` always exists on a live install regardless.
+    `company` declaration (so the foreign key resolves) from
+    `educlaw_base_schema.py` into a fresh MetaData that `seam.provision` can
+    act on. `provision` skips reference-only tables, and `company` always
+    exists on a live install regardless.
     """
-    init_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "init_db.py")
-    spec = importlib.util.spec_from_file_location("educlaw_init_db_m119",
-                                                  init_db_path)
-    init_db = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(init_db)
+    base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "..", "..", "educlaw_base_schema.py")
+    spec = importlib.util.spec_from_file_location("educlaw_base_schema_m119",
+                                                  base_path)
+    base = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(base)
 
     sa = seam._sqlalchemy()
     fresh = sa.MetaData()
-    init_db.METADATA.tables["company"].to_metadata(fresh)
-    init_db.NOTIFICATION.to_metadata(fresh)
+    base.BASE_METADATA.tables["company"].to_metadata(fresh)
+    base.NOTIFICATION.to_metadata(fresh)
     return fresh
 
 
@@ -206,7 +205,8 @@ def run_migration(db_path=None, report_only=False):
             if not real_present:
                 print(f"  resuming interrupted rebuild at phase 2 "
                       f"({aside_rows} rows preserved in {ASIDE}).")
-                seam.provision(_core_notification_metadata(), path)
+                metadata = _core_notification_metadata()
+                seam.provision(metadata, path)
             else:
                 print(f"  resuming interrupted rebuild at phase 3 "
                       f"({aside_rows} rows preserved in {ASIDE}).")
@@ -234,10 +234,14 @@ def run_migration(db_path=None, report_only=False):
               f"to carry through a rebuild.")
         if report_only:
             print(f"  report-only: the real run would rename {TABLE} aside, "
-                  f"provision core's declaration, copy all {rows} row(s) "
+                  f"provision the base declaration, copy all {rows} row(s) "
                   f"verbatim, and drop the aside copy. Nothing written.")
             return {"rebuilt": False, "would_rebuild": True, "rows": rows,
                     "report_only": True}
+
+        # The declaration is resolved before anything is written, so a
+        # load failure leaves the live table exactly as it was.
+        metadata = _core_notification_metadata()
 
         # phase 1 — one transaction: the live table steps aside.
         conn.execute(_RENAME_ASIDE)
@@ -245,9 +249,9 @@ def run_migration(db_path=None, report_only=False):
             conn.execute(stmt)
         conn.commit()
 
-        # phase 2 — core's declaration provisions the correct table + indexes.
-        created = seam.provision(_core_notification_metadata(), path)
-        print(f"  provisioned from core's init_db declaration: "
+        # phase 2 — the base declaration provisions the correct table + indexes.
+        created = seam.provision(metadata, path)
+        print(f"  provisioned from the base educlaw_base_schema declaration: "
               f"{created['tables']} table, {created['indexes']} indexes.")
 
         # phase 3 — one transaction: verbatim copy, counted, then the aside

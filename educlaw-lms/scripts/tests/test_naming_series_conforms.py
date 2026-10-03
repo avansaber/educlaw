@@ -28,8 +28,6 @@ Two tests, deliberately not one:
     being present, which is the house idiom for a module test that reaches into
     `testing/` (`erpclaw-selling/tests/test_inv25_flows.py` and five siblings).
 
-Plan home: `planning/pending_items.md` row M104.
-SIM: `planning/simlogs/m104_SIM_2026-08-13.md`.
 """
 import importlib.util
 import os

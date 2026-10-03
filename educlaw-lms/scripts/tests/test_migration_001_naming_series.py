@@ -1,7 +1,5 @@
 """Part A — migration 001: year-scope the LMS connection counter (M104).
 
-Plan home: `planning/pending_items.md` row M104. SIM:
-`planning/simlogs/m104_SIM_2026-08-13.md`.
 
 The migration rewrites a value in a shared allocator table on someone else's
 live install, so the pins are weighted toward what it must NOT do:

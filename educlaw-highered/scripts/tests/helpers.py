@@ -115,13 +115,9 @@ def bootstrap_foundation(db_path: str):
 
 def run_base_schema(db_path: str):
     """Create the 32 educlaw base tables (educlaw_course, educlaw_student, etc.)."""
-    conn = sqlite3.connect(db_path)
-    setup_pragmas(conn)
     sys.path.insert(0, PARENT_DIR)
     from educlaw_base_schema import ensure_educlaw_base_tables
-    ensure_educlaw_base_tables(conn)
-    conn.commit()
-    conn.close()
+    ensure_educlaw_base_tables(db_path)
 
 
 def run_init_db(db_path: str):
