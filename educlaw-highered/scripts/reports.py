@@ -5,6 +5,7 @@ Cross-domain reports: enrollment, retention, degree completion, alumni giving, f
 import os
 import sys
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 try:
     import importlib.util
@@ -128,6 +129,126 @@ def faculty_workload_summary(conn, args):
     ok({"departments": [dict(r) for r in rows], "count": len(rows)})
 
 
+PROGRAM_TABLE = "highered_degree_program"
+STUDENT_TABLE = "educlaw_student"
+MIN_PREVIEW_GPA = Decimal("2.00")
+
+
+def _preview_decimal(value):
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    try:
+        text_value = str(value).strip()
+    except Exception:
+        return None
+    if text_value == "":
+        return None
+    try:
+        return Decimal(text_value)
+    except (InvalidOperation, ValueError, AttributeError, TypeError):
+        return None
+
+
+def ipeds_completions_preview(conn, args):
+    """IPEDS Completions preview over stored records.
+
+    Traceable candidate counts per active degree program. A stored row
+    counts as an eligible candidate only when its stored credit total
+    reaches the program threshold and its stored GPA reaches 2.00.
+    Read only; preview only and not a certified submission.
+    """
+    company_id = getattr(args, "company_id", None)
+    if not company_id:
+        return err("--company-id is required")
+    prog = Table(PROGRAM_TABLE)
+    prog_q = (
+        Q.from_(prog)
+        .select(prog.id, prog.name, prog.degree_type, prog.credits_required)
+        .where(prog.company_id == P())
+        .where(prog.program_status == P())
+        .orderby(prog.id)
+    )
+    prog_rows = conn.execute(prog_q.get_sql(), (company_id, "active")).fetchall()
+    stu = Table(STUDENT_TABLE)
+    stu_q = (
+        Q.from_(stu)
+        .select(
+            stu.program_id,
+            stu.total_credits,
+            stu.total_credits_earned,
+            stu.gpa,
+            stu.cumulative_gpa,
+        )
+        .where(stu.company_id == P())
+    )
+    stu_rows = [dict(r) for r in conn.execute(stu_q.get_sql(), (company_id,)).fetchall()]
+    programs = []
+    total_students = 0
+    total_eligible = 0
+    for p in prog_rows:
+        prog_id = p["id"]
+        required = _preview_decimal(p["credits_required"])
+        members = [s for s in stu_rows if s.get("program_id") == prog_id]
+        student_count = len(members)
+        eligible = 0
+        if required is not None:
+            for s in members:
+                credit_options = (
+                    _preview_decimal(s.get("total_credits")),
+                    _preview_decimal(s.get("total_credits_earned")),
+                )
+                gpa_options = (
+                    _preview_decimal(s.get("gpa")),
+                    _preview_decimal(s.get("cumulative_gpa")),
+                )
+                credits_ok = any(
+                    c is not None and c >= required for c in credit_options
+                )
+                gpa_ok = any(
+                    g is not None and g >= MIN_PREVIEW_GPA for g in gpa_options
+                )
+                if credits_ok and gpa_ok:
+                    eligible += 1
+        total_students += student_count
+        total_eligible += eligible
+        programs.append({
+            "program_id": prog_id,
+            "name": p["name"],
+            "program_name": p["name"],
+            "degree_type": p["degree_type"],
+            "credits_required": p["credits_required"],
+            "student_count": student_count,
+            "eligible_candidate_count": eligible,
+            "eligible_count": eligible,
+            "eligible_candidates": eligible,
+        })
+    programs = sorted(programs, key=lambda d: str(d["program_id"]))
+    ok({
+        "survey": "Completions",
+        "mode": "preview",
+        "certifiable": False,
+        "company_id": company_id,
+        "programs": programs,
+        "count": len(programs),
+        "program_count": len(programs),
+        "total_students": total_students,
+        "total_eligible_candidates": total_eligible,
+        "total_eligible": total_eligible,
+        "total_eligible_count": total_eligible,
+        "sources": {
+            "programs": PROGRAM_TABLE,
+            "students": STUDENT_TABLE,
+            "student_count": STUDENT_TABLE,
+            "eligible_candidate_count": STUDENT_TABLE,
+        },
+        "source_tables": [PROGRAM_TABLE, STUDENT_TABLE],
+        "program_table": PROGRAM_TABLE,
+        "student_table": STUDENT_TABLE,
+    })
+
+
 def status_action(conn, args):
     ok({
         "skill": SKILL,
@@ -145,6 +266,7 @@ ACTIONS = {
     "highered-enrollment-report": enrollment_report,
     "highered-retention-report": retention_report,
     "highered-degree-completion-report": degree_completion_report,
+    "highered-ipeds-completions-preview": ipeds_completions_preview,
     "highered-alumni-giving-summary": alumni_giving_summary,
     "highered-faculty-workload-summary": faculty_workload_summary,
     "status": status_action,

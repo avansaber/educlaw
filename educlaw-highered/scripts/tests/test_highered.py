@@ -8,6 +8,8 @@ import pytest
 import sys
 import os
 
+from decimal import Decimal
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS_DIR = os.path.dirname(_HERE)
 
@@ -30,6 +32,8 @@ seed_company = _helpers.seed_company
 seed_student = _helpers.seed_student
 seed_academic_year = _helpers.seed_academic_year
 seed_academic_term = _helpers.seed_academic_term
+
+from erpclaw_lib.query import Q, P, Table, Field
 
 REG_ACTIONS = _load("registrar", _SCRIPTS_DIR).ACTIONS
 REC_ACTIONS = _load("records", _SCRIPTS_DIR).ACTIONS
@@ -60,6 +64,22 @@ def full_setup(db_path):
         "year_id": yid, "term_id": tid,
     }
     conn.close()
+
+
+def _package_rows(conn):
+    t = Table("educlaw_scholarship")
+    q = Q.from_(t).select(t.star)
+    rows = conn.execute(q.get_sql()).fetchall()
+    return sorted(
+        (dict(r) for r in rows),
+        key=lambda d: repr(sorted((k, str(v)) for k, v in d.items())),
+    )
+
+
+def _table_count(conn, table):
+    t = Table(table)
+    q = Q.from_(t).select(t.star)
+    return len(conn.execute(q.get_sql()).fetchall())
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -293,6 +313,61 @@ class TestAidPackage:
         ))
         assert is_ok(r)
 
+    def test_add_stores_exact_money_text(self, full_setup):
+        s = full_setup
+        conn, cid, sid = s["conn"], s["company_id"], s["student_id"]
+        n_before = _table_count(conn, "educlaw_scholarship")
+        disb_before = _table_count(conn, "highered_disbursement")
+        r = call_action(FIN_ACTIONS["highered-add-aid-package"], conn, ns(
+            company_id=cid, student_id=sid,
+            aid_year="2025-2026", total_cost="50000", efc="10000",
+            total_need="40000", grants="5000", scholarships="5000",
+            loans="3000", work_study="2000", package_status=None,
+        ))
+        assert is_ok(r)
+        assert r["total_aid"] == "15000.00"
+        assert Decimal(str(r["total_aid"])) == Decimal("15000.00")
+        assert r["package_status"] == "draft"
+        assert _table_count(conn, "educlaw_scholarship") == n_before + 1
+        t = Table("educlaw_scholarship")
+        q = Q.from_(t).select(t.star).where(Field("id") == P())
+        row = conn.execute(q.get_sql(), (r["id"],)).fetchone()
+        assert row is not None
+        stored = dict(row)
+        assert stored["student_id"] == sid
+        assert stored["company_id"] == cid
+        assert stored["aid_year"] == "2025-2026"
+        assert stored["package_status"] == "draft"
+        assert stored["total_cost"] == "50000.00"
+        assert stored["efc"] == "10000.00"
+        assert stored["total_need"] == "40000.00"
+        assert stored["grants"] == "5000.00"
+        assert stored["scholarships"] == "5000.00"
+        assert stored["loans"] == "3000.00"
+        assert stored["work_study"] == "2000.00"
+        assert stored["total_aid"] == "15000.00"
+        assert Decimal(str(stored["total_aid"])) == (
+            Decimal(str(stored["grants"]))
+            + Decimal(str(stored["scholarships"]))
+            + Decimal(str(stored["loans"]))
+            + Decimal(str(stored["work_study"]))
+        )
+        assert _table_count(conn, "highered_disbursement") == disb_before
+
+    def test_add_missing_student_id_writes_nothing(self, full_setup):
+        s = full_setup
+        conn = s["conn"]
+        before = _package_rows(conn)
+        r = call_action(FIN_ACTIONS["highered-add-aid-package"], conn, ns(
+            company_id=s["company_id"], student_id=None,
+            aid_year="2025-2026", total_cost="50000", efc="10000",
+            total_need="40000", grants="5000", scholarships="5000",
+            loans="3000", work_study="2000", package_status=None,
+        ))
+        assert is_error(r)
+        assert "student" in r["message"].lower()
+        assert _package_rows(conn) == before
+
     def test_list(self, full_setup):
         s = full_setup
         r = call_action(FIN_ACTIONS["highered-list-aid-packages"], s["conn"], ns(
@@ -506,3 +581,132 @@ class TestAlumniGivingReport:
             company_id=cid, limit=50, offset=0,
         ))
         assert is_ok(r)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# IPEDS completions preview v1: traceable candidate counts, read only
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _preview_program(conn, cid, name="Preview CS", credits=120):
+    r = call_action(REG_ACTIONS["highered-add-degree-program"], conn, ns(
+        company_id=cid, name=name, degree_type="bachelor",
+        department="CS", credits_required=credits, program_status="active",
+    ))
+    assert is_ok(r)
+    return r["id"]
+
+
+def _preview_student(conn, cid, program_id, total_credits, gpa):
+    import uuid as _uuid
+    rid = str(_uuid.uuid4())
+    sid = str(_uuid.uuid4())
+    conn.execute(
+        "INSERT INTO educlaw_student"
+        " (id, naming_series, student_id, name, program_id,"
+        " total_credits, gpa, company_id, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (rid, "HSTU-" + rid[:8], sid, "Preview Student",
+         program_id, total_credits, gpa, cid,
+         "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+    )
+    conn.commit()
+    return sid
+
+
+def _preview_snapshot(conn, tables):
+    out = {}
+    for t in tables:
+        tbl = Table(t)
+        rows = conn.execute(Q.from_(tbl).select(tbl.star).get_sql()).fetchall()
+        out[t] = sorted(
+            repr(sorted((k, str(v)) for k, v in dict(r).items())) for r in rows
+        )
+    return out
+
+
+class TestIpedsCompletionsPreview:
+    def test_eligible_and_ineligible_counts(self, setup):
+        conn, cid = setup
+        prog = _preview_program(conn, cid)
+        _preview_student(conn, cid, prog, 130, "3.50")
+        _preview_student(conn, cid, prog, 30, "3.00")
+        before = _preview_snapshot(
+            conn, ["educlaw_student", "highered_degree_program", "audit_log"])
+        r = call_action(
+            RPT_ACTIONS["highered-ipeds-completions-preview"],
+            conn, ns(company_id=cid),
+        )
+        assert is_ok(r)
+        assert r["survey"] == "Completions"
+        assert r["mode"] == "preview"
+        assert r["certifiable"] is False
+        assert r["company_id"] == cid
+        assert len(r["programs"]) == 1
+        row = r["programs"][0]
+        assert row["program_id"] == prog
+        assert row["student_count"] == 2
+        assert row["eligible_candidate_count"] == 1
+        assert r["total_students"] == 2
+        assert r["total_eligible_candidates"] == 1
+        assert "highered_degree_program" in str(r.get("sources", "")) or \
+            "highered_degree_program" in str(r.get("source_tables", ""))
+        assert "educlaw_student" in str(r.get("sources", "")) or \
+            "educlaw_student" in str(r.get("source_tables", ""))
+        assert _preview_snapshot(
+            conn, ["educlaw_student", "highered_degree_program", "audit_log"]) == before
+
+    def test_other_company_student_excluded(self, setup):
+        conn, cid = setup
+        prog = _preview_program(conn, cid)
+        _preview_student(conn, cid, prog, 130, "3.50")
+        other = seed_company(conn)
+        _preview_student(conn, other, prog, 150, "4.00")
+        r = call_action(
+            RPT_ACTIONS["highered-ipeds-completions-preview"],
+            conn, ns(company_id=cid),
+        )
+        assert is_ok(r)
+        assert r["total_students"] == 1
+        assert r["total_eligible_candidates"] == 1
+        assert r["programs"][0]["student_count"] == 1
+        assert r["programs"][0]["eligible_candidate_count"] == 1
+
+    def test_exact_decimal_boundary_qualifies(self, setup):
+        conn, cid = setup
+        prog = _preview_program(conn, cid, credits=120)
+        _preview_student(conn, cid, prog, "120.00", "2.00")
+        r = call_action(
+            RPT_ACTIONS["highered-ipeds-completions-preview"],
+            conn, ns(company_id=cid),
+        )
+        assert is_ok(r)
+        assert r["programs"][0]["student_count"] == 1
+        assert r["programs"][0]["eligible_candidate_count"] == 1
+        assert r["total_eligible_candidates"] == 1
+
+    def test_invalid_gpa_does_not_crash_or_qualify(self, setup):
+        conn, cid = setup
+        prog = _preview_program(conn, cid)
+        _preview_student(conn, cid, prog, 150, "not-a-gpa")
+        r = call_action(
+            RPT_ACTIONS["highered-ipeds-completions-preview"],
+            conn, ns(company_id=cid),
+        )
+        assert is_ok(r)
+        assert r["programs"][0]["student_count"] == 1
+        assert r["programs"][0]["eligible_candidate_count"] == 0
+        assert r["total_eligible_candidates"] == 0
+
+    def test_missing_company_id_refuses_without_writes(self, setup):
+        conn, cid = setup
+        prog = _preview_program(conn, cid)
+        _preview_student(conn, cid, prog, 130, "3.50")
+        before = _preview_snapshot(
+            conn, ["educlaw_student", "highered_degree_program", "audit_log"])
+        r = call_action(
+            RPT_ACTIONS["highered-ipeds-completions-preview"],
+            conn, ns(company_id=None),
+        )
+        assert is_error(r)
+        assert _preview_snapshot(
+            conn, ["educlaw_student", "highered_degree_program", "audit_log"]) == before

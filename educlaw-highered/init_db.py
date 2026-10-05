@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""EduClaw Higher Education schema — 10 tables, 102 columns, 19 indexes.
+"""EduClaw Higher Education schema: 11 tables, 117 columns, 21 indexes.
 
 6 tables (course, section, enrollment, student_record, aid_package, faculty)
 have been merged into the educlaw base schema. This file creates only the
 highered-specific tables that are NOT shared with other educlaw sub-verticals.
 
 Domains: registrar (1 table), records (1 table), finaid (1 table),
-         alumni (3 tables), faculty (2 tables), admissions (2 tables)
+         alumni (3 tables), faculty (2 tables), admissions (2 tables),
+         receivables (1 table)
 
 The header used to read "12 tables, ~80 columns, ~30 indexes" and the domain
 line still counted `highered_transcript` and `highered_academic_standing`, which
@@ -287,6 +288,38 @@ Index("idx_hrg_faculty", RESEARCH_GRANT.c.faculty_id)
 Index("idx_hrg_company", RESEARCH_GRANT.c.company_id)
 
 # ==========================================================
+# Receivables domain (1 table: student charges)
+# ==========================================================
+
+STUDENT_CHARGE = Table(
+    "highered_student_charge", METADATA,
+    Column("id", Text, primary_key=True, nullable=True),
+    Column("naming_series", Text, nullable=False, server_default=text("''")),
+    Column("student_id", Text, nullable=False, server_default=text("''")),
+    Column("description", Text, nullable=False, server_default=text("''")),
+    Column("amount", Text, nullable=False, server_default=text("'0.00'")),
+    Column("charge_date", Text, nullable=False, server_default=text("''")),
+    Column("charge_status", Text, nullable=False, server_default=text("'assessed'")),
+    Column("company_id", Text, ForeignKey("company.id", ondelete="RESTRICT"),
+           nullable=False, server_default=text("''")),
+    Column("receivable_account_id", Text, nullable=False, server_default=text("''")),
+    Column("revenue_account_id", Text, nullable=False, server_default=text("''")),
+    Column("cost_center_id", Text, nullable=False, server_default=text("''")),
+    Column("gl_entry_ids", Text, nullable=False, server_default=text("''")),
+    Column("posting_date", Text, nullable=False, server_default=text("''")),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    CheckConstraint(
+        "charge_status IN ('draft','assessed','posted','cancelled')",
+        name="ck_highered_student_charge_status"),
+    CheckConstraint("CAST(amount AS NUMERIC) >= 0",
+                    name="ck_highered_student_charge_amount"),
+)
+
+Index("idx_hsc_company", STUDENT_CHARGE.c.company_id)
+Index("idx_hsc_student", STUDENT_CHARGE.c.student_id)
+
+# ==========================================================
 # Admissions domain (2 tables)
 # ==========================================================
 
@@ -372,7 +405,7 @@ def create_educlaw_highered_tables(db_path):
     """Create the higher-education tables and indexes on whichever backend is configured.
 
     Same contract as before the ADR-0034 conversion, including the fact that this
-    installer creates only its own 10 tables and never the shared educlaw base
+    installer creates only its own 11 tables and never the shared educlaw base
     schema. Idempotent, and the returned counts are what was ACTUALLY created
     rather than what was declared.
     """

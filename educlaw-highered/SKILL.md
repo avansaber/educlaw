@@ -3,8 +3,8 @@ name: educlaw-highered
 version: 1.0.0
 description: >
   Higher education administration: registrar, student records, financial aid,
-  alumni relations, faculty management, and admissions. 60 actions across 7 domains.
-  12 own tables (6 tables merged into educlaw base schema).
+  alumni relations, faculty management, and admissions. 62 actions across 8 domains.
+  11 own tables (6 tables merged into educlaw base schema).
 author: AvanSaber
 homepage: https://github.com/avansaber/educlaw
 source: https://github.com/avansaber/educlaw
@@ -74,6 +74,10 @@ financial aid, alumni relations, and faculty management.
 - `highered-add-disbursement`, Record a disbursement
 - `highered-list-disbursements`, List disbursements
 
+### Student Receivables
+- `highered-add-student-charge`, Record an assessed student charge (tuition/fees)
+- `highered-post-student-charge`, Post one assessed charge to the ledger (DR receivable / CR revenue)
+
 ## Tier 3, Advanced Operations
 
 ### Financial Aid
@@ -114,6 +118,7 @@ financial aid, alumni relations, and faculty management.
 - `highered-enrollment-report`, Enrollment statistics
 - `highered-retention-report`, Retention/attrition analysis
 - `highered-degree-completion-report`, Graduation statistics
+- `highered-ipeds-completions-preview`, IPEDS Completions preview by program (candidate counts, non-certified)
 - `highered-alumni-giving-summary`, Giving overview
 - `highered-faculty-workload-summary`, Cross-department workload
 - `status`, Skill health check

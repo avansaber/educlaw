@@ -41,6 +41,7 @@ from alumni import ACTIONS as ALUMNI_ACTIONS
 from faculty import ACTIONS as FACULTY_ACTIONS
 from admissions import ACTIONS as ADMISSIONS_ACTIONS
 from reports import ACTIONS as REPORTS_ACTIONS
+from receivables import ACTIONS as RECEIVABLES_ACTIONS
 
 # ---------------------------------------------------------------------------
 # Merge all domain actions into one router
@@ -56,6 +57,7 @@ ACTIONS.update(ALUMNI_ACTIONS)
 ACTIONS.update(FACULTY_ACTIONS)
 ACTIONS.update(ADMISSIONS_ACTIONS)
 ACTIONS.update(REPORTS_ACTIONS)
+ACTIONS.update(RECEIVABLES_ACTIONS)
 
 
 def main():
@@ -176,6 +178,15 @@ def main():
     parser.add_argument("--test-scores")
     parser.add_argument("--documents")
     parser.add_argument("--phone")
+
+    # Student receivables bridge
+    parser.add_argument("--charge-id")
+    parser.add_argument("--charge-date")
+    parser.add_argument("--charge-status")
+    parser.add_argument("--posting-date")
+    parser.add_argument("--receivable-account-id")
+    parser.add_argument("--revenue-account-id")
+    parser.add_argument("--cost-center-id")
 
     # -- Transfer/What-If Audit --
     parser.add_argument("--transfer-courses")       # JSON
